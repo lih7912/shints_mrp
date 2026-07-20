@@ -151,6 +151,7 @@ export class ServiceS0914_FAC_IN_OUT_MANAGER {
                             OTHER
                             TABLE_SHORT
                             KEEP_STOCK
+                            MOVE_STOCK
                             LOST
                             LINE_RETURN
                             FACOUT

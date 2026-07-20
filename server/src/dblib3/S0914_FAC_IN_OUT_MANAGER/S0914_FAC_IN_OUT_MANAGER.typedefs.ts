@@ -50,6 +50,7 @@ const typeDefs = gql`
         OTHER: Float
         TABLE_SHORT: Float
         KEEP_STOCK: Float
+        MOVE_STOCK: Float
         LOST: Float
         LINE_RETURN: Float
         FACOUT: Float

@@ -184,6 +184,7 @@ const moduleQuery_S0914_FAC_IN_OUT_MANAGER = {
                         isnull((select sum(out_qty) from ksv_stock_facout where po_cd = a.po_cd and matl_cd = a.matl_cd and remark like '%main%'), 0) as MAINUSE,
                         isnull((select sum(out_qty) from ksv_stock_facout where po_cd = a.po_cd and matl_cd = a.matl_cd and remark like '%table_shortage%'), 0) as TABLE_SHORT,
                         isnull((select sum(out_qty) from ksv_stock_facout where po_cd = a.po_cd and matl_cd = a.matl_cd and remark like '%keep_stock%'), 0) as KEEP_STOCK,
+                        isnull((select sum(out_qty) from ksv_stock_facout where po_cd = a.po_cd and matl_cd = a.matl_cd and remark like '%move_stock%'), 0) as MOVE_STOCK,
                         isnull((select sum(out_qty) from ksv_stock_facout where po_cd = a.po_cd and matl_cd = a.matl_cd and remark like '%lost%'), 0) as LOST,
                         isnull((select sum(stock_qty) from ksv_stock_matl where po_cd = a.po_cd and matl_cd = a.matl_cd and reason_make='RETURN'), 0) as LINE_RETURN,
                         isnull((select sum(out_qty) from ksv_stock_facout where po_cd = a.po_cd and matl_cd = a.matl_cd), 0) as FACOUT,
@@ -235,6 +236,7 @@ const moduleQuery_S0914_FAC_IN_OUT_MANAGER = {
                     tObj.OTHER = Number(tObj.OTHER || 0);
                     tObj.TABLE_SHORT = Number(tObj.TABLE_SHORT || 0);
                     tObj.KEEP_STOCK = Number(tObj.KEEP_STOCK || 0);
+                    tObj.MOVE_STOCK = Number(tObj.MOVE_STOCK || 0);
                     tObj.LOST = Number(tObj.LOST || 0);
                     tObj.LINE_RETURN = Number(tObj.LINE_RETURN || 0);
                     tObj.FACOUT = Number(((tObj.SHORTOVER +

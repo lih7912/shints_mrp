@@ -689,6 +689,7 @@ const S0914_FAC_IN_OUT_MANAGER = () => {
                     <AFColumn field="OTHER" headerClassName="t-header" header="OTHER" className="text-right" body={(row) => serviceLib.formatNumber(row.OTHER)} />
                     <AFColumn field="TABLE_SHORT" headerClassName="t-header" header="Table Shortage" className="text-right" body={(row) => serviceLib.formatNumber(row.TABLE_SHORT)} />
                     <AFColumn field="KEEP_STOCK" headerClassName="t-header" header="Keep Stock" className="text-right" body={(row) => serviceLib.formatNumber(row.KEEP_STOCK)} />
+                    <AFColumn field="MOVE_STOCK" headerClassName="t-header" header="Move Stock" className="text-right" body={(row) => serviceLib.formatNumber(row.MOVE_STOCK)} />
                     <AFColumn field="LOST" headerClassName="t-header" header="Lost" className="text-right" body={(row) => serviceLib.formatNumber(row.LOST)} />
                     <AFColumn field="LINE_RETURN" headerClassName="t-header" header="Line Return" className="text-right" body={(row) => serviceLib.formatNumber(row.LINE_RETURN)} />
                     <AFColumn field="FACOUT" headerClassName="t-header" header="FAC OUT" className="text-right" body={(row) => serviceLib.formatNumber(row.FACOUT)} />
