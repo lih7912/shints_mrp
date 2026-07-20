@@ -793,7 +793,7 @@ const S0215_ORDER_STATUS_SHORTAGE = () => {
 
         var tPart = serviceLib.getUserInfo().PART;
         var tUserId = serviceLib.getUserInfo().USER_ID;
-        if (tPart === 'S06' || tUserId === 'won21kr' || tUserId === 'kevin1' ) setIsShints(false);
+        if (tPart === 'S06' || tPart === 'S03' ||tUserId === 'won21kr' || tUserId === 'kevin1' ) setIsShints(false);
         if (tPart === 'ES' || tPart === 'VS' || tUserId === 'won21kr' || tUserId === 'kevin1') setIsFactory(false);
         if (tUserId === 'won21kr' || tUserId === 'jhoen' || tUserId === 'kevin1') setIsShintsEnd(false);
 
