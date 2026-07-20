@@ -1,0 +1,2647 @@
+import { Prisma } from '@prisma/client';
+import prisma from '../../db'; //PrismaClient 사용하기 위해 불러오기
+import AFLib from '../../commlib'; //PrismaClient 사용하기 위해 불러오기
+const fs = require('fs');
+
+// export default로 Query 내용 내보내기
+const moduleQuery_S0419_LIST_1 = {
+    Query: {
+        mgrQueryS0419_LIST_1: async (_, args, contextValue) => {
+            var tRetDate = AFLib.getCurrTime();
+            var tRetDate1 = tRetDate.substring(0, 8);
+            var tUserInfo = AFLib.getUserInfo(contextValue);
+
+            var tInput = { ...args.data };
+            if (!tInput.BILL_CD) tInput.IS_ALL = '0';
+
+            let sqlUser = `
+                select
+                    *
+                from
+                    kcd_user
+                where
+                    user_id = '${tUserInfo.USER_ID}'
+            `;
+            var tRetUser = await prisma.$queryRaw(Prisma.raw(sqlUser));
+            var tCompanyCode = 'shints';
+            if (tRetUser.length > 0) {
+                tCompanyCode = tRetUser[0].company_code;
+            }
+            if (tCompanyCode === 'shints') tCompanyCode = '';
+
+            let sql0 = `
+                select
+                    *
+                from
+                    ksv_bill_mst
+                where
+                    bill_cd = '${tInput.BILL_CD}'
+            `;
+            var tRet0 = await prisma.$queryRaw(Prisma.raw(sql0));
+
+            var billObj = {};
+            var sBillCd = '';
+            var sPayDate = '';
+
+            if (tRet0.length > 0 && tInput.BILL_CD) {
+                billObj = { ...tRet0[0] };
+                sBillCd = billObj.BILL_CD;
+                sPayDate = billObj.PAY_DATE;
+            }
+
+            var payDateSql1 = '';
+            var sDate = tInput.S_PAY_DATE;
+            var eDate = tInput.E_PAY_DATE;
+            if (sDate !== '' || eDate !== '') {
+                if (sDate === '') sDate = `${tRetDate1.substring(0, 4)}0101`;
+                if (eDate === '') eDate = '99999999';
+                payDateSql1 = `and a.pay_date between '${sDate}' and '${eDate}' `;
+            }
+            if (!tInput.S_PAY_DATE && !tInput.E_PAY_DATE) payDateSql1 = '';
+            if (tInput.BILL_CD) {
+                payDateSql1 = `and a.pay_date between '20250101' and '99999999' `;
+            }
+
+            var endDateSql1 = '';
+            if (tInput.IS_ALL === '1') {
+                var sDate1 = tInput.S_END_DATE;
+                var eDate1 = tInput.E_END_DATE;
+                if (sDate1 === '') sDate1 = `${tRetDate1.substring(0, 4)}0101`;
+                if (eDate1 === '') eDate1 = '99999999';
+                endDateSql1 = `and a.end_date between '${sDate1}' and '${eDate1}' `;
+                if (!tInput.S_END_DATE && !tInput.E_END_DATE) endDateSql1 = '';
+            }
+
+            var sDate2 = tInput.S_IN_DATE;
+            var eDate2 = tInput.E_IN_DATE;
+            if (sDate2 === '') sDate2 = `${tRetDate1.substring(0, 6)}01`;
+            if (eDate2 === '') eDate2 = '99999999';
+            var inDateSql1 = `and left(a.in_datetime, 8) between '${sDate2}' and '${eDate2}' `;
+            if (!tInput.S_IN_DATE && !tInput.E_IN_DATE) inDateSql1 = '';
+
+            if (payDateSql1 === '' && inDateSql1 === '' && !tInput.PO_CD) {
+                sDate = `${tRetDate1.substring(0, 6)}01`;
+                eDate = `${tRetDate1.substring(0, 6)}31`;
+                payDateSql1 = `and a.pay_date between '20250101' and '99999999' `;
+            }
+
+            var endFlagSql = '';
+            if (tInput.BILL_CD) {
+                // endFlagSql = `and (a.end_flag is not null and  a.end_flag = '1') `;
+                endFlagSql = ``;
+            } else {
+                endFlagSql = `and (a.end_date is null or a.end_date = '') `;
+                endFlagSql += `and (a.end_flag is null or a.end_flag <> '1') `;
+            }
+
+            function makeLikeOrSql(column, value, alias = '') {
+                if (!value) return '';
+
+                const prefix = alias ? `${alias}.` : '';
+
+                const list = value
+                    .split(',')
+                    .map((v) => v.trim())
+                    .filter((v) => v !== '');
+
+                if (list.length === 0) return '';
+
+                return `and (${list
+                    .map(
+                        (v) =>
+                            `${prefix}${column} like '%${v.replace(/'/g, "''")}%'`,
+                    )
+                    .join(' or ')}) `;
+            }
+
+            const puCdSql = makeLikeOrSql('pu_cd', tInput.PU_CD, 'a');
+            const poCdSql = makeLikeOrSql('po_cd', tInput.PO_CD, 'k');
+
+            let sqlStsIn = `
+                select
+                    k.vendor_cd as VENDOR_CD,
+                    k3.VENDOR_NAME,
+                    k3.VENDOR_TYPE,
+                    isnull(k4.cd_name, '') as PAY_TERM,
+                    k.pu_cd as PU_CD,
+                    k.po_cd as PO_CD2,
+                    k.in_date as IN_DATE,
+                    k.pay_date as PAY_DATE,
+                    k.pay_curr_cd as CURR_CD,
+                    '' as END_DATE,
+                    '' as END_AMT,
+                    k.pur_factory as PUR_FACTORY,
+                    '' as BILL_CD,
+                    k.reg_user as PURCHARGER,
+                    k.company_code as COMPANY_CODE,
+                    k.pur_app as PUR_APP,
+                    k.tt_flag as TT_FLAG,
+                    k.pay_report as PAY_REPORT,
+                    max(k.lc_bill_no) as LC_BILL_NO,
+                    sum(k.in_qty) as IN_QTY,
+                    sum(k.in_amt) as IN_AMT,
+                    sum(k.lc_qty) as LC_QTY,
+                    sum(k.lc_amt) as LC_AMT
+                from
+                    (
+                        select
+                            a.pu_cd,
+                            a.po_cd,
+                            a.po_seq,
+                            a.order_cd,
+                            a.matl_cd,
+                            b.vendor_cd,
+                            left(a.in_datetime, 8) as in_date,
+                            a.pay_date,
+                            a.pay_report,
+                            a.pay_curr_cd,
+                            a.lc_bill_no,
+                            a.pur_factory,
+                            a.pur_app,
+                            a.tt_flag,
+                            d.company_code,
+                            a.in_qty,
+                            (a.in_qty * a.pay_price) as in_amt,
+                            a.reg_user,
+                            isnull(c.lc_qty, 0) as lc_qty,
+                            (isnull(c.lc_qty, 0) * isnull(c.pay_price, 0)) as lc_amt
+                        from
+                            ksv_stock_in a
+                            left join ksv_stock_in c on a.pu_cd = c.pu_cd
+                            and a.order_cd = c.order_CD
+                            and a.po_cd = c.PO_CD
+                            and a.matl_cd = c.matl_cd
+                            and a.mrp_seq = c.mrp_seq
+                            and a.lc_bill_no = c.pay_report
+                            and c.lc_qty > 0
+                            and c.in_qty <= 0,
+                            kcd_matl_mst b,
+                            kcd_user d,
+                            kcd_vendor d1,
+                            kcd_buyer d2
+                        where
+                            a.in_qty > 0
+                            and a.lc_qty <= 0
+                            ${endFlagSql}
+                            and ((a.po_seq <> 97 and a.pay_price > 0)
+                             or  (a.po_seq = 97 and a.pay_price > 0.00001))
+                            and a.pu_cd is not null
+                            and a.pu_cd <> '' ${puCdSql} ${payDateSql1} ${endDateSql1} ${inDateSql1}
+                            and left(a.order_cd, 2) = d2.buyer_cd
+                            and d2.buyer_cd like '%${tInput.BUYER_CD}%'
+                            and d2.reg_user = d.user_id
+                            and b.vendor_cd = d1.vendor_cd
+                            and d1.vendor_name like '%${tInput.VENDOR_CD}%'
+                            and d1.vendor_type like '%${tInput.VENDOR_TYPE}%'
+                            and a.bill_no like '%${sBillCd}%'
+                            and a.pay_date like '%${sPayDate}%'
+                            and a.matl_cd = b.matl_cd
+                            and a.reg_user like '%${tInput.PURCHARGER}%'
+                    ) k,
+                    kcd_user k2,
+                    kcd_vendor k3
+                    left join kcd_code k4 on k4.CD_CODE = k3.pay_type2 and k4.cd_group = 'pay_type'
+                where
+                    k.reg_user = k2.user_id
+                    and k.vendor_cd = k3.vendor_cd
+                    and k3.vendor_name like '%${tInput.VENDOR_CD}%'
+                    and k3.vendor_type like '%${tInput.VENDOR_TYPE}%' ${poCdSql}
+                    and (
+                        (k3.vendor_type = '5')
+                        or 
+                        (k3.vendor_type = '7')
+                        or (
+                            (
+                                k3.vendor_type = '1'
+                                or k3.vendor_type = '3'
+                            )
+                            and k.company_code like '%${tCompanyCode}%'
+                        )
+                    )
+                group by
+                    k.vendor_cd,
+                    k3.vendor_name,
+                    k3.vendor_type,
+                    k3.PAY_TERM,
+                    isnull(k4.cd_name, ''),
+                    k.pu_cd,
+                    k.po_cd,
+                    k.pur_factory,
+                    k.reg_user,
+                    k.company_code,
+                    k.in_date,
+                    k.pay_date,
+                    -- k.lc_bill_no, 
+                    k.pay_report,
+                    k.pur_app,
+                    k.tt_flag,
+                    k.pay_curr_cd
+                order by
+                    k.vendor_cd,
+                    k.in_date,
+                    k.pay_date
+            `;
+            var tRetStsIn = await prisma.$queryRaw(Prisma.raw(sqlStsIn));
+
+            if (tRetStsIn.length <= 0) return [];
+
+            const vendorCdList0 = tRetStsIn
+                .map((row) => `'${row.VENDOR_CD}'`)
+                .filter((value, index, self) => self.indexOf(value) === index);
+            var vendorCdList = [];
+            vendorCdList0.forEach((col, i) => {
+                vendorCdList.push(col);
+            });
+
+            const vendorBankSQL_bak = `
+                SELECT
+                    a.VENDOR_CD,
+                    ISNULL(a.SEQ, 0) AS SEQ,
+                    ISNULL(a.BANK_CD, '') AS BANK_CD,
+                    ISNULL(b.BANK_NAME, '') AS BANK_NAME,
+                    ISNULL(b.ACCOUNT_NO, '') AS ACCOUNT_NO
+                FROM
+                    kcd_vendor_bank a
+                    JOIN kcd_bank b ON a.BANK_CD = b.BANK_CD
+                    and b.status_cd = '0'
+                WHERE
+                    a.VENDOR_CD IN (${vendorCdList.join(',')})
+                ORDER BY
+                    a.VENDOR_CD,
+                    a.SEQ DESC
+            `;
+
+            const vendorBankSQL = `
+                SELECT
+                    a.VENDOR_CD,
+                    ISNULL(a.SEQ, 0) AS SEQ,
+                    ISNULL(a.BANK_CD, '') AS BANK_CD,
+                    ISNULL(b.BANK_NAME, '') AS BANK_NAME,
+                    ISNULL(b.ACCOUNT_NO, '') AS ACCOUNT_NO
+                FROM
+                    kcd_vendor_bank a
+                    JOIN kcd_bank b ON a.BANK_CD = b.BANK_CD
+                                   and b.status_cd = '0'
+                WHERE
+                    a.VENDOR_CD IN (${vendorCdList.join(',')})
+                    and b.status_cd = '0'
+                ORDER BY
+                    a.VENDOR_CD,
+                    a.SEQ DESC
+            `;
+            const vendorBankList = await prisma.$queryRaw(
+                Prisma.raw(vendorBankSQL),
+            );
+
+            const vendorBankMap = new Map();
+            vendorBankList.forEach((row) => {
+                const vendorCd = row.VENDOR_CD;
+                const entry = {
+                    BANK_CD: row.BANK_CD,
+                    BANK_NAME: `${row.BANK_NAME}/${row.ACCOUNT_NO}`,
+                };
+                if (!vendorBankMap.has(vendorCd)) {
+                    vendorBankMap.set(vendorCd, []);
+                }
+                vendorBankMap.get(vendorCd).push(entry);
+            });
+
+            var tRetArray = [];
+            var billMst = {};
+
+            var tLCArray = [];
+
+            for (let tIdx = 0; tIdx < tRetStsIn.length; tIdx++) {
+                var tObj = { ...tRetStsIn[tIdx] };
+
+                /*
+            제외조건: Vendor type = buyer(4)
+                      Vendor cd = factory(dtp) v2078 
+                      Vendor cd = factory(shints bvt) v0228
+                      Vendor cd = factory(cost-label printing) v2584
+                      Vendor cd = factory(cost) v0882
+                      Vendor cd = factory stock v0523, v0381 
+            */
+
+                if (
+                    tObj.VENDOR_TYPE === '4' ||
+                    tObj.VENDOR_CD === 'V2078' ||
+                    tObj.VENDOR_CD === 'V0228' ||
+                    tObj.VENDOR_CD === 'V2584' ||
+                    tObj.VENDOR_CD === 'V0523' ||
+                    tObj.VENDOR_CD === 'V0381' ||
+                    tObj.VENDOR_CD === 'V0882'
+                )
+                    continue;
+
+                // tObj.PU_CD = '';
+                tObj.STSIN_CD = '';
+                tObj.BUYER_CD = '';
+                tObj.BUYER_NAME = '';
+                tObj.LC_FLAG = '';
+                // tObj.PO_CD2 = '';
+                tObj.READY_DATE = '';
+                tObj.TARGET_ETA = '';
+                tObj.PAY_PRICE = '0';
+
+                tObj.IN_QTY = AFLib.numToFixed(parseFloat(tObj.IN_QTY), 2);
+                tObj.LC_QTY = AFLib.numToFixed(parseFloat(tObj.LC_QTY), 2);
+                tObj.IN_AMT = AFLib.numToFixed(parseFloat(tObj.IN_AMT), 2);
+                tObj.LC_AMT = AFLib.numToFixed(parseFloat(tObj.LC_AMT), 2);
+                tObj.DEPOSIT_AMT = AFLib.numToFixed(parseFloat(tObj.LC_AMT), 2);
+
+                var tPO_AMT = 0;
+                tPO_AMT = parseFloat(tObj.IN_AMT);
+                tObj.PO_AMT = AFLib.numToFixed(parseFloat(tPO_AMT), 2);
+
+                var tPAY_AMT = 0;
+                tPAY_AMT = parseFloat(tObj.IN_AMT) - parseFloat(tObj.LC_AMT);
+                tObj.PAY_AMT = AFLib.numToFixed(parseFloat(tPAY_AMT), 2);
+
+                if (tObj.LC_BILL_NO) {
+                    if (tObj.LC_BILL_NO.substring(0, 2) === 'LC') {
+                        tObj.LC_FLAG = '1';
+                        // tObj.DEPOSIT_AMT = '0';
+                    } else {
+                        tObj.LC_FLAG = '0';
+                        // tObj.DEPOSIT_AMT = tObj.LC_AMT;
+                        // tObj.LC_AMT = '0';
+                    }
+                }
+
+                const bankArr = vendorBankMap.get(tObj.VENDOR_CD) || [];
+                var tmpArray = [];
+                bankArr.forEach((col9, i9) => {
+                    if (col9.BANK_CD) {
+                        var tObj9 = { ...col9 };
+                        tmpArray.push(tObj9);
+                    }
+                });
+
+                if (tmpArray.length > 1) {
+                    tmpArray.unshift({ BANK_CD: '', BANK_NAME: ' ' });
+                    tObj.PAY_BANK = tmpArray[1]?.BANK_CD || '';
+                } else if (tmpArray.length === 1) {
+                    tObj.PAY_BANK = tmpArray[0].BANK_CD;
+                }
+
+                tObj.PAY_BANK_ARRAY = [...tmpArray];
+                tObj.BILL_MST = [];
+
+                // if (tInput.BILL_CD && tRetArray.length <= 0) {
+                if (tInput.BILL_CD) {
+                    const sqlBillMst = `
+                        select
+                            *
+                        from
+                            ksv_bill_mst
+                        where
+                            bill_cd = '${tInput.BILL_CD}'
+                    `;
+                    const retBillMst = await prisma.$queryRaw(
+                        Prisma.raw(sqlBillMst),
+                    );
+                    if (retBillMst.length > 0) {
+                        var tObj0 = { ...retBillMst[0] };
+
+                        var tObj1 = {};
+                        tObj1.PAY_DATE = tObj0.PAY_DATE;
+                        tObj1.PO_AMT = tObj0.PO_AMT;
+                        tObj1.DEPOSIT_AMT = tObj0.DEPOSIT_AMT;
+                        tObj1.LC_AMT = tObj0.LC_AMT;
+                        tObj1.DEBIT_AMT = tObj0.DEBIT_AMT;
+                        tObj1.DISCOUNT_AMT = tObj0.DISCOUNT_AMT;
+                        tObj1.VAT_AMT = tObj0.VAT_AMT;
+                        tObj1.PAY_AMT = tObj0.PAY_AMT;
+                        tObj1.PAY_BANK = tObj0.PAY_BANK;
+                        tObj1.TAX_KIND = tObj0.TAX_KIND;
+
+                        billMst = { ...tObj1 };
+                    }
+                }
+
+                if (tInput.BILL_CD) {
+                    tObj.BILL_MST.push(billMst);
+                }
+
+                tRetArray.push(tObj);
+            }
+
+            return tRetArray;
+        },
+
+        mgrQueryS0419_LIST_INFO: async (_, args) => {
+            var tSQL = '';
+
+            let sqlStsIn = `
+                select
+                    k.vendor_cd as VENDOR_CD,
+                    k3.VENDOR_NAME,
+                    k3.VENDOR_TYPE,
+                    k.in_date as IN_DATE,
+                    k.pay_date as PAY_DATE,
+                    k.pay_curr_cd as CURR_CD,
+                    '' as END_DATE,
+                    '' as END_AMT,
+                    k.pur_factory as PUR_FACTORY,
+                    k.pur_app as PUR_APP,
+                    k.tt_flag as TT_FLAG,
+                    k.pay_report as PAY_REPORT,
+                    '' as BILL_CD,
+                    k1.reg_user as PURCHARGER,
+                    k2.company_code as COMPANY_CODE,
+                    k.lc_bill_no as LC_BILL_NO,
+                    k.pu_cd as PU_CD,
+                    k1.po_cd2 as PO_CD2,
+                    sum(k.in_qty) as IN_QTY,
+                    sum(k.in_amt) as IN_AMT,
+                    sum(k.lc_qty) as LC_QTY,
+                    sum(k.lc_amt) as LC_AMT
+                from
+                    (
+                        select
+                            a.pu_cd,
+                            a.po_cd,
+                            a.po_seq,
+                            a.order_cd,
+                            a.matl_cd,
+                            b.vendor_cd,
+                            left(a.in_datetime, 8) as in_date,
+                            a.pay_date,
+                            a.pay_report,
+                            a.pay_curr_cd,
+                            a.lc_bill_no,
+                            a.pur_factory,
+                            a.pur_app,
+                            a.tt_flag,
+                            a.in_qty,
+                            (a.in_qty * a.in_price) as in_amt,
+                            isnull(c.lc_qty, 0) as lc_qty,
+                            (isnull(c.lc_qty, 0) * isnull(c.pay_price, 0)) as lc_amt
+                        from
+                            ksv_stock_in a
+                            left join ksv_stock_in c on a.pu_cd = c.pu_cd
+                            and a.order_cd = c.order_CD
+                            and a.po_cd = c.PO_CD
+                            and a.po_seq = c.po_seq
+                            and a.matl_cd = c.matl_cd
+                            and a.lc_bill_no = c.pay_report
+                            and c.lc_qty > 0
+                            and c.in_qty <= 0,
+                            kcd_matl_mst b,
+                            kcd_user d,
+                            kcd_vendor d1
+                        where
+                            a.in_qty > 0
+                            and a.bill_no = '${args.data.BILL_CD}'
+                            and a.lc_qty <= 0
+                            and a.pu_cd is not null
+                            and a.pu_cd <> ''
+                            and b.vendor_cd = d1.vendor_cd
+                            and a.reg_user = d.user_id
+                            and a.matl_cd = b.matl_cd
+                    ) k,
+                    ksv_pu_mst2 k1,
+                    kcd_user k2,
+                    kcd_vendor k3
+                where
+                    k.pu_cd = k1.pu_cd
+                    and k1.reg_user = k2.user_id
+                    and k.vendor_cd = k3.vendor_cd
+                group by
+                    k.pu_cd,
+                    k.vendor_cd,
+                    k3.vendor_name,
+                    k3.vendor_type,
+                    k.pur_factory,
+                    k.pay_report,
+                    k.pur_app,
+                    k.tt_flag,
+                    k1.po_cd2,
+                    k.in_date,
+                    k.pay_date,
+                    k.lc_bill_no,
+                    k.pay_curr_cd,
+                    k1.reg_user,
+                    k2.company_code
+                order by
+                    k.vendor_cd,
+                    k.pu_cd,
+                    k.in_date,
+                    k.pay_date
+            `;
+            var tRetStsIn = await prisma.$queryRaw(Prisma.raw(sqlStsIn));
+
+            const vendorCdList0 = tRetStsIn
+                .map((row) => `'${row.VENDOR_CD}'`)
+                .filter((value, index, self) => self.indexOf(value) === index);
+            var vendorCdList = [];
+            vendorCdList0.forEach((col, i) => {
+                vendorCdList.push(col);
+            });
+
+            const vendorBankSQL = `
+                SELECT
+                    a.VENDOR_CD,
+                    ISNULL(a.SEQ, 0) AS SEQ,
+                    ISNULL(a.BANK_CD, '') AS BANK_CD,
+                    ISNULL(b.BANK_NAME, '') AS BANK_NAME,
+                    ISNULL(b.ACCOUNT_NO, '') AS ACCOUNT_NO
+                FROM
+                    kcd_vendor_bank a
+                    JOIN kcd_bank b ON a.BANK_CD = b.BANK_CD
+                WHERE
+                    a.VENDOR_CD IN (${vendorCdList.join(',')})
+                    and b.status_cd = '0'
+                ORDER BY
+                    a.VENDOR_CD,
+                    a.SEQ DESC
+            `;
+            const vendorBankList = await prisma.$queryRaw(
+                Prisma.raw(vendorBankSQL),
+            );
+
+            const vendorBankMap = new Map();
+            vendorBankList.forEach((row) => {
+                const vendorCd = row.VENDOR_CD;
+                const entry = {
+                    BANK_CD: row.BANK_CD,
+                    BANK_NAME: `${row.BANK_NAME}/${row.ACCOUNT_NO}`,
+                };
+                if (!vendorBankMap.has(vendorCd)) {
+                    vendorBankMap.set(vendorCd, []);
+                }
+                vendorBankMap.get(vendorCd).push(entry);
+            });
+
+            var tRetArray = [];
+            var billMst = {};
+
+            var tLCArray = [];
+
+            for (let tIdx = 0; tIdx < tRetStsIn.length; tIdx++) {
+                var tObj = { ...tRetStsIn[tIdx] };
+
+                if (
+                    tObj.VENDOR_TYPE === '4' ||
+                    tObj.VENDOR_CD === 'V2078' ||
+                    tObj.VENDOR_CD === 'V0228' ||
+                    tObj.VENDOR_CD === 'V2584' ||
+                    tObj.VENDOR_CD === 'V0523' ||
+                    tObj.VENDOR_CD === 'V0381' ||
+                    tObj.VENDOR_CD === 'V0882'
+                )
+                    continue;
+
+                tObj.PU_CD = '';
+                tObj.STSIN_CD = '';
+                tObj.BUYER_CD = '';
+                tObj.BUYER_NAME = '';
+                tObj.LC_FLAG = '';
+                tObj.PO_CD2 = '';
+                tObj.READY_DATE = '';
+                tObj.TARGET_ETA = '';
+                tObj.PAY_PRICE = '0';
+
+                tObj.IN_QTY = AFLib.numToFixed(parseFloat(tObj.IN_QTY), 2);
+                tObj.LC_QTY = AFLib.numToFixed(parseFloat(tObj.LC_QTY), 2);
+                tObj.IN_AMT = AFLib.numToFixed(parseFloat(tObj.IN_AMT), 2);
+                tObj.LC_AMT = AFLib.numToFixed(parseFloat(tObj.LC_AMT), 2);
+                tObj.DEPOSIT_AMT = AFLib.numToFixed(parseFloat(tObj.LC_AMT), 2);
+
+                var tPO_AMT = 0;
+                tPO_AMT = parseFloat(tObj.IN_AMT);
+                tObj.PO_AMT = AFLib.numToFixed(parseFloat(tPO_AMT), 2);
+
+                var tPAY_AMT = 0;
+                tPAY_AMT = parseFloat(tObj.IN_AMT) - parseFloat(tObj.LC_AMT);
+                tObj.PAY_AMT = AFLib.numToFixed(parseFloat(tPAY_AMT), 2);
+
+                if (tObj.LC_BILL_NO) {
+                    if (tObj.LC_BILL_NO.substring(0, 2) === 'LC') {
+                        tObj.LC_FLAG = '1';
+                    } else {
+                        tObj.LC_FLAG = '0';
+                    }
+                }
+
+                const bankArr = vendorBankMap.get(tObj.VENDOR_CD) || [];
+
+                if (bankArr.length > 1) {
+                    bankArr.unshift({ BANK_CD: '', BANK_NAME: ' ' });
+                    tObj.PAY_BANK = bankArr[1]?.BANK_CD || '';
+                } else if (bankArr.length === 1) {
+                    tObj.PAY_BANK = bankArr[0].BANK_CD;
+                }
+                tRetArray.push(tObj);
+            }
+
+            var tBankArray0 = [];
+            var tIdx = 0;
+            for (tIdx = 0; tIdx < tRetArray.length; tIdx++) {
+                var tObj = { ...tRetArray[tIdx] };
+                tObj.VAT_AMT = '0';
+                tObj.PAY_AMT = String(
+                    parseFloat(tObj.PO_AMT) + parseFloat(tObj.VAT_AMT),
+                );
+
+                var tSql9 = `
+                    select
+                        isnull(a.BANK_CD, '') as BANK_CD,
+                        b.BANK_NAME
+                    from
+                        kcd_vendor_bank a,
+                        kcd_bank b
+                    where
+                        a.VENDOR_CD = '${tObj.VENDOR_CD}'
+                        and a.SEQ = (
+                            select
+                                max(SEQ)
+                            from
+                                kcd_vendor_bank
+                            where
+                                vendor_cd = '${tObj.VENDOR_CD}'
+                        )
+                        and a.BANK_CD = b.BANK_CD
+                `;
+                var tRet0 = await prisma.$queryRaw(Prisma.raw(tSql9));
+                if (tRet0.length > 0) {
+                    tObj.PAY_BANK = tRet0[0].BANK_CD;
+                }
+                // if (tBankArray.length <= 0) tBankArray = [ ...tRet0  ];
+                // tRetArray0.push(tObj);
+                tBankArray0.push(tObj);
+            }
+
+            let sqlStr1 = `
+                select
+                    *
+                from
+                    ksv_bill_mst
+                where
+                    bill_cd = '${args.data.BILL_CD}'
+            `;
+            var tRet1 = await prisma.$queryRaw(Prisma.raw(sqlStr1));
+
+            var tWObj = {};
+            tWObj.BILL_MST = { ...tRet1[0] };
+            tWObj.BILL_LIST = [...tRetArray];
+            tWObj.BANK_ARRAY = [...tBankArray0];
+            return tWObj;
+        },
+
+        mgrQueryS0419_LIST_DETAIL: async (_, args) => {
+            var tSQL = '';
+
+            var tInData = { ...args.data[0] };
+
+            var sDate = tInData.S_DATE;
+            var eDate = tInData.E_DATE;
+            if (sDate === '') sDate = `${tRetDate1.substring(0, 4)}0101`;
+            if (eDate === '') eDate = '99999999';
+
+            var tRetArray = [];
+
+            var sumDcAmount = 0;
+            var sumDnAmount = 0;
+
+            var tIdx = 0;
+            for (tIdx = 0; tIdx < args.data.length; tIdx++) {
+                var tOne = { ...args.data[tIdx] };
+
+                var poCdSql = '';
+                var vendorSql = '';
+                var inDateSql = '';
+                var payDateSql = '';
+                var stsInSql = '';
+                var currCdSql1 = '';
+                var currCdSql = '';
+                var endDateSql = '';
+                var payreportSql = '';
+                var purappSql = '';
+                var ttflagSql = '';
+
+                if (tOne.PO_CD) poCdSql = `and a.po_cd = '${tOne.PO_CD}' `;
+                if (tOne.VENDOR_CD)
+                    vendorSql = `and b.vendor_cd = '${tOne.VENDOR_CD}'  `;
+                if (tOne.IN_DATE)
+                    inDateSql = `and left(a.in_datetime, 8) = '${tOne.IN_DATE}' `;
+                if (tOne.PAY_DATE)
+                    payDateSql = `and a.pay_date = '${tOne.PAY_DATE}' `;
+                if (tOne.STSIN_CD)
+                    stsInSql = `and a.STSIN_CD = '${tOne.STSIN_CD}' `;
+                if (tOne.CURR_Cd)
+                    currCdSql1 = `and a.CURR_CD = '${tOne.CURR_CD}' `;
+                if (tOne.CURR_CD)
+                    currCdSql = `and a.PAY_CURR_CD =  '${tOne.CURR_CD}' `;
+                if (tOne.END_DATE)
+                    endDateSql = `and a.END_DATE = '${tOne.END_DATE}' `;
+                if (tOne.PAY_REPORT)
+                    payreportSql = `and a.PAY_REPORT = '${tOne.PAY_REPORT}' `;
+                if (tOne.PUR_APP)
+                    purappSql = `and a.PUR_APP = '${tOne.PUR_APP}' `;
+                if (tOne.TT_FLAG)
+                    ttflagSql = `and a.TT_FLAG = '${tOne.TT_FLAG}' `;
+
+                var sqlEndFlag = '';
+                var sqlBillCdFlag = '';
+                if (tOne.BILL_CD) {
+                    sqlEndFlag = `and (a.end_flag is not null and  a.end_flag = '1') `;
+                    sqlBillCdFlag = `and a.bill_no like '%${tInData.BILL_CD}%' `;
+                } else {
+                    sqlEndFlag = `and (a.end_flag is null or a.end_flag <> '1') `;
+                    // sqlBillCdFlag = `and   a.pay_report like '%${tInData.PAY_REPORT}%' `;
+                }
+
+                let sqlStr = `
+                    select
+                        kk.PU_CD,
+                        kk.PO_CD,
+                        kk.PO_SEQ,
+                        kk.MATL_CD,
+                        kk.MATL_NAME,
+                        kk.COLOR,
+                        kk.SPEC,
+                        kk.UNIT,
+                        kk.IN_CURR_CD,
+                        kk.IN_PRICE,
+                        kk.IN_DATETIME,
+                        kk.PAY_DATE,
+                        kk.END_FLAG,
+                        kk.END_DATE,
+                        kk.PAY_REPORT,
+                        kk.CALC_FLAG,
+                        kk.STSIN_CD,
+                        kk.BILL_NO,
+                        kk.TAX,
+                        sum(kk.TOT_QTY) as TOT_QTY,
+                        sum(kk.IN_QTY) as IN_QTY,
+                        sum(kk.LC_QTY) as LC_QTY
+                    from
+                        (
+                            SELECT
+                                a.PU_CD,
+                                a.PO_CD,
+                                a.PO_SEQ,
+                                a.MATL_CD,
+                                b.MATL_NAME,
+                                b.COLOR,
+                                b.SPEC,
+                                b.UNIT,
+                                -- a.IN_CURR_CD,
+                                -- a.IN_PRICE,
+                                a.PAY_CURR_CD as IN_CURR_CD,
+                                a.PAY_PRICE as IN_PRICE,
+                                a.IN_DATETIME,
+                                a.PAY_DATE,
+                                a.END_FLAG,
+                                a.END_DATE,
+                                a.PAY_REPORT,
+                                a.CALC_FLAG,
+                                a.STSIN_CD,
+                                a.BILL_NO,
+                                a.TAX,
+                                a.TOT_QTY,
+                                a.IN_QTY,
+                                (
+                                    case
+                                        when a.in_qty >= isnull(c.lc_qty, 0) then isnull(c.lc_qty, 0)
+                                        when a.in_qty < isnull(c.lc_qty, 0) then a.in_qty
+                                    end
+                                ) as LC_QTY
+                            FROM
+                                ksv_stock_in a
+                                left join ksv_stock_in c on a.pu_cd = c.pu_cd
+                                    and a.order_cd = c.order_CD
+                                    and a.po_cd = c.PO_CD
+                                    and a.po_seq = c.po_seq
+                                    and a.matl_cd = c.matl_cd
+                                    and a.lc_bill_no = c.pay_report
+                                    and c.lc_qty > 0
+                                    and c.in_qty <= 0,
+                                kcd_matl_mst b
+                            where
+                                1 = 1
+                                and a.matl_cd = b.matl_cd
+                                and ((a.po_seq <> 97 and a.pay_price > 0)
+                                 or  (a.po_seq = 97 and a.pay_price > 0.00001))
+                                and a.reg_user = '${tOne.PURCHARGER}' ${inDateSql} ${payDateSql} ${stsInSql} ${vendorSql} ${poCdSql} ${currCdSql} ${endDateSql} ${payreportSql} ${purappSql} ${ttflagSql} ${sqlEndFlag} ${sqlBillCdFlag}
+                        ) kk
+                    group by
+                        kk.PU_CD,
+                        kk.PO_CD,
+                        kk.PO_SEQ,
+                        kk.MATL_CD,
+                        kk.MATL_NAME,
+                        kk.COLOR,
+                        kk.SPEC,
+                        kk.UNIT,
+                        kk.IN_CURR_CD,
+                        kk.IN_PRICE,
+                        kk.IN_DATETIME,
+                        kk.PAY_DATE,
+                        kk.END_FLAG,
+                        kk.END_DATE,
+                        kk.PAY_REPORT,
+                        kk.CALC_FLAG,
+                        kk.STSIN_CD,
+                        kk.BILL_NO,
+                        kk.TAX
+                    order by
+                        kk.end_flag,
+                        kk.matl_cd
+                `;
+                var tRet = await prisma.$queryRaw(Prisma.raw(sqlStr));
+                tRet.forEach((col, i) => {
+                    var tObj = { ...col };
+                    tObj.TOT_QTY = AFLib.numToFixed(
+                        parseFloat(tObj.TOT_QTY),
+                        2,
+                    );
+                    tObj.IN_QTY = AFLib.numToFixed(parseFloat(tObj.IN_QTY), 2);
+                    tObj.LC_QTY = AFLib.numToFixed(parseFloat(tObj.LC_QTY), 2);
+                    tRetArray.push(tObj);
+                });
+
+                let sqlStr = `
+                    select
+                        isnull(sum(isnull(a.dc_amount, 0)), 0) as dc_amount
+                    from
+                        ksv_dc_amount a,
+                        kcd_vendor b
+                    where
+                        1 = 1
+                        and a.vendor_cd = b.vendor_cd ${payDateSql} ${vendorSql} ${currCdSql1} ${endDateSql}
+                `;
+                var tRet = await prisma.$queryRaw(Prisma.raw(sqlStr));
+                if (tRet.length > 0)
+                    sumDcAmount += parseFloat(tRet[0].dc_amount);
+
+                let sqlStr = `
+                    select
+                        isnull(sum(isnull(a.dn_amount, 0)), 0) as dn_amount
+                    from
+                        ksv_dc_amount a,
+                        kcd_vendor b
+                    where
+                        1 = 1
+                        and a.vendor_cd = b.vendor_cd ${payDateSql} ${vendorSql} ${currCdSql1} ${endDateSql}
+                `;
+                var tRet = await prisma.$queryRaw(Prisma.raw(sqlStr));
+                if (tRet.length > 0)
+                    sumDnAmount += parseFloat(tRet[0].dn_amount);
+            }
+
+            var tObj = {};
+            tObj.DC_AMOUNT = String(sumDcAmount);
+            tObj.DN_AMOUNT = String(sumDnAmount);
+
+            var tArray1 = [];
+            tArray1.push(tObj);
+
+            var tWObj = {};
+            tWObj.datas = [...tRetArray];
+            tWObj.datas1 = [...tArray1];
+
+            return tWObj;
+        },
+
+        mgrQueryS0419_LIST_DETAIL_1106: async (_, args) => {
+            var tSQL = '';
+
+            var tInData = { ...args.data[0] };
+
+            var sDate = tInData.S_DATE;
+            var eDate = tInData.E_DATE;
+            if (sDate === '') sDate = `${tRetDate1.substring(0, 4)}0101`;
+            if (eDate === '') eDate = '99999999';
+
+            var inDateSql = '';
+            var vendorSql = '';
+            var payDateSql = '';
+            var stsInSql = '';
+            var currCdSql = '';
+            var endDateSql = '';
+            var poCdSql = '';
+            var poCdArray = [];
+            var vendorArray = [];
+            var inDateArray = [];
+            var payDateArray = [];
+            var stsInArray = [];
+            var currCdArray = [];
+            var endDateArray = [];
+            var tIdx = 0;
+            for (tIdx = 0; tIdx < args.data.length; tIdx++) {
+                var tOne = { ...args.data[tIdx] };
+
+                var tCheck = 0;
+                poCdArray.forEach((col1, i1) => {
+                    if (tOne.PO_CD === col1) tCheck = 1;
+                });
+                if (tCheck === 0 && tOne.PO_CD !== '') {
+                    if (poCdArray.length === 0) poCdSql = `'${tOne.PO_CD}'`;
+                    else poCdSql += `,'${tOne.PO_CD}'`;
+                    poCdArray.push(tOne.PO_CD);
+                }
+
+                tCheck = 0;
+                vendorArray.forEach((col1, i1) => {
+                    if (tOne.VENDOR_CD === col1) tCheck = 1;
+                });
+                if (tCheck === 0 && tOne.VENDOR_CD !== '') {
+                    if (vendorArray.length === 0)
+                        vendorSql = `'${tOne.VENDOR_CD}'`;
+                    else vendorSql += `,'${tOne.VENDOR_CD}'`;
+                    vendorArray.push(tOne.VENDOR_CD);
+                }
+
+                tCheck = 0;
+                inDateArray.forEach((col1, i1) => {
+                    if (tOne.IN_DATE === col1) tCheck = 1;
+                });
+                if (tCheck === 0 && tOne.IN_DATE !== '') {
+                    if (inDateArray.length === 0)
+                        inDateSql = `'${tOne.IN_DATE}'`;
+                    else inDateSql += `,'${tOne.IN_DATE}'`;
+                    inDateArray.push(tOne.IN_DATE);
+                }
+
+                tCheck = 0;
+                payDateArray.forEach((col1, i1) => {
+                    if (tOne.PAY_DATE === col1) tCheck = 1;
+                });
+                if (tCheck === 0 && tOne.PAY_DATE !== '') {
+                    if (payDateArray.length === 0)
+                        payDateSql = `'${tOne.PAY_DATE}'`;
+                    else payDateSql += `,'${tOne.PAY_DATE}'`;
+                    payDateArray.push(tOne.PAY_DATE);
+                }
+
+                tCheck = 0;
+                stsInArray.forEach((col1, i1) => {
+                    if (tOne.STSIN_CD === col1) tCheck = 1;
+                });
+                if (tCheck === 0 && tOne.STSIN_CD !== '') {
+                    if (stsInArray.length === 0)
+                        stsInSql = `'${tOne.STSIN_CD}'`;
+                    else stsInSql += `,'${tOne.STSIN_CD}'`;
+                    stsInArray.push(tOne.STSIN_CD);
+                }
+
+                tCheck = 0;
+                currCdArray.forEach((col1, i1) => {
+                    if (tOne.CURR_CD === col1) tCheck = 1;
+                });
+                if (tCheck === 0 && tOne.CURR_CD !== '') {
+                    if (currCdArray.length === 0)
+                        currCdSql = `'${tOne.CURR_CD}'`;
+                    else currCdSql += `,'${tOne.CURR_CD}'`;
+                    currCdArray.push(tOne.CURR_CD);
+                }
+
+                tCheck = 0;
+                endDateArray.forEach((col1, i1) => {
+                    if (tOne.END_DATE === col1) tCheck = 1;
+                });
+                if (tCheck === 0 && tOne.END_DATE !== '') {
+                    if (endDateArray.length === 0)
+                        endDateSql = `'${tOne.END_DATE}'`;
+                    else endDateSql += `,'${tOne.END_DATE}'`;
+                    endDateArray.push(tOne.END_DATE);
+                }
+            }
+
+            var currCdSql1 = '';
+            if (poCdSql !== '') poCdSql = `and a.po_cd in (${poCdSql}) `;
+            if (vendorSql !== '')
+                vendorSql = `and b.vendor_cd in (${vendorSql}) `;
+            if (inDateSql !== '')
+                inDateSql = `and left(a.in_datetime, 8) in (${inDateSql}) `;
+            if (payDateSql !== '')
+                payDateSql = `and a.pay_date in (${payDateSql}) `;
+            if (stsInSql !== '') stsInSql = `and a.STSIN_CD in (${stsInSql}) `;
+            if (currCdSql !== '') {
+                currCdSql1 = `and a.CURR_CD in (${currCdSql}) `;
+                currCdSql = `and a.IN_CURR_CD in (${currCdSql}) `;
+            }
+            if (endDateSql !== '')
+                endDateSql = `and a.END_DATE in (${endDateSql}) `;
+
+            var sqlEndFlag = '';
+            var sqlBillCdFlag = '';
+            if (tInData.BILL_CD) {
+                sqlEndFlag = `and (a.end_flag is not null and  a.end_flag = '1') `;
+                sqlBillCdFlag = `and a.bill_no like '%${tInData.BILL_CD}%' `;
+            } else {
+                sqlEndFlag = `and (a.end_flag is null or a.end_flag <> '1') `;
+                // sqlBillCdFlag = `and   a.pay_report like '%${tInData.PAY_REPORT}%' `;
+            }
+
+            tSQL = `' `;
+            var tRetArray = [];
+
+            let sqlStr = `
+                SELECT
+                    a.PU_CD,
+                    a.PO_CD,
+                    a.PO_SEQ,
+                    a.MATL_CD,
+                    b.MATL_NAME,
+                    b.COLOR,
+                    b.SPEC,
+                    b.UNIT,
+                    a.IN_CURR_CD,
+                    a.IN_PRICE,
+                    a.IN_DATETIME,
+                    a.PAY_DATE,
+                    a.END_FLAG,
+                    a.END_DATE,
+                    a.PAY_REPORT,
+                    a.CALC_FLAG,
+                    a.STSIN_CD,
+                    a.BILL_NO,
+                    a.TAX,
+                    sum(a.TOT_QTY) as TOT_QTY,
+                    sum(a.IN_QTY) as IN_QTY,
+                    sum(a.LC_QTY) as LC_QTY
+                FROM
+                    ksv_stock_in a,
+                    kcd_matl_mst b
+                where
+                    1 = 1
+                    and a.matl_cd = b.matl_cd
+                    -- and   a.pay_report like '%${tInData.PAY_REPORT}%'
+                    ${inDateSql} ${payDateSql} ${stsInSql} ${vendorSql} ${poCdSql} ${currCdSql} ${endDateSql} ${sqlEndFlag} ${sqlBillCdFlag}
+                group by
+                    a.PU_CD,
+                    a.PO_CD,
+                    a.PO_SEQ,
+                    a.MATL_CD,
+                    b.MATL_NAME,
+                    b.COLOR,
+                    b.SPEC,
+                    b.UNIT,
+                    a.IN_CURR_CD,
+                    a.IN_PRICE,
+                    a.IN_DATETIME,
+                    a.PAY_DATE,
+                    a.END_FLAG,
+                    a.END_DATE,
+                    a.PAY_REPORT,
+                    a.CALC_FLAG,
+                    a.STSIN_CD,
+                    a.BILL_NO,
+                    a.TAX
+                order by
+                    a.end_flag,
+                    a.matl_cd
+            `;
+            var tRet = await prisma.$queryRaw(Prisma.raw(sqlStr));
+            tRetArray = [];
+            tRet.forEach((col, i) => {
+                var tObj = { ...col };
+                tObj.TOT_QTY = AFLib.numToFixed(parseFloat(tObj.TOT_QTY), 2);
+                tObj.IN_QTY = AFLib.numToFixed(parseFloat(tObj.IN_QTY), 2);
+                tObj.LC_QTY = AFLib.numToFixed(parseFloat(tObj.LC_QTY), 2);
+                tRetArray.push(tObj);
+            });
+
+            var tObj = {};
+            tObj.DC_AMOUNT = '0';
+            tObj.DN_AMOUNT = '0';
+
+            if (endDateArray.length > 0) {
+                let sqlStr = `
+                    select
+                        isnull(sum(isnull(a.dc_amount, 0)), 0) as dc_amount
+                    from
+                        ksv_dc_amount a,
+                        kcd_vendor b
+                    where
+                        1 = 1
+                        and a.vendor_cd = b.vendor_cd ${payDateSql} ${vendorSql} ${currCdSql1} ${endDateSql}
+                `;
+                var tRet = await prisma.$queryRaw(Prisma.raw(sqlStr));
+                if (tRet.length > 0)
+                    tObj.DC_AMOUNT = String(parseFloat(tRet[0].dc_amount));
+
+                let sqlStr = `
+                    select
+                        isnull(sum(isnull(a.dn_amount, 0)), 0) as dn_amount
+                    from
+                        ksv_dc_amount a,
+                        kcd_vendor b
+                    where
+                        1 = 1
+                        and a.vendor_cd = b.vendor_cd ${payDateSql} ${vendorSql} ${currCdSql1} ${endDateSql}
+                `;
+                var tRet = await prisma.$queryRaw(Prisma.raw(sqlStr));
+                if (tRet.length > 0)
+                    tObj.DN_AMOUNT = String(parseFloat(tRet[0].dn_amount));
+            }
+
+            var tArray1 = [];
+            tArray1.push(tObj);
+
+            var tWObj = {};
+            tWObj.datas = [...tRetArray];
+            tWObj.datas1 = [...tArray1];
+
+            return tWObj;
+        },
+
+        mgrQueryS0419_LIST_1_bak: async (_, args, contextValue) => {
+            var tRetDate = AFLib.getCurrTime();
+            var tRetDate1 = tRetDate.substring(0, 8);
+            var tUserInfo = AFLib.getUserInfo(contextValue);
+
+            var tSQL = '';
+            var tSQL1 = '';
+
+            if (args.data.IS_ALL === '1') {
+            } else {
+                tSQL = `and    (a3.bill_cd is null or  a3.bill_cd = '')`;
+            }
+
+            var sDate = args.data.S_PAY_DATE;
+            var eDate = args.data.E_PAY_DATE;
+            if (sDate === '') sDate = `${tRetDate1.substring(0, 6)}01`;
+            if (eDate === '') eDate = '99999999';
+            tSQL1 = `and a1.pay_date between '${sDate}' and '${eDate}' `;
+
+            let sqlStr = `
+                SELECT
+                    a4.BUYER_CD,
+                    b3.BUYER_NAME,
+                    a4.PU_CD,
+                    a3.PO_CD,
+                    a4.VENDOR_CD,
+                    b1.VENDOR_NAME,
+                    b1.VENDOR_TYPE,
+                    a3.MATL_CD,
+                    b2.MATL_NAME,
+                    b2.COLOR,
+                    b2.SPEC,
+                    b2.UNIT,
+                    a4.CURR_CD,
+                    --  a3.PO_QTY,
+                    a3.STSIN_QTY as PO_QTY,
+                    a3.PO_PRICE,
+                    --(a3.PO_QTY * a3.PO_PRICE) as PO_AMT,
+                    (a3.STSIN_QTY * a3.PO_PRICE) as PO_AMT,
+                    a1.PAY_DATE,
+                    a4.REG_USER,
+                    a1.PAY_BANK as PAY_BANK2,
+                    '' as INVOICE_DATE,
+                    '0' as VAT_AMT,
+                    '0' as PAY_AMT,
+                    a1.PAYER,
+                    a4.DEPOSIT_AMT,
+                    a4.PU_AMT,
+                    -- (a4.DEPOSIT_AMT / a4.PU_AMT * 100.0) as DEPOSIT_RATE,
+                    0.0 as DEPOSIT_RATE,
+                    a4.LC_FLAG,
+                    a4.LC_AMT,
+                    a3.STSIN_CD,
+                    isnull(b1.permit, '') as PERMIT,
+                    a4.FACTORY_CD,
+                    a1.PAY_REPORT,
+                    isnull(a3.BILL_CD, '') as BILL_CD
+                FROM
+                    ksv_stock_in_mst a1
+                    left join kcd_bank b4 on b4.bank_cd = a1.pay_bank,
+                    ksv_stock_mem2_stsin a3,
+                    ksv_pu_mst2 a4,
+                    kcd_vendor b1,
+                    kcd_matl_mst b2,
+                    kcd_buyer b3
+                WHERE
+                    a1.stsin_cd = a3.stsin_cd
+                    and a1.pu_cd = a4.pu_cd
+                    and a1.pu_cd like '%${args.data.PU_CD}%' ${tSQL1}
+                    and a4.vendor_cd = b1.vendor_cd
+                    and (
+                        b1.vendor_cd like '%${args.data.VENDOR_CD}%'
+                        or b1.vendor_name like '%${args.data.VENDOR_CD}%'
+                    )
+                    and a4.buyer_cd = b3.buyer_cd
+                    and a4.buyer_cd like '%${args.data.BUYER_CD}%'
+                    and a3.matl_cd = b2.matl_cd
+                    and b2.matl_cd like '%${args.data.MATL_CD}%'
+                    and b2.matl_name like '%${args.data.MATL_NAME}%'
+                    and b2.color like '%${args.data.COLOR}%'
+                    and b2.spec like '%${args.data.SPEC}%' ${tSQL}
+                    and a1.PAYER in ('SHINTS')
+                    -- and    (a3.leader_confirm is not null  and a3.leader_confirm <> '')
+                order by
+                    a4.VENDOR_Cd,
+                    a3.MATL_CD
+            `;
+            var tRet = await prisma.$queryRaw(Prisma.raw(sqlStr));
+
+            var tRetData = {};
+            var tRetArray = [];
+
+            var tIdx = 0;
+            for (tIdx = 0; tIdx < tRet.length; tIdx++) {
+                var tObj = { ...tRet[tIdx] };
+                tObj.VAT_AMT = '0';
+                tObj.PAY_AMT = String(
+                    parseFloat(tObj.PO_AMT) + parseFloat(tObj.VAT_AMT),
+                );
+                tObj.DEPOSIT_RATE = 0;
+                if (parseFloat(tObj.PU_AMT) > 0)
+                    tObj.DEPOSIT_RATE =
+                        (parseFloat(tObj.DEPOSIT_AMT) /
+                            parseFloat(tObj.PU_AMT)) *
+                        100.0;
+
+                var tSql9 = `
+                    select
+                        isnull(a.SEQ, 0) as SEQ,
+                        isnull(a.BANK_CD, '') as BANK_CD,
+                        isnull(b.BANK_NAME, '') as BANK_NAME,
+                        isnull(b.ACCOUNT_NO, '') as ACCOUNT_NO
+                    from
+                        kcd_vendor_bank a,
+                        kcd_bank b
+                    where
+                        a.VENDOR_CD = '${tObj.VENDOR_CD}'
+                        -- and a.SEQ = (select max(SEQ) from kcd_vendor_bank where vendor_cd = '${tObj.VENDOR_CD}')
+                        and a.BANK_CD = b.BANK_CD
+                    order by
+                        a.SEQ desc
+                `;
+                var tRet0_1 = await prisma.$queryRaw(Prisma.raw(tSql9));
+                var tRet0 = [];
+                tRet0_1.forEach((col, i) => {
+                    var tObj9 = { ...col };
+                    tObj9.BANK_NAME = `${tObj9.BANK_NAME}/${tObj9.ACCOUNT_NO}`;
+                    tRet0.push(tObj9);
+                });
+
+                if (tRet0_1.length > 1) {
+                    var tObj9 = {};
+                    tObj9.BANK_CD = '';
+                    tObj9.BANK_NAME = ' ';
+                    tRet0.unshift(tObj9);
+                    tObj.PAY_BANK = tRet0_1[0].BANK_CD;
+                } else if (tRet0_1.length === 1) {
+                    tObj.PAY_BANK = tRet0_1[0].BANK_CD;
+                }
+                tObj.PAY_BANK_ARRAY = [...tRet0];
+                tRetArray.push(tObj);
+            }
+            var tIdx = 0;
+            return tRetArray;
+        },
+        mgrQueryS0419_LIST_1_bak2: async (_, args, contextValue) => {
+            var tRetDate = AFLib.getCurrTime();
+            var tRetDate1 = tRetDate.substring(0, 8);
+            var tUserInfo = AFLib.getUserInfo(contextValue);
+
+            var tSQL = '';
+            var tSQL1 = '';
+
+            if (args.data.IS_ALL === '1') {
+            } else {
+                tSQL = `and    (k.bill_cd is null or  k.bill_cd = '')`;
+            }
+
+            var sDate = args.data.S_PAY_DATE;
+            var eDate = args.data.E_PAY_DATE;
+            if (sDate === '') sDate = `${tRetDate1.substring(0, 6)}01`;
+            if (eDate === '') eDate = '99999999';
+            tSQL1 = `and k1.pay_date between '${sDate}' and '${eDate}' `;
+
+            let sqlStr = `
+                SELECT
+                    a4.BUYER_CD,
+                    b3.BUYER_NAME,
+                    a4.PU_CD,
+                    kk.PO_CD,
+                    a4.VENDOR_CD,
+                    b1.VENDOR_NAME,
+                    b1.VENDOR_TYPE,
+                    kk.MATL_CD,
+                    b2.MATL_NAME,
+                    b2.COLOR,
+                    b2.SPEC,
+                    b2.UNIT,
+                    a4.CURR_CD,
+                    kk.STSIN_QTY as PO_QTY,
+                    kk.PO_PRICE,
+                    (kk.STSIN_QTY * kk.PO_PRICE) as PO_AMT,
+                    kk.PAY_DATE,
+                    a4.REG_USER,
+                    kk.PAY_BANK2,
+                    '' as INVOICE_DATE,
+                    '0' as VAT_AMT,
+                    '0' as PAY_AMT,
+                    kk.PAYER,
+                    a4.DEPOSIT_AMT,
+                    a4.PU_AMT,
+                    0.0 as DEPOSIT_RATE,
+                    a4.LC_FLAG,
+                    a4.LC_AMT,
+                    kk.STSIN_CD,
+                    isnull(b1.permit, '') as PERMIT,
+                    a4.FACTORY_CD,
+                    kk.PAY_REPORT,
+                    isnull(kk.BILL_CD, '') as BILL_CD
+                FROM
+                    (
+                        select
+                            k.PU_CD,
+                            k.MATL_CD,
+                            k.PO_CD,
+                            k.STSIN_QTY,
+                            k.PO_PRICE,
+                            k.STSIN_CD,
+                            isnull(k.BILL_CD, '') as BILL_CD,
+                            k1.PAY_BANK as PAY_BANK2,
+                            k1.PAYER,
+                            k1.PAY_REPORT,
+                            k1.PAY_DATE
+                        from
+                            ksv_stock_mem2_stsin k,
+                            ksv_stock_in_mst k1
+                        where
+                            k.stsin_cd = k1.stsin_cd
+                            and k.po_cd like '%${args.data.PO_CD}%'
+                            and k.pu_cd like '%${args.data.PU_CD}%'
+                            and k1.PAYER in ('SHINTS')
+                            -- and    (k1.leader_confirm is not null  and k1.leader_confirm <> '')
+                            ${tSQL} ${tSQL1}
+                    ) kk,
+                    ksv_pu_mst2 a4,
+                    kcd_vendor b1,
+                    kcd_matl_mst b2,
+                    kcd_buyer b3
+                where
+                    kk.pu_cd = a4.pu_cd
+                    and a4.vendor_cd = b1.vendor_cd
+                    and (
+                        b1.vendor_cd like '%${args.data.VENDOR_CD}%'
+                        or b1.vendor_name like '%${args.data.VENDOR_CD}%'
+                    )
+                    and a4.buyer_cd = b3.buyer_cd
+                    and a4.po_cd2 like '%${args.data.PO_CD}%'
+                    and a4.buyer_cd like '%${args.data.BUYER_CD}%'
+                    and kk.matl_cd = b2.matl_cd
+                    and b2.matl_cd like '%${args.data.MATL_CD}%'
+                    and b2.matl_name like '%${args.data.MATL_NAME}%'
+                    and b2.color like '%${args.data.COLOR}%'
+                    and b2.spec like '%${args.data.SPEC}%'
+                    and b1.spec like '%${args.data.SPEC}%'
+                    and (
+                        (
+                            left(kk.po_cd, 1) = 'P'
+                            and a4.bill_to = 'SHINTS'
+                        )
+                        or left(kk.po_cd, 1) = 'E'
+                    )
+                order by
+                    a4.VENDOR_Cd,
+                    kk.MATL_CD
+            `;
+            var tRet = await prisma.$queryRaw(Prisma.raw(sqlStr));
+
+            var tRetData = {};
+            var tRetArray = [];
+
+            var tIdx = 0;
+            for (tIdx = 0; tIdx < tRet.length; tIdx++) {
+                var tObj = { ...tRet[tIdx] };
+                tObj.VAT_AMT = '0';
+                tObj.PAY_AMT = String(
+                    parseFloat(tObj.PO_AMT) + parseFloat(tObj.VAT_AMT),
+                );
+                tObj.DEPOSIT_RATE = 0;
+                if (parseFloat(tObj.PU_AMT) > 0)
+                    tObj.DEPOSIT_RATE =
+                        (parseFloat(tObj.DEPOSIT_AMT) /
+                            parseFloat(tObj.PU_AMT)) *
+                        100.0;
+
+                var tSql9 = `
+                    select
+                        isnull(a.SEQ, 0) as SEQ,
+                        isnull(a.BANK_CD, '') as BANK_CD,
+                        isnull(b.BANK_NAME, '') as BANK_NAME,
+                        isnull(b.ACCOUNT_NO, '') as ACCOUNT_NO
+                    from
+                        kcd_vendor_bank a,
+                        kcd_bank b
+                    where
+                        a.VENDOR_CD = '${tObj.VENDOR_CD}'
+                        -- and a.SEQ = (select max(SEQ) from kcd_vendor_bank where vendor_cd = '${tObj.VENDOR_CD}')
+                        and a.BANK_CD = b.BANK_CD
+                    order by
+                        a.SEQ desc
+                `;
+                var tRet0_1 = await prisma.$queryRaw(Prisma.raw(tSql9));
+                var tRet0 = [];
+                tRet0_1.forEach((col, i) => {
+                    var tObj9 = { ...col };
+                    tObj9.BANK_NAME = `${tObj9.BANK_NAME}/${tObj9.ACCOUNT_NO}`;
+                    tRet0.push(tObj9);
+                });
+
+                if (tRet0_1.length > 1) {
+                    var tObj9 = {};
+                    tObj9.BANK_CD = '';
+                    tObj9.BANK_NAME = ' ';
+                    tRet0.unshift(tObj9);
+                    tObj.PAY_BANK = tRet0_1[0].BANK_CD;
+                } else if (tRet0_1.length === 1) {
+                    tObj.PAY_BANK = tRet0_1[0].BANK_CD;
+                }
+                tObj.PAY_BANK_ARRAY = [...tRet0];
+                tRetArray.push(tObj);
+            }
+            var tIdx = 0;
+            return tRetArray;
+        },
+
+        mgrQueryS0419_LIST_1_bak3: async (_, args, contextValue) => {
+            var tRetDate = AFLib.getCurrTime();
+            var tRetDate1 = tRetDate.substring(0, 8);
+            var tUserInfo = AFLib.getUserInfo(contextValue);
+
+            var tSQL = '';
+            var tSQL1 = '';
+
+            if (args.data.IS_ALL === '1') {
+            } else {
+                tSQL = `and    (k.bill_cd is null or  k.bill_cd = '')`;
+            }
+
+            var sDate = args.data.S_PAY_DATE;
+            var eDate = args.data.E_PAY_DATE;
+            if (sDate === '') sDate = `${tRetDate1.substring(0, 4)}0101`;
+            if (eDate === '') eDate = '99999999';
+            var payDateSql = `and c.pay_date between '${sDate}' and '${eDate}' `;
+
+            let sqlStr = `
+                select
+                    e.BUYER_NAME,
+                    c.BUYER_CD,
+                    c.PU_CD,
+                    c.PO_CD2,
+                    c.VENDOR_CD,
+                    d.VENDOR_NAME,
+                    d.VENDOR_TYPE,
+                    c.TARGET_ETA,
+                    c.EXP_DELIVERY_DATE as READY_DATE,
+                    c.PAY_DATE,
+                    c.CURR_CD,
+                    c.DEPOSIT_AMT,
+                    c.LC_FLAG,
+                    c.LC_AMT,
+                    c.REG_USER as PURCHARGER,
+                    sum(b.po_price * b.po_qty2) as PO_AMT,
+                    sum(isnull(b1.po_price, 0) * isnull(b1.stsin_qty, 0)) as PAY_AMT
+                from
+                    ksv_stock_mem2 b
+                    left join ksv_stock_mem2_stsin b1 on b1.pu_cd = b.pu_cd
+                    and b1.po_cd = b.po_cd
+                    and b1.matl_cd = b.matl_cd,
+                    ksv_pu_mst2 c,
+                    kcd_vendor d,
+                    kcd_buyer e
+                where
+                    b.pu_cd = c.pu_cd
+                    and c.bill_to in ('SHINTS', 'FACTORY', 'BVT', 'ETP')
+                    and c.vendor_cd = d.vendor_cd
+                    and c.buyer_cd = e.buyer_cd
+                    and d.vendor_type like '%${args.data.VENDOR_TYPE}%'
+                    and d.vendor_name like '%${args.data.VENDOR_CD}%'
+                    and c.vendor_cd <> 'V0882'
+                    and c.vendor_cd <> 'V0381'
+                    and c.vendor_cd <> 'V0523'
+                    and c.vendor_cd <> 'V2584'
+                    and d.vendor_type in ('1', '3', '5')
+                    and c.po_cd2 like '%${args.data.PO_CD}%'
+                    and c.pu_cd like '%${args.data.PU_CD}%'
+                    and c.buyer_cd like '%${args.data.BUYER_CD}%'
+                    and c.reg_user like '%${args.data.PURCHARGER}%' ${payDateSql}
+                group by
+                    e.BUYER_NAME,
+                    c.BUYER_CD,
+                    c.PU_CD,
+                    c.PO_CD2,
+                    c.VENDOR_CD,
+                    d.VENDOR_NAME,
+                    d.VENDOR_TYPE,
+                    c.TARGET_ETA,
+                    c.EXP_DELIVERY_DATE,
+                    c.PAY_DATE,
+                    c.CURR_CD,
+                    c.DEPOSIT_AMT,
+                    c.LC_FLAG,
+                    c.LC_AMT,
+                    c.REG_USER
+                order by
+                    d.vendor_name,
+                    c.pay_date
+            `;
+            var tRet = await prisma.$queryRaw(Prisma.raw(sqlStr));
+
+            var tRetArray = [];
+            var tIdx = 0;
+            for (tIdx = 0; tIdx < tRet.length; tIdx++) {
+                var tObj = { ...tRet[tIdx] };
+                if (tObj.LC_FLAG === '1') tObj.DEPOSIT_AMT = tObj.LC_AMT;
+
+                var sqlPoCd = '';
+                var tCols = tObj.PO_CD2.split('/');
+                tCols.forEach((col, i) => {
+                    if (col !== '') {
+                        if (i === 0) sqlPoCd = ` '${col}' `;
+                        else sqlPoCd += ` ,'${col}' `;
+                    }
+                });
+
+                var tSql8 = `
+                    select
+                        isnull(a.bill_cd, '') as bill_cd
+                    from
+                        ksv_stock_mem2_stsin a,
+                        ksv_bill_mst b
+                    where
+                        a.pu_cd = '${tObj.PU_CD}'
+                        and a.po_cd in (${sqlPoCd})
+                        and a.bill_cd = b.bill_cd
+                `;
+                var tRet8 = await prisma.$queryRaw(Prisma.raw(tSql8));
+                tObj.BILL_CD = '';
+                if (tRet8.length > 0) tObj.BILL_CD = tRet8[0].bill_cd;
+
+                if (args.data.IS_ALL !== '1' && tObj.BILL_CD !== '') continue;
+
+                var tSql9 = `
+                    select
+                        isnull(a.SEQ, 0) as SEQ,
+                        isnull(a.BANK_CD, '') as BANK_CD,
+                        isnull(b.BANK_NAME, '') as BANK_NAME,
+                        isnull(b.ACCOUNT_NO, '') as ACCOUNT_NO
+                    from
+                        kcd_vendor_bank a,
+                        kcd_bank b
+                    where
+                        a.VENDOR_CD = '${tObj.VENDOR_CD}'
+                        and a.BANK_CD = b.BANK_CD
+                    order by
+                        a.SEQ desc
+                `;
+                var tRet0_1 = await prisma.$queryRaw(Prisma.raw(tSql9));
+                var tRet0 = [];
+                tRet0_1.forEach((col, i) => {
+                    var tObj9 = { ...col };
+                    tObj9.BANK_NAME = `${tObj9.BANK_NAME}/${tObj9.ACCOUNT_NO}`;
+                    tRet0.push(tObj9);
+                });
+
+                if (tRet0_1.length > 1) {
+                    var tObj9 = {};
+                    tObj9.BANK_CD = '';
+                    tObj9.BANK_NAME = ' ';
+                    tRet0.unshift(tObj9);
+                    tObj.PAY_BANK = tRet0_1[0].BANK_CD;
+                } else if (tRet0_1.length === 1) {
+                    tObj.PAY_BANK = tRet0_1[0].BANK_CD;
+                }
+                tObj.PAY_BANK_ARRAY = [...tRet0];
+
+                if (
+                    parseFloat(tObj.PAY_AMT) > 0 ||
+                    parseFloat(tObj.DEPOSIT_AMT) > 0 ||
+                    tObj.LC_FLAG === '1'
+                ) {
+                    if (tObj.LC_FLAG === '1') tObj.PAY_AMT = '0';
+                    else if (parseFloat(tObj.DEPOSIT_AMT) > 0) {
+                        var tPayAmt =
+                            parseFloat(tObj.PAY_AMT) -
+                            parseFloat(tObj.DEPOSIT_AMT);
+                        tObj.PAY_AMT = String(tPayAmt);
+                    }
+                    tRetArray.push(tObj);
+                }
+            }
+            console.log(sqlStr);
+            return tRetArray;
+        },
+        mgrQueryS0419_LIST_1_bak4: async (_, args, contextValue) => {
+            var tRetDate = AFLib.getCurrTime();
+            var tRetDate1 = tRetDate.substring(0, 8);
+            var tUserInfo = AFLib.getUserInfo(contextValue);
+
+            var tSQL = '';
+            var tSQL1 = '';
+
+            /*
+       if (args.data.IS_ALL === '1') {
+          ;
+       } else {
+          tSQL = `and    (k.bill_cd is null or  k.bill_cd = '')`;
+       }
+       */
+
+            var sDate = args.data.S_PAY_DATE;
+            var eDate = args.data.E_PAY_DATE;
+            if (sDate === '') sDate = `${tRetDate1.substring(0, 4)}0101`;
+            if (eDate === '') eDate = '99999999';
+            var payDateSql = `and c.pay_date between '${sDate}' and '${eDate}' `;
+            var payDateSql1 = `and a.pay_date between '${sDate}' and '${eDate}' `;
+            var payDateSql2 = `and b.pay_date between '${sDate}' and '${eDate}' `;
+
+            let sqlStr = `
+                select
+                    e.BUYER_NAME,
+                    c.BUYER_CD,
+                    kk3.PU_CD,
+                    kk3.PO_CD as PO_CD2,
+                    c.VENDOR_CD,
+                    d.VENDOR_NAME,
+                    d.VENDOR_TYPE,
+                    c.TARGET_ETA,
+                    c.EXP_DELIVERY_DATE as READY_DATE,
+                    kk3.PAY_DATE,
+                    -- c.CURR_CD,
+                    kk3.IN_CURR_CD as CURR_CD,
+                    c.DEPOSIT_AMT,
+                    c.LC_FLAG,
+                    c.LC_AMT as LC_AMT2,
+                    c.REG_USER as PURCHARGER,
+                    sum(kk3.PO_QTY) as PO_QTY,
+                    sum(kk3.PO_AMT) as PO_AMT0,
+                    sum(kk3.IN_QTY) as IN_QTY,
+                    sum(kk3.IN_AMT) as PO_AMT,
+                    sum(kk3.LC_QTY) as LC_QTY,
+                    sum(kk3.LC_AMT) as LC_AMT,
+                    sum(kk3.END_IN_QTY) as IN_QTY,
+                    sum(kk3.END_IN_AMT) as END_AMT,
+                    sum(kk3.END_LC_QTY) as LC_QTY,
+                    sum(kk3.END_LC_AMT) as END_LC_AMT
+                from
+                    (
+                        select
+                            kk.PU_CD,
+                            kk.PO_CD,
+                            kk.MATL_CD,
+                            kk.PAY_DATE,
+                            kk.IN_CURR_CD,
+                            kk2.PO_QTY2 as PO_QTY,
+                            (kk2.PO_QTY2 * kk2.PO_PRICE) as PO_AMT,
+                            kk.IN_QTY,
+                            kk.IN_AMT,
+                            kk.LC_QTY,
+                            kk.LC_AMT,
+                            kk.END_IN_QTY,
+                            kk.END_IN_AMT,
+                            kk.END_LC_QTY,
+                            kk.END_LC_AMT
+                        from
+                            (
+                                select
+                                    a.PU_CD,
+                                    a.PO_CD,
+                                    a.MATL_CD,
+                                    a.PAY_DATE,
+                                    a.IN_CURR_CD,
+                                    sum(a.IN_QTY) as IN_QTY,
+                                    sum(a.IN_QTY * a.IN_PRICE) as IN_AMT,
+                                    sum(isnull(a.LC_QTY, 0)) as LC_QTY,
+                                    sum(isnull(a.LC_QTY, 0) * a.IN_PRICE) as LC_AMT,
+                                    sum(isnull(b.IN_QTY, 0)) as END_IN_QTY,
+                                    sum((isnull(b.IN_QTY, 0) * a.IN_PRICE)) as END_IN_AMT,
+                                    sum(isnull(b.LC_QTY, 0)) as END_LC_QTY,
+                                    sum((isnull(b.LC_QTY, 0) * a.IN_PRICE)) as END_LC_AMT
+                                from
+                                    ksv_stock_in a
+                                    left join ksv_stock_in b on a.pu_cd = b.pu_cd
+                                    and a.po_cd = b.PO_CD
+                                    and a.po_seq = b.PO_SEQ
+                                    and a.order_cd = b.ORDER_CD
+                                    and a.matl_cd = b.MATL_CD
+                                    and a.mrp_seq = b.MRP_SEQ
+                                    and a.matl_seq = b.MATL_SEQ
+                                    and a.IN_DATETIME = b.IN_DATETIME
+                                    and a.pay_date = b.PAY_DATE
+                                    and a.in_curr_cd = b.IN_CURR_CD
+                                    and b.end_flag = '1' ${payDateSql2}
+                                where
+                                    a.po_cd like '%${args.data.PO_CD}%'
+                                    and a.pu_cd like '%${args.data.PU_CD}%' ${payDateSql1}
+                                group by
+                                    a.PU_CD,
+                                    a.PO_CD,
+                                    a.MATL_CD,
+                                    a.PAY_DATE,
+                                    a.IN_CURR_CD
+                            ) kk,
+                            ksv_stock_mem2 kk2
+                        where
+                            kk.PU_CD = kk2.PU_CD
+                            and kk.PO_CD = kk2.PO_CD
+                            and kk.MATL_CD = kk2.MATL_CD
+                    ) kk3,
+                    ksv_pu_mst2 c,
+                    kcd_vendor d,
+                    kcd_buyer e
+                where
+                    kk3.PU_CD = c.pu_cd
+                    and c.bill_to in ('SHINTS', 'FACTORY', 'BVT', 'ETP')
+                    and c.vendor_cd = d.vendor_cd
+                    and c.buyer_cd = e.buyer_cd
+                    and d.vendor_type like '%${args.data.VENDOR_TYPE}%'
+                    and d.vendor_name like '%${args.data.VENDOR_CD}%'
+                    and c.vendor_cd <> 'V0882'
+                    and c.vendor_cd <> 'V0381'
+                    and c.vendor_cd <> 'V0523'
+                    and c.vendor_cd <> 'V2584'
+                    and d.vendor_type in ('1', '3', '5')
+                    and c.po_cd2 like '%${args.data.PO_CD}%'
+                    and c.pu_cd like '%${args.data.PU_CD}%'
+                    and c.buyer_cd like '%${args.data.BUYER_CD}%'
+                    and c.reg_user like '%${args.data.PURCHARGER}%' ${payDateSql}
+                group by
+                    e.BUYER_NAME,
+                    c.BUYER_CD,
+                    kk3.PU_CD,
+                    kk3.PO_CD,
+                    c.VENDOR_CD,
+                    d.VENDOR_NAME,
+                    d.VENDOR_TYPE,
+                    c.TARGET_ETA,
+                    c.EXP_DELIVERY_DATE,
+                    kk3.PAY_DATE,
+                    -- c.CURR_CD,
+                    kk3.IN_CURR_CD,
+                    c.DEPOSIT_AMT,
+                    c.LC_FLAG,
+                    c.LC_AMT,
+                    c.REG_USER
+                order by
+                    d.VENDOR_NAME,
+                    kk3.PAY_DATE
+            `;
+            var tRet = await prisma.$queryRaw(Prisma.raw(sqlStr));
+
+            var tRetArray = [];
+            var tIdx = 0;
+            for (tIdx = 0; tIdx < tRet.length; tIdx++) {
+                var tObj = { ...tRet[tIdx] };
+
+                // if (tObj.LC_FLAG === '1') tObj.DEPOSIT_AMT = tObj.LC_AMT;
+                tObj.DEPOSIT_AMT = tObj.LC_AMT;
+
+                var tDepositAmt = parseFloat(tObj.DEPOSIT_AMT);
+                var tPoAmt = parseFloat(tObj.PO_AMT) + tDepositAmt;
+                var tEndAmt =
+                    parseFloat(tObj.END_AMT) + parseFloat(tObj.END_LC_AMT);
+                var tPayAmt = tPoAmt - tDepositAmt;
+
+                tObj.PO_AMT = AFLib.numToFixed(tPoAmt, 2);
+                tObj.DEPOSIT_AMT = AFLib.numToFixed(tDepositAmt, 2);
+                tObj.PAY_AMT = AFLib.numToFixed(tPayAmt, 2);
+                tObj.END_AMT = AFLib.numToFixed(tEndAmt, 2);
+
+                var tSql8 = `
+                    select
+                        isnull(a.bill_cd, '') as bill_cd
+                    from
+                        ksv_stock_mem2_stsin a,
+                        ksv_bill_mst b
+                    where
+                        a.pu_cd = '${tObj.PU_CD}'
+                        and a.po_cd = '${tObj.PO_CD2}'
+                        and a.bill_cd = b.bill_cd
+                `;
+                var tRet8 = await prisma.$queryRaw(Prisma.raw(tSql8));
+                tObj.BILL_CD = '';
+                if (tRet8.length > 0) tObj.BILL_CD = tRet8[0].bill_cd;
+
+                // if (args.data.IS_ALL !== '1' && tObj.BILL_CD !== '') continue;
+
+                var tSql9 = `
+                    select
+                        isnull(a.SEQ, 0) as SEQ,
+                        isnull(a.BANK_CD, '') as BANK_CD,
+                        isnull(b.BANK_NAME, '') as BANK_NAME,
+                        isnull(b.ACCOUNT_NO, '') as ACCOUNT_NO
+                    from
+                        kcd_vendor_bank a,
+                        kcd_bank b
+                    where
+                        a.VENDOR_CD = '${tObj.VENDOR_CD}'
+                        and a.BANK_CD = b.BANK_CD
+                    order by
+                        a.SEQ desc
+                `;
+                var tRet0_1 = await prisma.$queryRaw(Prisma.raw(tSql9));
+                var tRet0 = [];
+                tRet0_1.forEach((col, i) => {
+                    var tObj9 = { ...col };
+                    tObj9.BANK_NAME = `${tObj9.BANK_NAME}/${tObj9.ACCOUNT_NO}`;
+                    tRet0.push(tObj9);
+                });
+
+                if (tRet0_1.length > 1) {
+                    var tObj9 = {};
+                    tObj9.BANK_CD = '';
+                    tObj9.BANK_NAME = ' ';
+                    tRet0.unshift(tObj9);
+                    tObj.PAY_BANK = tRet0_1[0].BANK_CD;
+                } else if (tRet0_1.length === 1) {
+                    tObj.PAY_BANK = tRet0_1[0].BANK_CD;
+                }
+                tObj.PAY_BANK_ARRAY = [...tRet0];
+
+                if (
+                    parseFloat(tObj.PAY_AMT) > 0 ||
+                    parseFloat(tObj.DEPOSIT_AMT) > 0 ||
+                    tObj.LC_FLAG === '1'
+                ) {
+                    /*
+               if (tObj.LC_FLAG === '1') tObj.PAY_AMT = '0';
+               else if (parseFloat(tObj.DEPOSIT_AMT) > 0) {
+                   var tPayAmt = parseFloat(tObj.PAY_AMT) - parseFloat(tObj.DEPOSIT_AMT);
+                   tObj.PAY_AMT = String(tPayAmt);
+               }
+               */
+                    if (args.data.IS_ALL === '1') {
+                        tRetArray.push(tObj);
+                    } else {
+                        var tTmpPayAmt =
+                            AFLib.numToFixed(parseFloat(tObj.PAY_AMT), 2) +
+                            AFLib.numToFixed(parseFloat(tObj.LC_AMT), 2);
+                        var tTmpEndAmt = AFLib.numToFixed(
+                            parseFloat(tObj.END_AMT),
+                            2,
+                        );
+                        if (tTmpPayAmt > tTmpEndAmt) tRetArray.push(tObj);
+                    }
+                }
+            }
+            console.log(sqlStr);
+            return tRetArray;
+        },
+        mgrQueryS0419_LIST_1_bak5: async (_, args, contextValue) => {
+            var tRetDate = AFLib.getCurrTime();
+            var tRetDate1 = tRetDate.substring(0, 8);
+            var tUserInfo = AFLib.getUserInfo(contextValue);
+
+            var tSQL = '';
+            var tSQL1 = '';
+
+            /*
+       if (args.data.IS_ALL === '1') {
+          ;
+       } else {
+          tSQL = `and    (k.bill_cd is null or  k.bill_cd = '')`;
+       }
+       */
+
+            var sDate = args.data.S_PAY_DATE;
+            var eDate = args.data.E_PAY_DATE;
+            if (sDate === '') sDate = `${tRetDate1.substring(0, 4)}0101`;
+            if (eDate === '') eDate = '99999999';
+            var payDateSql = `and c.pay_date between '${sDate}' and '${eDate}' `;
+            var payDateSql1 = `and a.pay_date between '${sDate}' and '${eDate}' `;
+            var payDateSql2 = `and b.pay_date between '${sDate}' and '${eDate}' `;
+
+            var endDateSql = '';
+            var endDateSql1 = '';
+            var endDateSql2 = '';
+            if (args.data.IS_ALL === '1') {
+                var sDate1 = args.data.S_END_DATE;
+                var eDate1 = args.data.E_END_DATE;
+                if (sDate1 === '') sDate = `${tRetDate1.substring(0, 4)}0101`;
+                if (eDate1 === '') eDate = '99999999';
+                var endDateSql = `and c.end_date between '${sDate1}' and '${eDate1}' `;
+                var endDateSql1 = `and a.end_date between '${sDate1}' and '${eDate1}' `;
+                var endDateSql2 = `and b.end_date between '${sDate1}' and '${eDate1}' `;
+            }
+
+            let sqlStr = `
+                select
+                    e.BUYER_NAME,
+                    c.BUYER_CD,
+                    kk3.PU_CD,
+                    kk3.PO_CD as PO_CD2,
+                    c.VENDOR_CD,
+                    d.VENDOR_NAME,
+                    d.VENDOR_TYPE,
+                    c.TARGET_ETA,
+                    c.EXP_DELIVERY_DATE as READY_DATE,
+                    kk3.PAY_DATE,
+                    kk3.PAY_CURR_CD as CURR_CD,
+                    c.DEPOSIT_AMT,
+                    c.LC_FLAG,
+                    c.LC_AMT as LC_AMT2,
+                    c.REG_USER as PURCHARGER,
+                    kk3.PUR_APP,
+                    kk3.TT_FLAG,
+                    kk3.PUR_FACTORY,
+                    kk3.END_DATE,
+                    kk3.PAY_REPORT,
+                    sum(kk3.PO_QTY) as PO_QTY,
+                    sum(kk3.PO_AMT) as PO_AMT0,
+                    sum(kk3.IN_QTY) as IN_QTY,
+                    sum(kk3.IN_AMT) as PO_AMT,
+                    sum(kk3.LC_QTY) as LC_QTY,
+                    sum(kk3.LC_AMT) as LC_AMT
+                from
+                    (
+                        select
+                            kk.PU_CD,
+                            kk.PO_CD,
+                            kk.MATL_CD,
+                            kk.PAY_DATE,
+                            kk.PAY_CURR_CD,
+                            kk.PUR_APP,
+                            kk.TT_FLAG,
+                            kk.PUR_FACTORY,
+                            kk.END_DATE,
+                            kk.PAY_REPORT,
+                            kk2.PO_QTY2 as PO_QTY,
+                            (kk2.PO_QTY2 * kk2.PO_PRICE) as PO_AMT,
+                            kk.IN_QTY,
+                            kk.IN_AMT,
+                            kk.LC_QTY,
+                            kk.LC_AMT
+                        from
+                            (
+                                select
+                                    a.PU_CD,
+                                    a.PO_CD,
+                                    a.MATL_CD,
+                                    a.PAY_DATE,
+                                    a.PAY_CURR_CD,
+                                    isnull(a.PUR_APP, '') as PUR_APP,
+                                    isnull(a.TT_FLAg, '') as TT_FLAG,
+                                    isnull(a.PUR_FACTORY, '') as PUR_FACTORY,
+                                    isnull(a.END_DATE, '') as END_DATE,
+                                    isnull(a.PAY_REPORT, '') as PAY_REPORT,
+                                    sum(a.IN_QTY) as IN_QTY,
+                                    sum(a.IN_QTY * a.IN_PRICE) as IN_AMT,
+                                    sum(isnull(a.LC_QTY, 0)) as LC_QTY,
+                                    sum(isnull(a.LC_QTY, 0) * a.IN_PRICE) as LC_AMT
+                                from
+                                    ksv_stock_in a,
+                                    kcd_matl_mst b,
+                                    kcd_vendor c
+                                where
+                                    a.po_cd like '%${args.data.PO_CD}%'
+                                    and a.pu_cd like '%${args.data.PU_CD}%'
+                                    and a.matl_cd = b.matl_cd
+                                    and b.vendor_cd = c.vendor_cd
+                                    and c.vendor_name like '%${args.data.VENDOR_CD}%'
+                                    and c.vendor_type like '%${args.data.VENDOR_TYPE}%' ${payDateSql1} ${endDateSql1}
+                                group by
+                                    a.PU_CD,
+                                    a.PO_CD,
+                                    a.MATL_CD,
+                                    a.PAY_DATE,
+                                    a.PAY_CURR_CD,
+                                    a.PUR_APP,
+                                    a.TT_FLAg,
+                                    a.PUR_FACTORY,
+                                    a.END_DATE,
+                                    a.PAY_REPORT
+                            ) kk,
+                            ksv_stock_mem2 kk2
+                        where
+                            kk.PU_CD = kk2.PU_CD
+                            and kk.PO_CD = kk2.PO_CD
+                            and kk.MATL_CD = kk2.MATL_CD
+                    ) kk3,
+                    ksv_pu_mst2 c,
+                    kcd_vendor d,
+                    kcd_buyer e
+                where
+                    kk3.PU_CD = c.pu_cd
+                    and c.bill_to in ('SHINTS', 'FACTORY', 'BVT', 'ETP')
+                    and c.vendor_cd = d.vendor_cd
+                    and c.buyer_cd = e.buyer_cd
+                    and d.vendor_type like '%${args.data.VENDOR_TYPE}%'
+                    and d.vendor_name like '%${args.data.VENDOR_CD}%'
+                    and c.vendor_cd <> 'V0882'
+                    and c.vendor_cd <> 'V0381'
+                    and c.vendor_cd <> 'V0523'
+                    and c.vendor_cd <> 'V2584'
+                    and d.vendor_type in ('1', '3', '5')
+                    and c.po_cd2 like '%${args.data.PO_CD}%'
+                    and c.pu_cd like '%${args.data.PU_CD}%'
+                    and c.buyer_cd like '%${args.data.BUYER_CD}%'
+                    and c.reg_user like '%${args.data.PURCHARGER}%'
+                    -- ${payDateSql}
+                group by
+                    e.BUYER_NAME,
+                    c.BUYER_CD,
+                    kk3.PU_CD,
+                    kk3.PO_CD,
+                    c.VENDOR_CD,
+                    d.VENDOR_NAME,
+                    d.VENDOR_TYPE,
+                    c.TARGET_ETA,
+                    c.EXP_DELIVERY_DATE,
+                    kk3.PAY_DATE,
+                    kk3.PAY_CURR_CD,
+                    c.DEPOSIT_AMT,
+                    c.LC_FLAG,
+                    c.LC_AMT,
+                    c.REG_USER,
+                    kk3.PUR_APP,
+                    kk3.TT_FLAG,
+                    kk3.PUR_FACTORY,
+                    kk3.END_DATE,
+                    kk3.PAY_REPORT
+                order by
+                    d.VENDOR_NAME,
+                    kk3.PAY_DATE,
+                    kk3.PAY_CURR_CD,
+                    kk3.END_DATE
+            `;
+            var tRet = await prisma.$queryRaw(Prisma.raw(sqlStr));
+
+            var tRetArray = [];
+            var tIdx = 0;
+            for (tIdx = 0; tIdx < tRet.length; tIdx++) {
+                var tObj = { ...tRet[tIdx] };
+
+                // if (tObj.LC_FLAG === '1') tObj.DEPOSIT_AMT = tObj.LC_AMT;
+                tObj.DEPOSIT_AMT = tObj.LC_AMT;
+
+                var tDepositAmt = parseFloat(tObj.DEPOSIT_AMT);
+                var tPoAmt = parseFloat(tObj.PO_AMT) + tDepositAmt;
+                var tPayAmt = tPoAmt - tDepositAmt;
+
+                if (tObj.END_DATE !== '') {
+                    tObj.END_AMT = String(tPayAmt);
+                    tObj.END_LC_AMT = String(tDepositAmt);
+                } else {
+                    tObj.END_AMT = '0';
+                    tObj.END_LC_AMT = '0';
+                }
+                var tEndAmt =
+                    parseFloat(tObj.END_AMT) + parseFloat(tObj.END_LC_AMT);
+
+                tObj.PO_AMT = AFLib.numToFixed(tPoAmt, 2);
+                tObj.DEPOSIT_AMT = AFLib.numToFixed(tDepositAmt, 2);
+                tObj.PAY_AMT = AFLib.numToFixed(tPayAmt, 2);
+                tObj.END_AMT = AFLib.numToFixed(tEndAmt, 2);
+
+                var tSql8 = `
+                    select
+                        isnull(a.bill_cd, '') as bill_cd
+                    from
+                        ksv_stock_mem2_stsin a,
+                        ksv_bill_mst b
+                    where
+                        a.pu_cd = '${tObj.PU_CD}'
+                        and a.po_cd = '${tObj.PO_CD2}'
+                        and a.bill_cd = b.bill_cd
+                `;
+                var tRet8 = await prisma.$queryRaw(Prisma.raw(tSql8));
+                tObj.BILL_CD = '';
+                if (tRet8.length > 0) tObj.BILL_CD = tRet8[0].bill_cd;
+
+                // if (args.data.IS_ALL !== '1' && tObj.BILL_CD !== '') continue;
+
+                var tSql9 = `
+                    select
+                        isnull(a.SEQ, 0) as SEQ,
+                        isnull(a.BANK_CD, '') as BANK_CD,
+                        isnull(b.BANK_NAME, '') as BANK_NAME,
+                        isnull(b.ACCOUNT_NO, '') as ACCOUNT_NO
+                    from
+                        kcd_vendor_bank a,
+                        kcd_bank b
+                    where
+                        a.VENDOR_CD = '${tObj.VENDOR_CD}'
+                        and a.BANK_CD = b.BANK_CD
+                    order by
+                        a.SEQ desc
+                `;
+                var tRet0_1 = await prisma.$queryRaw(Prisma.raw(tSql9));
+                var tRet0 = [];
+                tRet0_1.forEach((col, i) => {
+                    var tObj9 = { ...col };
+                    tObj9.BANK_NAME = `${tObj9.BANK_NAME}/${tObj9.ACCOUNT_NO}`;
+                    tRet0.push(tObj9);
+                });
+
+                if (tRet0_1.length > 1) {
+                    var tObj9 = {};
+                    tObj9.BANK_CD = '';
+                    tObj9.BANK_NAME = ' ';
+                    tRet0.unshift(tObj9);
+                    tObj.PAY_BANK = tRet0_1[0].BANK_CD;
+                } else if (tRet0_1.length === 1) {
+                    tObj.PAY_BANK = tRet0_1[0].BANK_CD;
+                }
+                tObj.PAY_BANK_ARRAY = [...tRet0];
+
+                if (
+                    parseFloat(tObj.PAY_AMT) > 0 ||
+                    parseFloat(tObj.DEPOSIT_AMT) > 0 ||
+                    tObj.LC_FLAG === '1'
+                ) {
+                    /*
+               if (tObj.LC_FLAG === '1') tObj.PAY_AMT = '0';
+               else if (parseFloat(tObj.DEPOSIT_AMT) > 0) {
+                   var tPayAmt = parseFloat(tObj.PAY_AMT) - parseFloat(tObj.DEPOSIT_AMT);
+                   tObj.PAY_AMT = String(tPayAmt);
+               }
+               */
+                    if (args.data.IS_ALL === '1') {
+                        tRetArray.push(tObj);
+                    } else {
+                        var tTmpPayAmt =
+                            AFLib.numToFixed(parseFloat(tObj.PAY_AMT), 2) +
+                            AFLib.numToFixed(parseFloat(tObj.LC_AMT), 2);
+                        var tTmpEndAmt = AFLib.numToFixed(
+                            parseFloat(tObj.END_AMT),
+                            2,
+                        );
+                        if (tTmpPayAmt > tTmpEndAmt) tRetArray.push(tObj);
+                    }
+                }
+            }
+            console.log(sqlStr);
+            return tRetArray;
+        },
+        mgrQueryS0419_LIST_1_bak6: async (_, args, contextValue) => {
+            var tRetDate = AFLib.getCurrTime();
+            var tRetDate1 = tRetDate.substring(0, 8);
+            var tUserInfo = AFLib.getUserInfo(contextValue);
+
+            var tSQL = '';
+            if (args.data.IS_ALL !== '1') {
+                tSQL = `and (a.end_flag is null or a.end_flag = '' or a.end_flag = '0')`;
+            }
+
+            var payDateSql1 = '';
+            var sDate = args.data.S_PAY_DATE;
+            var eDate = args.data.E_PAY_DATE;
+            if (sDate !== '' || eDate !== '') {
+                if (sDate === '') sDate = `${tRetDate1.substring(0, 4)}0101`;
+                if (eDate === '') eDate = '99999999';
+                payDateSql1 = `and a.pay_date between '${sDate}' and '${eDate}' `;
+            }
+
+            var endDateSql1 = '';
+            if (args.data.IS_ALL === '1') {
+                var sDate1 = args.data.S_END_DATE;
+                var eDate1 = args.data.E_END_DATE;
+                if (sDate1 === '') sDate1 = `${tRetDate1.substring(0, 4)}0101`;
+                if (eDate1 === '') eDate1 = '99999999';
+                endDateSql1 = `and a.end_date between '${sDate1}' and '${eDate1}' `;
+            }
+
+            var sDate2 = args.data.S_IN_DATE;
+            var eDate2 = args.data.E_IN_DATE;
+            if (sDate2 === '') sDate2 = `${tRetDate1.substring(0, 6)}01`;
+            if (eDate2 === '') eDate2 = '99999999';
+            var inDateSql1 = `and left(a.in_datetime, 8) between '${sDate2}' and '${eDate2}' `;
+
+            let sqlStr = `
+                select
+                    b.VENDOR_CD,
+                    c.VENDOR_NAME,
+                    c.VENDOR_TYPE,
+                    left(a.IN_DATETIME, 8) as IN_DATE,
+                    isnull(a.PAY_DATE, '') as PAY_DATE,
+                    isnull(a.PAY_CURR_CD, '') as CURR_CD,
+                    isnull(a.END_DATE, '') as END_DATE,
+                    isnull(a.PUR_FACTORY, '') as PUR_FACTORY,
+                    isnull(a.PUR_APP, '') as PUR_APP,
+                    isnull(a.TT_FLAG, '') as TT_FLAG,
+                    isnull(a.PAY_REPORT, '') as PAY_REPORT,
+                    isnull(a.BILL_NO, '') as BILL_CD,
+                    isnull(a.REG_USER, '') as PURCHARGER,
+                    isnull(e.company_code, '') as COMPANY_CODE,
+                    isnull(a.lc_bill_no, '') as LC_BILL_NO,
+                    sum(a.IN_QTY) as IN_QTY,
+                    sum(a.IN_QTY * a.PAY_PRICE) as IN_AMT,
+                    isnull(sum(a.LC_QTY), 0) as LC_QTY,
+                    isnull(sum(a.LC_QTY * a.PAY_PRICE), 0) as LC_AMT
+                from
+                    ksv_stock_in a,
+                    kcd_matl_mst b,
+                    kcd_vendor c,
+                    kcd_buyer d,
+                    kcd_user e
+                where
+                    a.po_cd like '%${args.data.PO_CD}%'
+                    and a.pu_cd like '%${args.data.PU_CD}%'
+                    and a.matl_cd = b.matl_cd
+                    and b.vendor_cd = c.vendor_cd
+                    and left(a.order_cd, 2) = d.buyer_cd
+                    and d.reg_user = e.user_id
+                    and c.vendor_name like '%${args.data.VENDOR_CD}%'
+                    and c.vendor_type like '%${args.data.VENDOR_TYPE}%'
+                    and (
+                        a.in_qty > 0
+                        or (
+                            a.lc_qty > 0
+                            and a.in_qty <= 0
+                            and lc_conf_flag = '1'
+                        )
+                    ) ${payDateSql1} ${endDateSql1} ${inDateSql1} ${tSQL}
+                group by
+                    b.VENDOR_CD,
+                    c.VENDOR_NAME,
+                    c.VENDOR_TYPE,
+                    left(a.IN_DATETIME, 8),
+                    a.PAY_DATE,
+                    a.PAY_CURR_CD,
+                    a.END_DATE,
+                    a.PUR_FACTORY,
+                    a.PUR_APP,
+                    a.TT_FLAG,
+                    a.PAY_REPORT,
+                    a.BILL_NO,
+                    a.REG_USER,
+                    e.COMPANY_CODE,
+                    a.lc_bill_no
+                order by
+                    c.VENDOR_NAME,
+                    e.COMPANY_CODE desc,
+                    a.END_DATE,
+                    left(a.IN_DATETIME, 8)
+            `;
+
+            var tRet = await prisma.$queryRaw(Prisma.raw(sqlStr));
+
+            const vendorCdList = tRet
+                .map((row) => `'${row.VENDOR_CD}'`)
+                .filter((value, index, self) => self.indexOf(value) === index);
+
+            const vendorBankSQL = `
+                SELECT
+                    a.VENDOR_CD,
+                    ISNULL(a.SEQ, 0) AS SEQ,
+                    ISNULL(a.BANK_CD, '') AS BANK_CD,
+                    ISNULL(b.BANK_NAME, '') AS BANK_NAME,
+                    ISNULL(b.ACCOUNT_NO, '') AS ACCOUNT_NO
+                FROM
+                    kcd_vendor_bank a
+                    JOIN kcd_bank b ON a.BANK_CD = b.BANK_CD
+                WHERE
+                    a.VENDOR_CD IN (${vendorCdList.join(',')})
+                ORDER BY
+                    a.VENDOR_CD,
+                    a.SEQ DESC
+            `;
+            const vendorBankList = await prisma.$queryRaw(
+                Prisma.raw(vendorBankSQL),
+            );
+
+            const vendorBankMap = new Map();
+            vendorBankList.forEach((row) => {
+                const vendorCd = row.VENDOR_CD;
+                const entry = {
+                    BANK_CD: row.BANK_CD,
+                    BANK_NAME: `${row.BANK_NAME}/${row.ACCOUNT_NO}`,
+                };
+                if (!vendorBankMap.has(vendorCd)) {
+                    vendorBankMap.set(vendorCd, []);
+                }
+                vendorBankMap.get(vendorCd).push(entry);
+            });
+
+            var tRetArray = [];
+            var billMst = {};
+
+            for (let tIdx = 0; tIdx < tRet.length; tIdx++) {
+                var tObj = { ...tRet[tIdx] };
+
+                if (
+                    parseFloat(tObj.IN_QTY) <= 0 &&
+                    parseFloat(tObj.LC_QTY) <= 0
+                )
+                    continue;
+                if (parseFloat(tObj.IN_QTY) <= 0 && parseFloat(tObj.LC_QTY) > 0)
+                    continue; // LC, Deposit
+
+                if (parseFloat(tObj.IN_QTY) > 0 && tObj.LC_BILL_NO !== '') {
+                    const sqlLc = `
+                        select
+                            isnull(sum(lc_qty), 0) as LC_QTY,
+                            isnull(sum(lc_qty * pay_price), 0) as LC_AMT
+                        from
+                            ksv_stock_in
+                        where
+                            lc_qty > 0
+                            and pay_report = '${tObj.LC_BILL_NO}'
+                    `;
+                    const retLc = await prisma.$queryRaw(Prisma.raw(sqlLc));
+                    if (retLc.length > 0) {
+                        tObj.LC_QTY = retLc[0].LC_QTY;
+                        tObj.LC_AMT = retLc[0].LC_AMT;
+                    }
+                }
+
+                tObj.PU_CD = '';
+                tObj.STSIN_CD = '';
+                tObj.BUYER_CD = '';
+                tObj.BUYER_NAME = '';
+                tObj.LC_FLAG = '';
+                tObj.PO_CD2 = '';
+                tObj.READY_DATE = '';
+                tObj.TARGET_ETA = '';
+                tObj.PAY_PRICE = '0';
+
+                var tPO_AMT = 0;
+                if (parseFloat(tObj.IN_AMT) > 0 && parseFloat(tObj.LC_AMT))
+                    tPO_AMT = parseFloat(tObj.IN_AMT);
+                else
+                    tPO_AMT = parseFloat(tObj.IN_AMT) + parseFloat(tObj.LC_AMT);
+
+                tObj.PO_AMT = String(tPO_AMT);
+                if (
+                    parseFloat(tObj.IN_QTY) === 0 &&
+                    parseFloat(tObj.LC_QTY) > 0
+                )
+                    tObj.LC_FLAG = '1';
+                tObj.DEPOSIT_AMT = '0';
+                if (parseFloat(tObj.LC_QTY) > 0) {
+                    tObj.DEPOSIT_AMT = String(tObj.LC_AMT);
+                }
+
+                tObj.IN_QTY = AFLib.numToFixed(parseFloat(tObj.IN_QTY), 2);
+                tObj.LC_QTY = AFLib.numToFixed(parseFloat(tObj.LC_QTY), 2);
+
+                tObj.PO_AMT = AFLib.numToFixed(parseFloat(tObj.PO_AMT), 2);
+                tObj.DEPOSIT_AMT = AFLib.numToFixed(
+                    parseFloat(tObj.DEPOSIT_AMT),
+                    2,
+                );
+
+                var tPayAmt =
+                    parseFloat(tObj.PO_AMT) - parseFloat(tObj.DEPOSIT_AMT);
+                tObj.PAY_AMT = AFLib.numToFixed(parseFloat(tPayAmt), 2);
+                tObj.END_AMT = AFLib.numToFixed(parseFloat(tPayAmt), 2);
+                if (!tObj.END_DATE) {
+                    tObj.END_DATE = '';
+                    tObj.END_AMT = '0';
+                }
+
+                const bankArr = vendorBankMap.get(tObj.VENDOR_CD) || [];
+
+                if (bankArr.length > 1) {
+                    bankArr.unshift({ BANK_CD: '', BANK_NAME: ' ' });
+                    tObj.PAY_BANK = bankArr[1]?.BANK_CD || '';
+                } else if (bankArr.length === 1) {
+                    tObj.PAY_BANK = bankArr[0].BANK_CD;
+                }
+
+                tObj.PAY_BANK_ARRAY = [...bankArr];
+                tObj.BILL_MST = [];
+
+                if (tObj.BILL_CD && tRetArray.length <= 0) {
+                    const sqlBillMst = `
+                        select
+                            *
+                        from
+                            ksv_bill_mst
+                        where
+                            bill_cd = '${tObj.BILL_CD}'
+                    `;
+                    const retBillMst = await prisma.$queryRaw(
+                        Prisma.raw(sqlBillMst),
+                    );
+                    if (retBillMst.length > 0) {
+                        var tObj0 = { ...retBillMst[0] };
+
+                        var tObj1 = {};
+                        tObj1.PAY_DATE = tObj0.PAY_DATE;
+                        tObj1.PO_AMT = tObj0.PO_AMT;
+                        tObj1.DEPOSIT_AMT = tObj0.DEPOSIT_AMT;
+                        tObj1.LC_AMT = tObj0.LC_AMT;
+                        tObj1.DEBIT_AMT = tObj0.DEBIT_AMT;
+                        tObj1.DISCOUNT_AMT = tObj0.DISCOUNT_AMT;
+                        tObj1.VAT_AMT = tObj0.VAT_AMT;
+                        tObj1.PAY_AMT = tObj0.PAY_AMT;
+                        tObj1.PAY_BANK = tObj0.PAY_BANK;
+                        tObj1.TAX_KIND = tObj0.TAX_KIND;
+
+                        billMst = { ...tObj1 };
+                    }
+                }
+
+                if (tObj.BILL_CD) {
+                    tObj.BILL_MST.push(billMst);
+                }
+
+                if (!args.data.BILL_CD || tObj.BILL_CD === args.data.BILL_CD) {
+                    tRetArray.push(tObj);
+                }
+            }
+
+            console.log(sqlStr);
+            return tRetArray;
+
+            /*
+      var tRetDate = AFLib.getCurrTime();
+      var tRetDate1 = tRetDate.substring(0, 8);
+      var tUserInfo = AFLib.getUserInfo(contextValue);
+
+
+       var tSQL = '';
+       var tSQL1 = '';
+
+       if (args.data.IS_ALL === '1') {
+          ;
+       } else {
+          tSQL = `and    (a.end_flag is null or a.end_flag = '' or a.end_flag = '0')`;
+       }
+
+       var payDateSql = '';
+       var payDateSql1 = '';
+       var payDateSql2 = '';
+       var sDate = args.data.S_PAY_DATE;
+       var eDate = args.data.E_PAY_DATE;
+       if (!args.data.S_PAY_DATE && !args.data.E_PAY_DATE) {
+           ;
+       } else {
+          if (sDate === '') sDate = `${tRetDate1.substring(0, 4)}0101`;
+          if (eDate === '') eDate = '99999999';
+          payDateSql1 = `and a.pay_date between '${sDate}' and '${eDate}' `;
+       }
+
+       var endDateSql = '';
+       var endDateSql1 = '';
+       var endDateSql2 = '';
+       if (args.data.IS_ALL === '1') {
+           var sDate1 = args.data.S_END_DATE;
+           var eDate1 = args.data.E_END_DATE;
+           if (sDate1 === '') sDate1 = `${tRetDate1.substring(0, 4)}0101`;
+           if (eDate1 === '') eDate1 = '99999999';
+           endDateSql1 = `and a.end_date between '${sDate1}' and '${eDate1}' `;
+       }
+
+       var sDate2 = args.data.S_IN_DATE;
+       var eDate2 = args.data.E_IN_DATE;
+       var inDateSql = ''; 
+       var inDateSql1 = '';
+       var inDateSql2 = '';
+       if (!args.data.S_IN_DATE && !args.data.E_IN_DATE) {
+           if (sDate2 === '') sDate2 = `${tRetDate1.substring(0, 6)}01`;
+           if (eDate2 === '') eDate2 = '99999999';
+           inDateSql1 = `and left(a.in_datetime, 8) between '${sDate2}' and '${eDate2}' `;
+       } else {
+           if (sDate2 === '') sDate2 = `${tRetDate1.substring(0, 6)}01`;
+           if (eDate2 === '') eDate2 = '99999999';
+           inDateSql1 = `and left(a.in_datetime, 8) between '${sDate2}' and '${eDate2}' `;
+       }
+
+       let sqlStr = `
+           select
+               b.VENDOR_CD,
+               c.VENDOR_NAME,
+               c.VENDOR_TYPE,
+               left(a.IN_DATETIME, 8) as IN_DATE,
+               isnull(a.PAY_DATE, '') as PAY_DATE,
+               isnull(a.PAY_CURR_CD, '') as CURR_CD,
+               isnull(a.END_DATE, '') as END_DATE,
+               isnull(a.PUR_FACTORY, '') as PUR_FACTORY,
+               isnull(a.PUR_APP, '') as PUR_APP,
+               isnull(a.TT_FLAG, '') as TT_FLAG,
+               isnull(a.PAY_REPORT, '') as PAY_REPORT,
+               isnull(a.BILL_NO, '') as BILL_CD,
+               isnull(a.REG_USER, '') as PURCHARGER,
+               isnull(e.company_code, '') as COMPANY_CODE,
+               sum(a.IN_QTY) as IN_QTY,
+               sum(a.IN_QTY * a.PAY_PRICE) as IN_AMT,
+               sum(isnull(a.LC_QTY, 0)) as LC_QTY,
+               sum(isnull(a.LC_QTY, 0) * a.PAY_PRICE) as LC_AMT
+           from
+               ksv_stock_in a,
+               kcd_matl_mst b,
+               kcd_vendor c,
+               kcd_buyer d,
+               kcd_user e
+           where
+               a.po_cd like '%${args.data.PO_CD}%'
+               and a.pu_cd like '%${args.data.PU_CD}%'
+               and a.matl_cd = b.matl_cd
+               and b.vendor_cd = c.vendor_cd
+               and left(a.order_cd, 2) = d.buyer_cd
+               and d.reg_user = e.user_id
+               and c.vendor_name like '%${args.data.VENDOR_CD}%'
+               and c.vendor_type like '%${args.data.VENDOR_TYPE}%' ${payDateSql1} ${endDateSql1} ${inDateSql1} ${tSQL}
+           group by
+               b.VENDOR_CD,
+               c.VENDOR_NAME,
+               c.VENDOR_TYPE,
+               left(a.IN_DATETIME, 8),
+               a.PAY_DATE,
+               a.PAY_CURR_CD,
+               a.END_DATE,
+               a.PUR_FACTORY,
+               a.PUR_APP,
+               a.TT_FLAG,
+               a.PAY_REPORT,
+               a.BILL_NO,
+               a.REG_USER,
+               e.COMPANY_CODE
+           order by
+               c.VENDOR_NAME,
+               e.COMPANY_CODE desc,
+               a.END_DATE,
+               left(a.IN_DATETIME, 8)
+       `;
+       var tRet  =  await prisma.$queryRaw(Prisma.raw(sqlStr));
+
+       var tRetArray = [];
+       var tIdx = 0;
+       for (tIdx = 0; tIdx < tRet.length; tIdx ++) {
+           var tObj = { ...tRet[tIdx] };
+
+           if (parseFloat(tObj.IN_QTY) <= 0 && parseFloat(tObj.LC_QTY) <= 0) continue;
+
+           tObj.PU_CD = '';
+           tObj.STSIN_CD = '';
+           tObj.BUYER_CD = '';
+           tObj.BUYER_NAME = '';
+           tObj.LC_FLAG = '';
+           tObj.PO_CD2 = '';
+           tObj.READY_DATE = '';
+           tObj.TARGET_ETA = '';
+
+           var tPO_AMT = parseFloat(tObj.IN_AMT) + parseFloat(tObj.LC_AMT);
+           tObj.PO_AMT = String(tPO_AMT);
+           tObj.PAY_AMT = String(tPO_AMT);
+
+           if (!tObj.END_DATE) {
+               tObj.END_DATE = '';
+               tObj.END_AMT = '0';
+           } else {
+               if (tObj.END_DATE !== '') tObj.END_AMT = tObj.PAY_AMT;
+           }
+
+           if (parseFloat(tObj.IN_QTY) === 0 && parseFloat(tObj.LC_QTY) > 0) tObj.LC_FLAG = '1';
+           tObj.DEPOSIT_AMT = '0';
+           if (parseFloat(tObj.IN_QTY) > 0 && parseFloat(tObj.LC_QTY) > 0) {
+               var tDepositAmt = tObj.LC_AMT;
+               tObj.DEPOSIT_AMT = String(tDepositAmt); 
+           } 
+
+           tObj.PO_AMT = AFLib.numToFixed(parseFloat(tObj.PO_AMT), 2);
+           tObj.DEPOSIT_AMT = AFLib.numToFixed(parseFloat(tObj.DEPOSIT_AMT), 2);
+           tObj.PAY_AMT = AFLib.numToFixed(parseFloat(tObj.PAY_AMT), 2);
+           tObj.END_AMT = AFLib.numToFixed(parseFloat(tObj.END_AMT), 2);
+
+           var tSql9 = `
+               select
+                   isnull(a.SEQ, 0) as SEQ,
+                   isnull(a.BANK_CD, '') as BANK_CD,
+                   isnull(b.BANK_NAME, '') as BANK_NAME,
+                   isnull(b.ACCOUNT_NO, '') as ACCOUNT_NO
+               from
+                   kcd_vendor_bank a,
+                   kcd_bank b
+               where
+                   a.VENDOR_CD = '${tObj.VENDOR_CD}'
+                   and a.BANK_CD = b.BANK_CD
+               order by
+                   a.SEQ desc
+           `;
+           var tRet0_1  =  await prisma.$queryRaw(Prisma.raw(tSql9));
+					 var tRet0 = [];
+					 tRet0_1.forEach((col, i) => {
+							 var tObj9 = { ...col };
+               tObj9.BANK_NAME = `${tObj9.BANK_NAME}/${tObj9.ACCOUNT_NO}`;
+							 tRet0.push(tObj9);
+					 });
+
+           if (tRet0_1.length > 1) {
+							 var tObj9 = {};
+               tObj9.BANK_CD = '';
+               tObj9.BANK_NAME = ' ';
+							 tRet0.unshift(tObj9);
+							 tObj.PAY_BANK = tRet0_1[0].BANK_CD;
+           } else if (tRet0_1.length === 1) {
+							 tObj.PAY_BANK = tRet0_1[0].BANK_CD;
+					 }
+           tObj.PAY_BANK_ARRAY = [ ...tRet0 ];
+
+
+           if (!args.data.BILL_CD) tRetArray.push(tObj); 
+           else {
+               if (tObj.BILL_CD === args.data.BILL_CD) tRetArray.push(tObj);
+           }
+       }
+       console.log(sqlStr);
+       return (tRetArray);
+       */
+        },
+    },
+};
+
+export default moduleQuery_S0419_LIST_1;

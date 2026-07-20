@@ -1,0 +1,1342 @@
+/* eslint-disable */
+import React, { useEffect, useRef, useState } from 'react';
+import { useLocation } from 'react-router-dom';
+import classNames from 'classnames';
+import axios from 'axios';
+import { AFDataTable } from '../components/AFDataTable';
+import { AFColumn } from '../components/AFColumn';
+import { Toast } from 'primereact/toast';
+import { Button } from 'primereact/button';
+import { Tooltip } from 'primereact/tooltip';
+import { InputText } from 'primereact/inputtext';
+import { Dropdown } from 'primereact/dropdown';
+import { ServiceLib } from '../service/service_lib/ServiceLib';
+import apiOption from '../assets/env_graphql';
+import $ from 'jquery';
+
+import '../App.scss';
+
+/** Core: 실제 UI (memo 대상) */
+const MgrKzzAcctCore = ({ pathname }) => {
+  // 로그인 확인(마운트 1회) + 초기 로드
+  const toast = useRef(null);
+  const serviceLibRef = useRef(null);
+
+  useEffect(() => {
+    serviceLibRef.current = new ServiceLib();
+    serviceLibRef.current.loginConfirm();
+
+    // 초기 로드
+    fetchCostCenters();
+    fetchSuppliers();
+    fetchAccts();
+    // 초기 목록(필터 기본값) 조회
+    fetchList();
+
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // ====== 상수/상태 ======
+  // 상태 드롭다운: 고정값
+  const STATUS_OPTIONS = [
+    { label: 'ALL', value: '' },
+    { label: '등록', value: '등록' },
+    { label: '상신', value: '상신' },
+    { label: '취소', value: '취소' },
+    { label: '종결', value: '종결' },
+    { label: '삭제요청', value: '삭제요청' },
+    { label: '삭제완료', value: '삭제완료' },
+    { label: '전표', value: '전표' },
+    { label: '송금', value: '송금' },
+    { label: '반려', value: '반려' },
+  ];
+  // 로컬 yyyy-MM-dd 포맷터
+  const formatDateLocal = (d) => {
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${y}-${m}-${day}`;
+  };
+
+  // 기본값 계산 (오늘/한달 전)
+  const today = new Date();
+  const defaultDateTo = formatDateLocal(today);
+  const monthAgo = new Date(today);
+  monthAgo.setMonth(today.getMonth() - 1); // 3/31 → 2/29 같은 경우도 JS가 자동 보정
+  const defaultDateFrom = formatDateLocal(monthAgo);
+
+  // 기간 기준 옵션 (라디오)
+  // 'closing' = 종빙일, 'request' = 송금요청일, 'all' = 모든기간
+  const [dateType, setDateType] = useState('closing');
+  const [dateFrom, setDateFrom] = useState(defaultDateFrom);
+  const [dateTo, setDateTo] = useState(defaultDateTo);
+
+  // 상태
+  const [status, setStatus] = useState(''); // ''=ALL
+
+  // ── 코스트센터 Dropdown 상태 ─────────────────────────────
+  const [ccOptions, setCcOptions] = useState([{ label: '전체', value: '' }]);
+  const [ccSelected, setCcSelected] = useState(''); // '' = 전체
+  const [ccLoading, setCcLoading] = useState(false);
+
+  // ── 거래처(Supplier) Dropdown 상태 ──────────────────────
+  const [supplierOptions, setSupplierOptions] = useState([{ label: '전체', value: '' }]);
+  const [supplierSelected, setSupplierSelected] = useState('');
+  const [supplierLoading, setSupplierLoading] = useState(false);
+
+  // ── 계정과목(Acct) Dropdown 상태 ────────────────────────
+  const [acctOptions, setAcctOptions] = useState([{ label: '전체', value: '' }]);
+  const [acctSelected, setAcctSelected] = useState('');
+  const [acctLoading, setAcctLoading] = useState(false);
+
+  // ── 목록 데이터 ──────────────────────────────────────────
+  const [rows, setRows] = useState([]);
+  const [listLoading, setListLoading] = useState(false);
+
+  // ====== API 호출 (옵션 포맷 전용) ======
+  const API_BASE = 'https://insa.shints.com/StsApp';
+
+  // 코스트센터 목록
+  const fetchCostCenters = async () => {
+    setCcLoading(true);
+    try {
+      const { data } = await axios.get(`${API_BASE}/LoadCC`);
+      const items = Array.isArray(data) ? data : [];
+      setCcOptions([{ label: '전체', value: '' }, ...items]);
+      setCcSelected((prev) => (prev === undefined || prev === null ? '' : prev));
+    } catch (e) {
+      console.error(e);
+      toast.current?.show({
+        severity: 'error',
+        summary: '코스트센터',
+        detail: '목록을 불러오지 못했습니다.',
+        life: 3000,
+      });
+    } finally {
+      setCcLoading(false);
+    }
+  };
+
+  // 거래처(Supplier) 목록
+  const fetchSuppliers = async () => {
+    setSupplierLoading(true);
+    try {
+      const { data } = await axios.get(`${API_BASE}/LoadSupplier`);
+      const items = Array.isArray(data) ? data : [];
+      setSupplierOptions([{ label: '전체', value: '' }, ...items]);
+      setSupplierSelected((prev) => (prev === undefined || prev === null ? '' : prev));
+    } catch (e) {
+      console.error(e);
+      toast.current?.show({
+        severity: 'error',
+        summary: '거래처',
+        detail: '목록을 불러오지 못했습니다.',
+        life: 3000,
+      });
+    } finally {
+      setSupplierLoading(false);
+    }
+  };
+
+  // 계정과목(Acct) 목록
+  const fetchAccts = async () => {
+    setAcctLoading(true);
+    try {
+      const { data } = await axios.get(`${API_BASE}/LoadAcct`);
+      const items = Array.isArray(data) ? data : [];
+      setAcctOptions([{ label: '전체', value: '' }, ...items]);
+      setAcctSelected((prev) => (prev === undefined || prev === null ? '' : prev));
+    } catch (e) {
+      console.error(e);
+      toast.current?.show({
+        severity: 'error',
+        summary: '계정과목',
+        detail: '목록을 불러오지 못했습니다.',
+        life: 3000,
+      });
+    } finally {
+      setAcctLoading(false);
+    }
+  };
+  // yyyyMMdd or yyyy-MM-dd → yyyy-MM-dd 로 표시
+  const formatDateYMD = (v) => {
+    if (v == null) return '';
+    const s = String(v).trim();
+    if (!s) return '';
+    const digits = s.replace(/\D/g, ''); // 숫자만
+    if (digits.length === 8) {
+      const y = digits.slice(0, 4);
+      const m = digits.slice(4, 6);
+      const d = digits.slice(6, 8);
+      return `${y}-${m}-${d}`;
+    }
+    return s; // 다른 형태면 그대로
+  };
+
+  // 금액 천단위 콤마
+  const formatMoney = (v) => {
+    if (v == null || v === '') return '';
+    const num = typeof v === 'number' ? v : Number(String(v).replace(/,/g, '').trim());
+    if (!isFinite(num)) return String(v);
+    return num.toLocaleString('ko-KR'); // 12,345 형식
+  };
+
+  // ====== 조회(LoadList) 호출 ======
+  // 서버가 기대하는 파라미터 키는 다음으로 가정했습니다:
+  // cc, supplier, acct, status, dateFrom, dateTo, dateType
+  // (필요 시 서버 명세에 맞춰 키 이름만 바꾸세요.)
+  const fetchList = async () => {
+    setListLoading(true);
+    try {
+      const params = {
+        cc: ccSelected || '',
+        supplier: supplierSelected || '',
+        acct: acctSelected || '',
+        status: status || '',
+        dateFrom: dateFrom || '',
+        dateTo: dateTo || '',
+        dateType: dateType || 'closing', // 'closing' | 'request' | 'all'
+      };
+
+      const { data } = await axios.get(`${API_BASE}/LoadList`, { params });
+
+      // 서버 응답 -> 그리드에 표시할 필드로 정규화
+      // 응답 필드명이 다를 수 있어 안전하게 매핑합니다.
+      const normalize = (r) => ({
+        id: r?.id ?? `${r?.CODE ?? r?.code ?? ''}-${r?.REQ_DATE ?? r?.req_date ?? ''}-${r?.VENDOR ?? r?.vendor ?? ''}`,
+        code: r?.CODE ?? r?.code ?? '',
+        status: r?.STATUS ?? r?.status ?? '',
+
+        // ✅ 날짜 포맷 적용 (yyyy-MM-dd)
+        closingDate: formatDateYMD(r?.CLOSING_DATE ?? r?.closing_date ?? r?.closingDate ?? ''),
+        reqDate:     formatDateYMD(r?.REQ_DATE     ?? r?.req_date     ?? r?.requestDate ?? ''),
+        payDate:     formatDateYMD(r?.PAY_DATE     ?? r?.pay_date     ?? r?.remitDate   ?? ''),
+
+        costCenter: r?.COST_CENTER ?? r?.cost_center ?? r?.costCenter ?? '',
+        account:    r?.ACCOUNT     ?? r?.account     ?? r?.acct       ?? '',
+        currency:   r?.CURR        ?? r?.currency    ?? '',
+
+        // ✅ 금액 포맷 적용 (천단위 콤마)
+        amount: formatMoney(r?.AMOUNT ?? r?.amount ?? 0),
+
+        vendor: r?.VENDOR ?? r?.vendor ?? r?.supplier ?? '',
+        card:   r?.CARD   ?? r?.card   ?? '',
+        method: r?.METHOD ?? r?.method ?? '',
+      });
+
+      const list = Array.isArray(data) ? data.map(normalize) : [];
+      setRows(list);
+    } catch (e) {
+      console.error(e);
+      toast.current?.show({
+        severity: 'error',
+        summary: '조회',
+        detail: '목록을 불러오지 못했습니다.',
+        life: 3000,
+      });
+      setRows([]);
+    } finally {
+      setListLoading(false);
+    }
+<<<<<<< HEAD
+  };
+
+  // ====== 액션 ======
+  const handleSearch = () => {
+    fetchList();
+  };
+  
+  const resetDatesToDefault = () => {
+  const now = new Date();
+  const to = formatDateLocal(now);
+  const fromDate = new Date(now);
+  fromDate.setMonth(now.getMonth() - 1);
+  const from = formatDateLocal(fromDate);
+  setDateFrom(from);
+  setDateTo(to);
+  };
+
+  const handleReset = () => {
+    setCcSelected('');
+    setSupplierSelected('');
+    setAcctSelected('');
+    setStatus('');
+    setDateType('closing');
+    resetDatesToDefault();          // ✅ 여기서 기본값으로 되돌림
+    setRows([]);
+    setTimeout(() => fetchList(), 0);
+  };
+
+  return (
+    <div className="af-div-main">
+      <Toast ref={toast} />
+
+      <div className="af-div-first" style={{ width: '10rem', marginLeft: '0rem', height: '10rem' }}>
+        <span className="af-span-3-0" style={{ width: '10rem' }}>
+          <div className="af-span-div" style={{ marginLeft: '0.5rem', display: 'inline-block', width: '9rem' }}>
+            <label style={{ marginRight: '0.5rem' }}>
+              <input
+                type="radio"
+                name="dateType"
+                checked={dateType === 'closing'}
+                onChange={() => setDateType('closing')}
+              />{' '}
+              증빙일
+            </label>
+          </div>
+        </span>
+        <span className="af-span-3-0" style={{ width: '10rem' }}>
+          <div className="af-span-div" style={{ marginLeft: '0.5rem', display: 'inline-block', width: '9rem' }}>
+            <label style={{ marginRight: '0.5rem' }}>
+              <input
+                type="radio"
+                name="dateType"
+                checked={dateType === 'request'}
+                onChange={() => setDateType('request')}
+              />{' '}
+              송금요청일
+            </label>
+          </div>
+        </span>
+        <span className="af-span-3-0" style={{ width: '10rem' }}>
+          <div className="af-span-div" style={{ marginLeft: '0.5rem', display: 'inline-block', width: '9rem' }}>
+            <label>
+              <input
+                type="radio"
+                name="dateType"
+                checked={dateType === 'all'}
+                onChange={() => setDateType('all')}
+              />{' '}
+              모든기간
+            </label>
+          </div>
+        </span>
+      </div>
+      <div className="af-div-first" style={{ width: '52rem', marginLeft: '0rem', height: '8rem' }}>
+        <span className="af-span-3-0" style={{ width: '20rem' }}>
+          <p className="af-span-p" style={{ width: '8rem', display: 'inline-block' }}>시작일</p>
+          <div className="af-span-div">
+            <input
+              type="date"
+              value={dateFrom}
+              onChange={(e) => setDateFrom(e.target.value)}
+              style={{ marginLeft: '0.5rem', display: 'inline-block', width: '15rem' }}
+              disabled={dateType === 'all'}
+            />
+          </div>
+        </span>
+        <span className="af-span-3-0" style={{ width: '20rem' }}>
+          <p className="af-span-p" style={{ width: '8rem', display: 'inline-block' }}>종료일</p>
+          <div className="af-span-div">
+            <input
+              type="date"
+              value={dateTo}
+              onChange={(e) => setDateTo(e.target.value)}
+              style={{ marginLeft: '0.5rem', display: 'inline-block', width: '15rem' }}
+              disabled={dateType === 'all'}
+            />
+          </div>
+        </span>
+      </div>
+      <div className="af-div-first" style={{ width: '40rem', marginLeft: '0rem', height: '8rem' }}>
+        <span className="af-span-3-0" style={{ width: '34rem' }}>
+          <p className="af-span-p" style={{ width: '8rem', display: 'inline-block' }}>코스트센터</p>
+          <div className="af-span-div" style={{ marginLeft: '0.5rem', display: 'inline-block', width: '15rem' }}>
+            <Dropdown
+              value={ccSelected}
+              options={ccOptions}
+              optionLabel="label"
+              optionValue="value"
+              placeholder="전체"
+              style={{ width: '15rem' }}
+              onChange={(e) => setCcSelected(e.value)}
+              loading={ccLoading}
+              showClear
+              filter
+            />
+          </div>
+        </span>
+        <span className="af-span-3-0" style={{ width: '34rem' }}>
+          <p className="af-span-p" style={{ width: '8rem', display: 'inline-block' }}>거래처</p>
+          <div className="af-span-div" style={{ marginLeft: '0.5rem', display: 'inline-block', width: '15em' }}>
+            <Dropdown
+              value={supplierSelected}
+              options={supplierOptions}
+              optionLabel="label"
+              optionValue="value"
+              placeholder="전체"
+              style={{ width: '15rem' }}
+              onChange={(e) => setSupplierSelected(e.value)}
+              loading={supplierLoading}
+              showClear
+              filter
+            />
+          </div>
+        </span>
+        <span className="af-span-3-0" style={{ width: '34rem' }}>
+          <p className="af-span-p" style={{ width: '8rem', display: 'inline-block'  }}>계정과목</p>
+          <div className="af-span-div" style={{ marginLeft: '0.5rem', display: 'inline-block', width: '15em' }}>
+            <Dropdown
+              value={acctSelected}
+              options={acctOptions}
+              optionLabel="label"
+              optionValue="value"
+              placeholder="전체"
+              style={{ width: '15rem' }}
+              onChange={(e) => setAcctSelected(e.value)}
+              loading={acctLoading}
+              showClear
+              filter
+            />
+          </div>
+        </span>
+      </div>
+      <div className="af-div-first" style={{ width: '15rem', marginLeft: '0rem', height: '8rem' }}>
+        <span className="af-span-3-0" style={{ width: '15rem' }}>
+          <p className="af-span-p" style={{ width: '5rem', display: 'inline-block' }}>상태</p>
+          <div className="af-span-div" style={{ marginLeft: '0.5rem', display: 'inline-block', width: '9rem' }}>
+            <Dropdown
+              value={status}
+              options={STATUS_OPTIONS}
+              optionLabel="label"
+              optionValue="value"
+              onChange={(e) => setStatus(e.value)}
+              placeholder="ALL"
+              style={{ width: '9rem' }}
+              showClear
+            />
+          </div>
+        </span>
+      </div>
+      <div className="af-div-first" style={{ width: '15rem', marginLeft: '0rem', height: '8rem' }}>
+        <span className="af-span-3-0" style={{ width: '11rem' }}>
+          <div className="af-span-div" style={{ width: '10rem' }}>
+            <Button
+              style={{ width: '10rem' }}
+              label={listLoading ? '조회중...' : '조회'}
+              className="p-button-text"
+              onClick={handleSearch}
+              disabled={listLoading}
+            />
+          </div>
+        </span>
+        <span className="af-span-3-0" style={{ width: '11rem' }}>
+          <div className="af-span-div" style={{ width: '10rem' }}>
+            <Button style={{ width: '10rem' }} label="Report" className="p-button-text" />
+          </div>
+        </span>
+        <span className="af-span-3-0" style={{ width: '11rem' }}>
+          <div className="af-span-div" style={{ width: '10rem' }}>
+            <Button style={{ width: '10rem' }} label="Reset" className="p-button-text" onClick={handleReset} />
+          </div>
+        </span>
+      </div>
+
+      {/* === [그리드] 목록 === */}
+      <div className="af-div-first main-table" style={{ marginLeft: '0rem', width: '123rem', height: '29rem', marginTop: '0.5rem' }}>
+        <AFDataTable
+          size="small"
+          value={rows}
+          resizableColumns
+          tableStyle={{ tableLayout: 'fixed' }}
+          columnResizeMode="expand"
+          showGridlines
+          className="datatable-responsive"
+          emptyMessage={listLoading ? '로딩 중…' : ' '}
+          responsiveLayout="scroll"
+          scrollable
+          scrollHeight="flex"
+          dataKey="id"
+        >
+          <AFColumn field="select" headerClassName="t-header" header="v" style={{ width: '4rem', flexBasis: 'auto' }} />
+          <AFColumn field="code" headerClassName="t-header" header="CODE" style={{ width: '8rem', flexBasis: 'auto' }} />
+          <AFColumn field="status" headerClassName="t-header" header="상태" style={{ width: '8rem', flexBasis: 'auto' }} />
+          <AFColumn field="closingDate" headerClassName="t-header" header="종빙일" style={{ width: '10rem', flexBasis: 'auto' }} />
+          <AFColumn field="reqDate" headerClassName="t-header" header="송금요청일" style={{ width: '10rem', flexBasis: 'auto' }} />
+          <AFColumn field="type" headerClassName="t-header" header="송금구분" style={{ width: '8rem', flexBasis: 'auto' }} />
+          <AFColumn field="payDate" headerClassName="t-header" header="송금일" style={{ width: '10rem', flexBasis: 'auto' }} />
+          <AFColumn field="costCenter" headerClassName="t-header" header="코스트센터" style={{ width: '10rem', flexBasis: 'auto' }} />
+          <AFColumn field="account" headerClassName="t-header" header="계정과목" style={{ width: '10rem', flexBasis: 'auto' }} />
+          <AFColumn field="currency" headerClassName="t-header" header="환종" style={{ width: '6rem', flexBasis: 'auto' }} />
+          <AFColumn field="amount" headerClassName="t-header" header="실송금액" style={{ width: '10rem', flexBasis: 'auto' }} />
+          <AFColumn field="vendor" headerClassName="t-header" header="거래처" style={{ width: '12rem', flexBasis: 'auto' }} />
+          <AFColumn field="card" headerClassName="t-header" header="카드결제" style={{ width: '8rem', flexBasis: 'auto' }} />
+          <AFColumn field="method" headerClassName="t-header" header="송금방법" style={{ width: '10rem', flexBasis: 'auto' }} />
+        </AFDataTable>
+      </div>
+    </div>
+  );
+=======
+
+    //
+    const process_RESET = () => {
+        put_dataQRY_KCD_BANK(dataQRY_KCD_BANK);
+        put_dataEDT_KCD_BANK(dataEDT_KCD_BANK);
+
+        setDatasTBL_KCD_BANK([]);
+        setSelectedTBL_KCD_BANK([]);
+        setDataTBL_KCD_BANK(emptyTBL_KCD_BANK);
+
+        setDatasTBL_KCD_VENDOR([]);
+        setSelectedTBL_KCD_VENDOR([]);
+    }
+
+    const GW_WINDOW_NAME = 'GW_VENDOR_BANK_POPUP';
+    const gwWinRef = useRef(null);
+    const process_GW = () => {
+        // 이미 열려 있으면 새로 안 띄움
+        if (gwWinRef.current?.closed === false) {
+            alert('이미 열려 있는 창이 있습니다.');
+            gwWinRef.current.focus();
+            return;
+        }
+
+        var tRetDate = serviceLib.getCurrDate();
+        var tUserInfo = serviceLib.getUserInfo();
+
+        if (selectedTBL_KCD_VENDOR.length <= 0 || selectedTBL_KCD_BANK.length <= 0) {
+            alert('GW 처리할 은행과 Supplier가 선택되지 않았습니다');
+            return;
+        }
+
+        var tInData1 = [ ...selectedTBL_KCD_VENDOR ]; 
+        var tInData2 = { ...selectedTBL_KCD_BANK[0] };
+
+
+        if (tInData2.fileName !== '') {
+           ;
+        } else {
+           alert('계좌사본이 등록되지 않아 GW를 처리할수 없습니다');
+           return;
+        }
+
+        if (tInData1[0].GW_N === '종결' || tInData1[0].GW_N === '상신' ) {
+           alert('종결/상신중인 계좌는 상신 할수 없습니다');
+           return;
+        }
+       
+        var tPostObj  = {};
+        tPostObj.vendor_cd = '';
+        tInData1.forEach((col, i) => {
+           if (i === 0) tPostObj.vendor_cd = col.VENDOR_CD;
+           else tPostObj.vendor_cd = ':' + col.VENDOR_CD;
+        });
+
+        let _url1 = `${window.location.protocol}//${window.location.hostname}:3202/restapi/`;
+        axios.post(`${_url1}request_gw_vendor/${tInData2.BANK_CD}/${tRetDate}/${tUserInfo.USER_ID}`, tPostObj)
+            .then(response => {
+                console.log(response.data);
+                console.log("GW RES DATA: " + response.data.data.ADDRESS + "=>" + response.data.data.APPROKEY);
+
+                gwWinRef.current = window.open(response.data.data.ADDRESS, GW_WINDOW_NAME);
+
+                // 닫힘 감시 — 닫히면 ref 초기화
+                const timer = setInterval(() => {
+                    if (gwWinRef.current?.closed) {
+                        gwWinRef.current = null;
+                        clearInterval(timer);
+                    }
+                }, 500);
+
+                var tInData2_0 = { ...selectedTBL_KCD_BANK[0] };
+
+                let _inData = {};
+                _inData.BANK_CD = tInData2_0.BANK_CD;
+                setDatasTBL_KCD_VENDOR([]);
+                setSelectedTBL_KCD_VENDOR([]);
+                search_LIST_3(_inData);
+            }
+        );
+    }
+
+    const blankFn = () => {
+    }
+
+    const search_LIST_1 = () => {
+        var tInput = get_dataQRY_KCD_BANK();
+
+				var tSelArray = [ ...selectedTBL_KCD_BANK ];
+        
+        setDatasTBL_KCD_BANK([]);
+        setSelectedTBL_KCD_BANK([]);
+
+        setLoadingTBL_KCD_BANK(true);
+        serviceS0803_ETC_COST.mgrQuery_LIST_1(tInput).then(data => {
+            setLoadingTBL_KCD_BANK(false);
+            if (typeof data.graphQLErrors === 'undefined') {
+                setDatasTBL_KCD_BANK(data);
+								setSelectedTBL_KCD_BANK(tSelArray);
+            } else {
+                console.log("ServiceMgrKCD_VENDOR.mgr1KcdBuyer error => " + JSON.stringify(data.graphQLErrors));
+                // toast.current.show({ severity: 'success', summary: 'Query Error', detail: tStr , life: 3000 });
+            }
+        });
+    }
+
+    const search_LIST_2 = () => {
+        var tInput = { VENDOR_CD: ''};
+        var tArray = [];
+        var tObj = {};
+        tObj.VENDOR_CD = '';
+        tObj.VENDOR_NAME = '데이타로딩중';
+        tArray.push(tObj);
+        setDatasQRY_KCD_BANK_VENDOR_CD(tArray);
+        setDataQRY_KCD_BANK_VENDOR_CD(tArray[0]);
+
+        serviceS0803_ETC_COST.mgrQuery_LIST_2(tInput).then(data => {
+            if (typeof data.graphQLErrors === 'undefined') {
+                var tArray = data.map((col, i) => {
+                    var tObj = { ...col };
+                    tObj.id = i + 1;
+                    return (tObj);
+                });
+                setDatasQRY_KCD_BANK_VENDOR_CD(tArray);
+                setDataQRY_KCD_BANK_VENDOR_CD(tArray[0]);
+            } else {
+                console.log("ServiceMgrKCD_VENDOR.mgr1KcdBuyer error => " + JSON.stringify(data.graphQLErrors));
+                // toast.current.show({ severity: 'success', summary: 'Query Error', detail: tStr , life: 3000 });
+            }
+        });
+    }
+
+    const search_LIST_3 = (argData) => {
+        var tInput = {};
+        tInput.BANK_CD = argData.BANK_CD;
+
+        setDatasTBL_KCD_VENDOR([]);
+        setSelectedTBL_KCD_VENDOR([]);
+
+        setLoadingTBL_KCD_VENDOR(true);
+
+        serviceS0803_ETC_COST.mgrQuery_LIST_3(tInput).then(data => {
+            setLoadingTBL_KCD_VENDOR(false);
+            if (typeof data.graphQLErrors === 'undefined') {
+                var tArray1 = [];
+                var tIdx2 = 0;
+                for (tIdx2 = 0; tIdx2 < data.length; tIdx2++) {
+                    var tObj = { ...data[tIdx2] };
+                    tObj.id = tIdx2 + 1;
+                    tArray1.push(tObj);
+                }
+                setDatasTBL_KCD_VENDOR(tArray1);
+
+            } else {
+                console.log("ServiceMgrKCD_VENDOR.mgr1KcdBuyer error => " + JSON.stringify(data.graphQLErrors));
+                // toast.current.show({ severity: 'success', summary: 'Query Error', detail: tStr , life: 3000 });
+            }
+        });
+    }
+
+    const process_INSERT = () => {
+        var tRetDate = serviceLib.getCurrDate();
+        var tUserInfo = serviceLib.getUserInfo();
+
+        /*
+        if (tUserInfo.PART !== 'S11') {
+                alert('서울 자재팀만 GW가능합니다');
+								return;
+                 
+        }
+        */
+
+        if (!dataEDT_KCD_BANK_BANK_NAME || !dataEDT_KCD_BANK_ACCOUNT_NAME || !dataEDT_KCD_BANK_ACCOUNT_NO || !dataEDT_KCD_BANK_BANK_TYPE1.CD_CODE) {
+            alert ('Check mandatory values. (*red items)');
+            return;
+        }
+
+        console.log(dataTBL_KCD_BANK);
+
+        if (!dataTBL_KCD_BANK.fileName) {
+            alert ('Bank Copy is a mandatory value.');
+            return;
+        }
+
+        if (dataEDT_KCD_BANK_BANK_TYPE1.CD_CODE  === '2' ) { // 외화
+            if (dataEDT_KCD_BANK_SFTCODE === '') {
+               alert('SWIFT/IBAN is a mandatory value.');
+               return;
+            }
+         }
+
+        if (dataEDT_KCD_BANK_BANK_CD && dataEDT_KCD_BANK_BANK_CD !== '') {
+            if (confirm('다시 GW 상신 받아야 합니다. 진행하시겠습니까?')) {
+                 process_UPDATE_BANK();
+            }
+        } else {
+            process_INSERT_BANK();
+        }
+    }
+
+    const process_INSERT_BANK = () => {
+        var tInData1 = get_dataEDT_KCD_BANK();
+        tInData1.REG_USER = serviceLib.getUserInfo().USER_ID;
+
+        if (typeof dataTBL_KCD_BANK.fileName !== 'undefined' && dataTBL_KCD_BANK.fileName !== '' ) {
+           tInData1.imgURL = dataTBL_KCD_BANK.imgURL;
+           tInData1.fileName = dataTBL_KCD_BANK.fileName;
+           tInData1.objectName = dataTBL_KCD_BANK.objectName;
+        }  else {
+           tInData1.imgURL = '';
+           tInData1.fileName = '';
+           tInData1.objectName = '';
+        } 
+
+        setLoadingTBL_KCD_BANK(true);
+        serviceS0803_ETC_COST.mgrInsert_INSERT_BANK(tInData1).then(data => {
+            setLoadingTBL_KCD_BANK(false);
+            if (typeof data.graphQLErrors === 'undefined') {
+                if (typeof data.length === 'undefined') {
+                    ;
+                } else {
+                    if (data.length > 0) {
+					    process_RESET();
+                        alert(data[0].CODE);
+                        search_LIST_1();
+                    }
+                }
+            } else {
+                console.log("ServiceMgrKCD_VENDOR.mgr1KcdBuyer error => " + JSON.stringify(data.graphQLErrors));
+                toast.current.show({ severity: 'success', summary: 'ERROR:Insert Bank', detail: '', life: 3000 });
+            }
+        });
+
+    }
+
+    const process_SEARCH_VENDOR = () => {
+        var tInput = {};
+        tInput.VENDOR_CD = dataQRY_KCD_BANK_VENDOR_CD.VENDOR_CD;
+
+        setDatasQRY_KCD_BANK_VENDOR_CD([]);
+
+        var tArray = [];
+        var tObj = {};
+        tObj.VENDOR_CD = ' ';
+        tObj.VENDOR_NAME = '데이타로딩중';
+        tArray.push(tObj);
+        
+        setDatasQRY_KCD_BANK_VENDOR_CD(tArray);
+        setDataQRY_KCD_BANK_VENDOR_CD(tArray[0]);
+
+        serviceS0803_ETC_COST.mgrQuery_LIST_2(tInput).then(data => {
+            if (typeof data.graphQLErrors === 'undefined') {
+                var tArray = data.map((col, i) => {
+                    var tObj = { ...col };
+                    tObj.id = i + 1;
+                    return (tObj);
+                });
+                setDatasQRY_KCD_BANK_VENDOR_CD(tArray);
+            } else {
+                console.log("ServiceMgrKCD_VENDOR.mgr1KcdBuyer error => " + JSON.stringify(data.graphQLErrors));
+            }
+        });
+    }
+
+    const process_INSERT_VENDOR = () => {
+        var tInData1 = get_dataEDT_KCD_BANK();
+        if (tInData1.BANK_CD === '') {
+            alert('등록된 Bank에 대해서만 Supplier추가가능합니다');
+            return;
+        }
+        tInData1.REG_USER = serviceLib.getUserInfo().USER_ID;
+
+        var tInData2_0 = { ...dataTBL_KCD_VENDOR };
+        var tInData2 = {};
+        tInData2.VENDOR_CD = dataQRY_KCD_BANK_VENDOR_CD.VENDOR_CD;
+      
+        serviceS0803_ETC_COST.mgrInsert_UPDATE_VENDOR(tInData1, tInData2).then(data => {
+            if (typeof data.graphQLErrors === 'undefined') {
+                if (typeof data.length === 'undefined') {
+                    ;
+                } else {
+                    toast.current.show({ severity: 'success', summary: 'SUCCEED:Insert Vendor', detail: data[0].CODE, life: 3000 });
+                    let _inData = {};
+                    _inData.BANK_CD = tInData1.BANK_CD;
+                    setDatasTBL_KCD_VENDOR([]);
+                    setSelectedTBL_KCD_VENDOR([]);
+                    search_LIST_3(_inData);
+                }
+            } else {
+                console.log("ServiceMgrKCD_VENDOR.mgr1KcdBuyer error => " + JSON.stringify(data.graphQLErrors));
+                toast.current.show({ severity: 'success', summary: 'ERROR:Insert Vendor', detail: '', life: 3000 });
+            }
+        });
+
+    }
+
+    const process_DELETE_VENDOR = () => {
+
+        if (selectedTBL_KCD_VENDOR.length <= 0 || selectedTBL_KCD_BANK.length <= 0) return;
+
+        var tInData1 = { ...selectedTBL_KCD_VENDOR[0] };
+        var tInData2 = { ...selectedTBL_KCD_BANK[0] };
+
+        if (tInData1.GW_N === '응답대기' ||
+            tInData1.GW_N === '' ||
+            tInData1.GW_N === '반려' ||
+            tInData1.GW_N === 'NEW'  ) {
+            var tRet = confirm('GW 상태가 응답대기인것을 삭제 하시겠습니까?');
+            if (tRet) ;
+            else return;
+        } else  {
+            alert('GW 상태가 New, 응답대기, 반려만 삭제가능합니다');
+            return;
+        }
+
+        var tObj = {};
+        tObj.BANK_CD = tInData2.BANK_CD;
+        tObj.VENDOR_CD = tInData1.VENDOR_CD;
+
+        serviceS0803_ETC_COST.mgrInsert_DELETE_VENDOR(tObj).then(data => {
+            if (typeof data.graphQLErrors === 'undefined') {
+                if (typeof data.length === 'undefined') {
+                    ;
+                } else {
+                    if (data.length > 0) {
+                       alert(data[0].CODE);
+                       let _inData = {};
+                       _inData.BANK_CD = tObj.BANK_CD;
+                       setDatasTBL_KCD_VENDOR([]);
+                       setSelectedTBL_KCD_VENDOR([]);
+                       search_LIST_3(_inData);
+                    }
+                    // console.log("ServiceMgrKCD_BUYER.mgr1KcdStyle call => " + data.length);
+                    // toast.current.show({ severity: 'success', summary: 'SUCCEED:Insert Vendor', detail: data[0].CODE, life: 3000 });
+                }
+            } else {
+                console.log("ServiceMgrKCD_VENDOR.mgr1KcdBuyer error => " + JSON.stringify(data.graphQLErrors));
+                toast.current.show({ severity: 'success', summary: 'ERROR:Insert Vendor', detail: JSON.stringify(data.graphQLErrors), life: 3000 });
+            }
+        });
+    }
+
+    const process_UPDATE_BANK = () => {
+        var tInData1 = get_dataEDT_KCD_BANK();
+        tInData1.imgURL = dataTBL_KCD_BANK.imgURL;
+        tInData1.fileName = dataTBL_KCD_BANK.fileName;
+        tInData1.objectName = dataTBL_KCD_BANK.objectName;
+        serviceS0803_ETC_COST.mgrInsert_UPDATE_BANK(tInData1).then(data => {
+            if (typeof data.graphQLErrors === 'undefined') {
+                if (typeof data.length === 'undefined') {
+                    ;
+                } else {
+                    if (data.length > 0) {
+											 process_RESET();
+                       alert(data[0].CODE);
+                       search_LIST_1();
+                    }
+                }
+            } else {
+                console.log("ServiceMgrKCD_VENDOR.mgr1KcdBuyer error => " + JSON.stringify(data.graphQLErrors));
+                toast.current.show({ severity: 'success', summary: 'ERROR:Update Buyer', detail: '', life: 3000 });
+            }
+        });
+    }
+
+    const process_DELETE_BANK = () => {
+        var tInData1 = get_dataEDT_KCD_BANK();
+        let tInDataVendor = {...datasTBL_KCD_VENDOR[0]}
+
+        let deleteData = {
+            VENDOR_CD:tInDataVendor.VENDOR_CD,
+            BANK_CD : tInData1.BANK_CD
+        }
+
+        /*
+        var tFlag = 0;
+        datasTBL_KCD_VENDOR.forEach((col, i) => {
+            if (col.GW_N === '종결') tFlag = 1;
+        });
+        if (tFlag === 1) {
+            alert('종결된 Pay Bank가 있어 삭제가 불가합니다');
+            return;
+        }
+        */
+        if (datasTBL_KCD_VENDOR.length > 0) {
+            alert('은행에 등록된 Supplier가 있어 삭제가 불가합니다');
+            return;
+        }
+
+
+        serviceS0803_ETC_COST.mgrInsert_DELETE_BANK(deleteData).then(data => {
+            if (typeof data.graphQLErrors === 'undefined') {
+                if (typeof data.length === 'undefined') {
+                    ;
+                } else {
+                    if (data.length > 0) {
+                       alert(data[0].CODE);
+                       process_RESET();
+                       search_LIST_1();
+                    }
+                }
+            } else {
+                console.log("ServiceMgrKCD_VENDOR.mgr1KcdBuyer error => " + JSON.stringify(data.graphQLErrors));
+                toast.current.show({ severity: 'success', summary: 'ERROR:Delete Bank', detail: '', life: 3000 });
+            }
+        });
+    }
+
+    /*File Upload */
+    const [dataUrl, setDataUrl] = useState('');
+    const onFileUpload = (e) => {
+        console.log(e.files[0].name)
+        var tobj = {};
+        tobj = get_dataEDT_KCD_BANK();
+        tobj.FILE_NAME = e.files[0].name;
+        // setDataKCD_BANK(tobj);
+        toast.current.show({ severity: 'info', summary: 'Success', detail: 'File Uploaded with Basic Mode' });
+    }
+
+    const s3FileUpload = async (e) => {
+        // console.log('s3');
+        // console.log(e.target);
+        const fileName = e.target.files[0].name;
+        const img = e.target.files[0];
+        //console.log(img);
+        const formData = new FormData();
+        formData.append("file", img);
+
+        try {
+            let tUrl = `${apiOption.apiuri}/restapi/imgUpload`;
+
+            const s3UrlResponse = await axios.get(tUrl);
+            console.log(s3UrlResponse.data.uploadURL);
+
+            const presignedUrl = s3UrlResponse.data.uploadURL;
+            const objectName = s3UrlResponse.data.imageName;
+            await fetch(presignedUrl, {
+                method: "PUT",
+                headers: {
+                    "Content-Type": img.type,
+                },
+                body: img,
+            });
+
+            const imgURL = s3UrlResponse.data.uploadURL.split('?')[0];
+            console.log("imgUrl :" + imgURL);
+            //  search_LIST_1();
+
+						var tSelArray = [];
+						selectedTBL_KCD_BANK.forEach((col, i) => {
+								var tObj = { ...col };
+								tObj.fileName = fileName;
+								tSelArray.push(tObj);
+						});
+						setSelectedTBL_KCD_BANK(tSelArray);
+
+           
+            let _dataKCD_BANK = { ...dataTBL_KCD_BANK };
+            _dataKCD_BANK.imgURL = imgURL;
+            _dataKCD_BANK.fileName = fileName;
+            _dataKCD_BANK.objectName = objectName;
+            setDataTBL_KCD_BANK(_dataKCD_BANK);
+
+        } catch (err) {
+            console.log(err);
+        }
+    }
+
+    const s3FileDelete = async () => {
+        try{
+            console.log(dataTBL_KCD_BANK.objectName);
+
+            var tCheck = 0;
+            datasTBL_KCD_VENDOR.forEach((col, i) => {
+                if (col.GW === '2' ||  
+                    col.GW === '6') {
+                    tCheck = 1;
+                }
+            });
+            if (tCheck === 1) {
+                alert('GW가 종결또는 응답대기인 것이 있으면 File 삭제 불가합니다');
+                return;
+            }
+
+
+            const body = {
+                objectName : dataTBL_KCD_BANK.objectName
+            }
+            let tUrl = `${apiOption.apiuri}/restapi/deleteImg`;
+            const response = await axios.post(tUrl,body);
+
+            if(response){
+                search_LIST_1();
+                let _dataKCD_BANK = { ...dataTBL_KCD_BANK };
+    
+                _dataKCD_BANK.imgURL = null;
+                _dataKCD_BANK.fileName = null;
+                _dataKCD_BANK.objectName = null;
+
+                setDataTBL_KCD_BANK(_dataKCD_BANK);
+
+                console.log(response);
+                alert('삭제 되었습니다');
+            }else{
+                alert('삭제 실패');
+            }
+           
+        }catch(err){
+            alert('에러 발생');
+            console.log(err);
+        }
+    }
+
+    /* */
+
+    useEffect(() => {
+
+        setDataEDT_KCD_BANK_UPD_USER(serviceLib.getUserInfo().USER_ID);
+        put_dataQRY_KCD_BANK(dataQRY_KCD_BANK);
+
+        var _tObj = { ...dataQRY_KCD_BANK };
+
+        serviceS0803_ETC_COST.mgrQuery_CODE(_tObj).then(data => {
+            if (typeof data.graphQLErrors === 'undefined') {
+
+                setDatasQRY_KCD_BANK_STATUS_CD(data.QRY_STATUS_CD);
+                setDataQRY_KCD_BANK_STATUS_CD(data.QRY_STATUS_CD[0]);
+
+                setDatasEDT_KCD_BANK_STATUS_CD(data.QRY_STATUS_CD);
+                setDataEDT_KCD_BANK_STATUS_CD(data.QRY_STATUS_CD[0]);
+
+                setDatasQRY_KCD_BANK_BANK_TYPE(data.BANK_TYPE1);
+                setDataQRY_KCD_BANK_BANK_TYPE(data.BANK_TYPE1[0]);
+
+                setDatasEDT_KCD_BANK_BANK_TYPE1(data.BANK_TYPE1);
+                setDataEDT_KCD_BANK_BANK_TYPE1(data.BANK_TYPE1[0]);
+
+                var tArray = [];
+                var tObj = {};
+                tObj.VENDOR_CD = '';
+                tObj.VENDOR_NAME = ' ';
+                tArray.push(tObj);
+                setDatasQRY_KCD_BANK_VENDOR_CD(tArray);
+                setDataQRY_KCD_BANK_VENDOR_CD(tArray[0]);
+
+            } else {
+                console.log(data)
+                console.log("ServiceMgrKCD_VENDOR.mgr1KcdBuyer error => " + JSON.stringify(data.graphQLErrors));
+                // toast.current.show({ severity: 'success', summary: 'Query Error', detail: tStr , life: 3000 });
+            }
+        });
+
+        search_LIST_1();
+        search_LIST_2();
+
+    }, []);
+
+    const onDropdownChangeQRY_KCD_BANK_VENDOR_CD = (e, name) => {
+        // console.log(typeof e.value, e.value);
+        //직접 타이핑 시
+        if (typeof e.value === 'string') {
+            var tArray = [];
+            var tObj = {};
+            var tVal = e.value;
+            tObj.VENDOR_CD = e.value;
+            if (tVal === '') tObj.VENDOR_NAME = ' ';
+            else tObj.VENDOR_NAME = e.value;
+            tArray.push(tObj)
+            setDatasQRY_KCD_BANK_VENDOR_CD(tArray);
+            setDataQRY_KCD_BANK_VENDOR_CD(tObj);
+        } else if (typeof e.value === 'null') {
+            var tArray = [];
+            var tObj = {};
+            var tVal = '';
+            tObj.VENDOR_CD = ' ';
+            tArray.push(tObj)
+            setDatasQRY_KCD_BANK_VENDOR_CD(tArray);
+            setDataQRY_KCD_BANK_VENDOR_CD(tObj);
+        } else {
+            setDataQRY_KCD_BANK_VENDOR_CD(e.value);
+        }
+    }
+
+
+    const onDownloadFile = () => {
+        let fileName = dataTBL_KCD_BANK.fileName;
+        let url = '';
+
+        if (dataTBL_KCD_BANK.imgURL)
+            url = dataTBL_KCD_BANK.imgURL;
+        
+        if (dataTBL_KCD_BANK.fileUrl);
+            url = dataTBL_KCD_BANK.fileUrl;
+
+        if (!url) {
+            alert('Not exist attached file!');
+            return;
+        }
+
+        serviceLib.downloadFile(url, fileName);
+    }
+
+    return (
+        <div className='af-div-main'>
+            <div className='af-div-first' style={{ width: '123rem', marginLeft: '0rem', height: '3rem' }}>
+                <span className="af-span-3-0" style={{ width: '24rem' }}>
+                    <p className="af-span-p" style={{ width: '8rem', display: 'inline-block' }} >  {"Bank Name"} </p>
+                    <div className="af-span-div">
+                        <InputText style={{ marginLeft: '0.5rem', display: 'inline-block', width: '15rem' }} 
+                         value={dataQRY_KCD_BANK_BANK_NAME} onChange={(e) => setDataQRY_KCD_BANK_BANK_NAME(e.target.value)} placeholder="" onKeyPress={(e) => onKeyPress_QRY_KCD_BANK(e, 'BANK_NAME')} />
+                    </div>
+                </span>
+                <span className="af-span-3-0" style={{ width: '24rem' }}>
+                    <p className="af-span-p" style={{ width: '8rem', display: 'inline-block' }} >  {"Account Name"} </p>
+                    <div className="af-span-div">
+                        <InputText style={{ marginLeft: '0.5rem', display: 'inline-block', width: '15rem' }}  
+                         value={dataQRY_KCD_BANK_ACCOUNT_NAME} onChange={(e) => setDataQRY_KCD_BANK_ACCOUNT_NAME(e.target.value)} placeholder="" />
+                    </div>
+                </span>
+                <span className="af-span-3-0" style={{ width: '19rem' }}>
+                    <p className="af-span-p" style={{ width: '8rem', display: 'inline-block' }} >  {"Status"} </p>
+                    <div className="af-span-div" style={{ marginLeft: '0.5rem', display: 'inline-block', width: '10rem' }}>
+                        <Dropdown id="id_QryStatus" 
+                                  value={dataQRY_KCD_BANK_STATUS_CD} onChange={(e) => setDataQRY_KCD_BANK_STATUS_CD(e.target.value)} options={datasQRY_KCD_BANK_STATUS_CD} optionLabel="CD_NAME" placeholder="All" ></Dropdown>
+                    </div>
+                </span>
+                <span className="af-span-3-0" style={{ width: '19rem' }}>
+                    <p className="af-span-p" style={{ width: '8rem', display: 'inline-block' }} >  {"Currency"} </p>
+                    <div className="af-span-div" style={{ marginLeft: '0.5rem', display: 'inline-block', width: '10rem' }}>
+                        <Dropdown id="id_QryStatus" 
+                                  value={dataQRY_KCD_BANK_BANK_TYPE} onChange={(e) => setDataQRY_KCD_BANK_BANK_TYPE(e.target.value)} options={datasQRY_KCD_BANK_BANK_TYPE} optionLabel="CD_NAME" placeholder="All" ></Dropdown>
+                    </div>
+                </span>
+                <span className="af-span-3-0" style={{ width: '11rem' }}>
+                    <div className="af-span-div" style={{ width: '10rem' }}>
+		            	<Tooltip className="menuCodeTooltip" target={`#btnSearch`} content={`Alt+S`} position="bottom" />
+                        <Button style={{ width: '10rem' }} label={<span>Search(<u>S</u>)</span>}  accessKey='S' id="btnSearch" className="p-button-text" onClick={search_LIST_1} />
+                    </div>
+                </span>   
+                <span className="af-span-3-0" style={{ width: '11rem' }}>
+                    <div className="af-span-div" style={{ width: '10rem' }}>
+                        <Button style={{ width: '10rem' }} label="Reset" className="p-button-text" onClick={process_RESET} />
+                    </div>
+                </span>   
+                <span className="af-span-3-0" style={{ width: '11rem' }}>
+                    <div className="af-span-div" style={{ width: '10rem' }}>
+                        <Button style={{ width: '10rem' }} label="Excel" className="p-button-text green" onClick={exportExcelTBL_KCD_BANK} />
+                    </div>
+                </span>
+
+            </div>
+
+
+            <div className='af-div-first main-table' style={{ marginLeft: '0rem', width: '123rem', height: '29rem', marginTop: '0.5rem', }}>
+                <AFDataTable ref={dt_kcd_bank} size="small" value={datasTBL_KCD_BANK} resizableColumns
+                    tableStyle={{ tableLayout: 'fixed' }}
+                    selectionMode="checkbox"
+                    selection={selectedTBL_KCD_BANK}
+                    loading={loadingTBL_KCD_BANK}
+                    onSelectionChange={(e) => { setSelectedTBL_KCD_BANK(e.value); onRowClick1TBL_KCD_BANK(e.value) }}
+                    columnResizeMode="expand" showGridlines
+                    onRowClick={onRowClickTBL_KCD_BANK}
+                    dataKey="id"
+                    className="datatable-responsive" virtualScrollerOptions={{ itemSize: 20 }}
+                    emptyMessage=" " responsiveLayout="scroll"
+                    scrollable scrollHeight="flex">
+
+                    <AFColumn field="BANK_CD" headerClassName='t-header' header="Bank #" headerStyle={{ textAlign: 'center', justifContent: 'center' }} style={{ width: '6rem', flexBasis: 'auto'  }}></AFColumn>
+                    <AFColumn field="BANK_NAME" headerClassName='t-header' header="Bank_Name" headerStyle={{ textAlign: 'center', justifyContent: 'center' }} style={{ width: '20rem', flexBasis: 'auto'  }}></AFColumn>
+                    <AFColumn field="BANK_BRANCH" headerClassName='t-header' header="Bank Branch" style={{ width: '8rem', flexBasis: 'auto'  }}></AFColumn>
+                    <AFColumn field="ACCOUNT_NAME" headerClassName='t-header' header="Account Name" style={{ width: '15rem', flexBasis: 'auto'  }}></AFColumn>
+                    <AFColumn field="ACCOUNT_NO" headerClassName='t-header' header="Account NO" style={{ width: '10rem', flexBasis: 'auto'  }}></AFColumn>
+                    <AFColumn field="SFTCODE" headerClassName='t-header' header="SWIFT Code" style={{ width: '8rem', flexBasis: 'auto'  }}></AFColumn>
+                    <AFColumn field="ADDR1" headerClassName='t-header' header="Address" style={{ width: '15rem', flexBasis: 'auto'  }}></AFColumn>
+                    <AFColumn field="bank_typeName" header="Currency" style={{ width: '15rem', flexBasis: 'auto'  }}></AFColumn>
+                    <AFColumn field="STATUS_CD_N" headerClassName='t-header' header="Status" style={{ width: '8rem', flexBasis: 'auto'  }}></AFColumn>
+                    {/* <AFColumn field="REG_USER" headerClassName='t-header' header="REG User" style={{ width: '8rem', flexBasis: 'auto'  }}></AFColumn> */}
+                    <AFColumn field="fileName" headerClassName='t-header' header="File" style={{ width: '8rem', flexBasis: 'auto'  }}></AFColumn>
+                </AFDataTable>
+            </div>
+
+            {/* <Divider /> */} 
+            <div style={{ marginTop: '0.5rem', width: '123rem', height: '28rem' }}>
+                <div className='af-div-first' style={{ marginLeft: '0rem', width: '58rem', height: '28rem', background: 'white', float: 'left' }}>
+                    <span style={{ height: '2rem', display: 'block', width: '36rem', marginTop: '0.5rem' }}>
+                        <p style={{ width: '8rem', display: 'inline-block' }}> Bank # </p>
+                        <InputText style={{ marginLeft: '0.5rem', display: 'inline-block', width: '23rem' }} id="id_BANK_CD" 
+                                   value={dataEDT_KCD_BANK_BANK_CD} onChange={(e) => setDataEDT_KCD_BANK_BANK_CD(e.target.value)} disabled />
+                    </span>
+                    <span style={{ height: '2rem', display: 'block', width: '36rem' }}>
+                        <p style={{ width: '8rem', display: 'inline-block', color: 'red' }}> *Bank Name </p>
+                        <InputText style={{ marginLeft: '0.5rem', display: 'inline-block', width: '23rem' }} id="id_BANK_NAME" 
+                                   value={dataEDT_KCD_BANK_BANK_NAME} onChange={(e) => setDataEDT_KCD_BANK_BANK_NAME(e.target.value)}  />
+                    </span>
+                    <span style={{ height: '2rem', display: 'block', width: '36rem' }}>
+                        <p style={{ width: '8rem', display: 'inline-block', color: 'red' }}> *Account Name </p>
+                        <InputText style={{ marginLeft: '0.5rem', display: 'inline-block', width: '23rem' }} id="id_ACCOUNT_NAME" 
+                                   value={dataEDT_KCD_BANK_ACCOUNT_NAME} onChange={(e) => setDataEDT_KCD_BANK_ACCOUNT_NAME(e.target.value)}  />
+                    </span>
+                    <span style={{ height: '2rem', display: 'block', width: '36rem' }}>
+                        <p style={{ width: '8rem', display: 'inline-block', color: 'red' }}> *Account NO </p>
+                        <InputText style={{ marginLeft: '0.5rem', display: 'inline-block', width: '23rem' }} id="id_ACCOUNT_NO" 
+                                   value={dataEDT_KCD_BANK_ACCOUNT_NO} onChange={(e) => setDataEDT_KCD_BANK_ACCOUNT_NO(e.target.value)}  />
+                    </span>
+                    <span style={{ height: '2rem', display: 'block', width: '36rem' }}>
+                        <p style={{ width: '8rem', display: 'inline-block', color: 'red' }}> *Currency </p>
+                        <div style={{ marginLeft: '0.5rem', display: 'inline-block', width: '23rem' }}>
+                            <Dropdown 
+                                style={{ width: '23rem' }} 
+                                value={dataEDT_KCD_BANK_BANK_TYPE1} 
+                                onChange={(e) => {
+                                    setDataEDT_KCD_BANK_BANK_TYPE1(e.target.value);
+                                    console.log(e.target.value);
+                                    if (e.target.value.CD_CODE === '2') {
+                                        $('#sftCodeInput').css('display','block');
+                                    } else {
+                                        $('#sftCodeInput').css('display','none');
+                                    }
+                                    
+                                }} 
+                                options={datasEDT_KCD_BANK_BANK_TYPE1} 
+                                optionLabel="CD_NAME" 
+                                placeholder="All" />
+                        </div>
+                    </span>
+                    <span style={{ height: '2rem', display: 'block', width: '36rem' }}>
+                        <p style={{ width: '8rem', display: 'inline-block' }}> Bank Branch </p>
+                        <InputText style={{ marginLeft: '0.5rem', display: 'inline-block', width: '23rem' }} id="id_BANK_BRANCH" 
+                                   value={dataEDT_KCD_BANK_BANK_BRANCH} onChange={(e) => setDataEDT_KCD_BANK_BANK_BRANCH(e.target.value)}  />
+                    </span>
+                    <span id='sftCodeInput' style={{ height: '2rem', display: 'none', width: '36rem' }}>
+                        <p style={{ width: '8rem', display: 'inline-block'}}  className='red'> *SWIFT/IBAN </p>
+                        <InputText style={{ marginLeft: '0.5rem', display: 'inline-block', width: '23rem' }} id="id_SFTCODE" 
+                                   value={dataEDT_KCD_BANK_SFTCODE} onChange={(e) => setDataEDT_KCD_BANK_SFTCODE(e.target.value)}  />
+                    </span>
+
+                    <span style={{ height: '2rem', display: 'block', width: '36rem' }}>
+                        <p style={{ width: '8rem', display: 'inline-block' }}> Address </p>
+                        <InputText style={{ marginLeft: '0.5rem', display: 'inline-block', width: '23rem' }}  
+                                   value={dataEDT_KCD_BANK_ADDR1} onChange={(e) => setDataEDT_KCD_BANK_ADDR1(e.target.value)}  />
+                    </span>
+
+                    <span style={{ height: '2rem', display: 'block', width: '36rem' }}>
+                        <p style={{ width: '8rem', display: 'inline-block' }}> Status </p>
+                        <Dropdown id="id_STATUS_CD" style={{ marginLeft: '0.5rem', width: '23rem' }} 
+                                  value={dataEDT_KCD_BANK_STATUS_CD} onChange={(e) => setDataEDT_KCD_BANK_STATUS_CD(e.target.value)} options={datasEDT_KCD_BANK_STATUS_CD} optionLabel="CD_NAME" placeholder="All" ></Dropdown>
+                    </span>
+
+                    <span style={{ height: '2rem', display: 'block', width: '36rem' }}>
+                        <p style={{ width: '8rem', display: 'inline-block' }}> Update User </p>
+                        <InputText disabled style={{ marginLeft: '0.5rem', display: 'inline-block', width: '23rem' }} id="id_UPD_USER" 
+                                   value={dataEDT_KCD_BANK_UPD_USER} onChange={(e) => setDataEDT_KCD_BANK_UPD_USER(e.target.value)}  />
+                    </span>
+
+                    <span style={{ height: '3rem', display: 'block', width: '55rem', marginTop: '0rem' }}>
+                        <p style={{ width: '8rem', display: 'inline-block' }} className="red"> *Bank Copy </p>
+                        
+                        <div style={{ marginLeft: '0.5rem', display: 'inline-block', width: '23rem' }}>
+                            <p style={{ width: '23rem', height: '20px', display: 'inline-block' ,overflow:'hidden', textOverflow:"ellipsis", whiteSpace:'nowrap', border:'1px solid #d9d9d9'}}> {dataTBL_KCD_BANK.fileName} </p>
+                        </div>
+                        <div style={{ marginLeft: '0.5rem', display: 'inline-block', width: '9rem' }}>
+                            <button style={{width: '9rem'}}><label className="inputFileCustom" htmlFor="inputFile" >File Upload</label></button>
+                            <input type="file" id="inputFile" onChange={s3FileUpload} style={{display:"none"}} />
+                        </div>
+                        <div style={{ marginLeft: '0rem', display: 'inline-block', width: '9rem' }}>
+                            <button style={{marginLeft: '1rem', width: '9rem'}} onClick={onDownloadFile}>File download</button>
+                        </div>
+                    </span>
+
+                    <div style={{ marginLeft: '40px', marginTop: '10px'}}>
+                        <Button style={{ display: 'inline-block', width: '9rem' }} label="Save" className="p-button-text" onClick={process_INSERT} />
+                        <Button style={{ display: 'inline-block', width: '9rem' }} label="Reset" className="p-button-text" onClick={process_RESET} />
+                        <Button style={{ display: 'inline-block', width: '9rem' }} label="Delete" className="p-button-text" onClick={process_DELETE_BANK} />
+                    </div>
+
+                    
+                </div>
+
+                <div className='af-div-first' style={{ marginLeft: '0.5rem', width: '64.5rem', height: '28rem', float: 'left' }}>
+                    <div style={{ marginTop: '0.5rem', marginLeft: '0rem', width: '57.5rem', backgroundColor: 'white', height: '4rem' }}>
+                        <span style={{ marginLeft: '1rem', marginTop: '1rem', float: 'left', display: 'inline-block', height: '2rem', width: '23rem', display: 'flex' }}>
+                            <p style={{ width: '4rem' }}> Supplier </p>
+                            <div style={{ marginLeft: '0.5rem', display: 'inline-block', width: '18rem' }}>
+                                <Dropdown id="id_STATUS_CD" style={{ width: '18rem' }}
+                                  value={dataQRY_KCD_BANK_VENDOR_CD} onChange={(e) => onDropdownChangeQRY_KCD_BANK_VENDOR_CD(e)} options={datasQRY_KCD_BANK_VENDOR_CD} filter optionLabel="VENDOR_NAME" placeholder=""  ></Dropdown>
+                            </div>
+                        </span>
+                        <span style={{ marginTop: '1rem', float: 'left', display: 'inline-block', height: '2rem', width: '32rem' }}>
+                            <Button style={{ width: '3rem', }} label="" icon="pi pi-refresh" className="p-button-text" onClick={search_LIST_2} />
+                            <Button style={{ width: '8rem', }} label="Add" className="p-button-text" onClick={process_INSERT_VENDOR} />
+                            <Button style={{ width: '9em', }} label="Remove" className="p-button-text" onClick={process_DELETE_VENDOR} />
+                            <Button style={{ width: '8em', }} label="GW" className="p-button-text" onClick={process_GW} />
+                        </span>
+                    </div>
+                    <div style={{ marginLeft: '0rem', width: '64.5rem', height: '15rem', }}>
+                        <AFDataTable ref={dt_kcd_vendor} size="small" value={datasTBL_KCD_VENDOR} resizableColumns columnResizeMode="expand"
+                            tableStyle={{ tableLayout: 'fixed' }}
+                            selectionMode="checkbox"
+                            selection={selectedTBL_KCD_VENDOR}
+                            onSelectionChange={(e) => { setSelectedTBL_KCD_VENDOR(e.value); onRowClick1TBL_KCD_VENDOR(e.value); }}
+                            dataKey="id" className="datatable-responsive" showGridlines
+                            emptyMessage=" " 
+                            loading={loadingTBL_KCD_VENDOR}
+                            responsiveLayout="scroll"
+                            virtualScrollerOptions={{ itemSize: 20 }}
+                            //scrollable
+                            scrollHeight="flex" >
+                            <AFColumn field="VENDOR_CD" headerClassName='t-header' header="Supplier CD" headerStyle={{ width: '10rem', height: '1.8rem' }} bodyStyle={{ width: '10rem'  }}></AFColumn>
+                            <AFColumn field="VENDOR_NAME" headerClassName='t-header' header="Supplier Name" headerStyle={{ width: '10rem', height: '1.8rem' }} bodyStyle={{ width: '10rem'  }}></AFColumn>
+                            <AFColumn field="INVOICE_NAME" headerClassName='t-header' header="Invoice Name" headerStyle={{ width: '10rem', height: '1.8rem' }} bodyStyle={{ width: '10rem'  }}></AFColumn>
+                            <AFColumn field="VENDOR_TYPE_N" headerClassName='t-header' header="Supplier Type" headerStyle={{ width: '10rem', height: '1.8rem' }} bodyStyle={{ width: '10rem'  }}></AFColumn>
+                            <AFColumn field="GW_N" headerClassName='t-header' header="GW" headerStyle={{ width: '5rem', height: '1.8rem' }} bodyStyle={{ width: '5rem'  }}></AFColumn>
+                            {/*
+                            <AFColumn field="NAT_CD" headerClassName='t-header' header="NAT" headerStyle={{ width: '10rem', height: '1.8rem' }} bodyStyle={{ width: '10rem'  }}></AFColumn>
+                            <AFColumn field="APPROKEY" headerClassName='t-header' header="ApproKey" headerStyle={{ width: '10rem', height: '1.8rem' }} bodyStyle={{ width: '10rem'  }}></AFColumn>
+                            */}
+                        </AFDataTable>
+                    </div>
+
+                </div>
+            </div>
+
+            {/* <Divider />
+            <div style={{ width: '116rem', height: '2rem', marginLeft: '88rem' }}>
+                <div className="formgrid grid">
+                    <div className="field col-6 md:col-6">
+                        <span style={{ height: '2rem', display: 'block', width: '43rem' }}>
+                            <Button style={{ display: 'inline-block', width: '10rem' }} label="Reset" className="p-button-text" onClick={process_RESET} />
+                            <Button style={{ display: 'inline-block', width: '10rem' }} label="Save" className="p-button-text" onClick={process_INSERT} />
+                            <Button style={{ display: 'inline-block', width: '10rem' }} label="Delete" className="p-button-text" onClick={process_DELETE_BANK} />
+                        </span>
+                    </div>
+                </div>
+            </div>
+            <Divider /> */}
+            <Toast ref={toast} />
+
+            {/*
+            <Dialog visible={createDialogS020401_ORDER_INFO} position="top-left" style={{ width: '100vw' }} header="전자결제" modal={true} className="p-fluid" onHide={hideDialogS020401_ORDER_INFO}>
+                <iframe src={urlOrderInfo}
+                    ref={dt_iframe}
+                    width="1250px"
+                    height="1100px"
+                    id="id1"
+                    className="myClassname"
+                    scrolling="no"
+                />
+            </Dialog>
+            */} 
+
+        </div>
+    );
+}
+
+const comparisonFn = function (prevProps, nextProps) {
+    return prevProps.location.pathname === nextProps.location.pathname;
+};
+
+/** memo 비교: pathname이 변할 때만 리렌더 */
+const propsAreEqual = (prevProps, nextProps) => {
+  const prev = prevProps?.pathname ?? '';
+  const next = nextProps?.pathname ?? '';
+  return prev === next;
+};
+const MemoMgrKzzAcctCore = React.memo(MgrKzzAcctCore, propsAreEqual);
+
+/** Wrapper(외부 노출): 기존 명칭 유지 + 라우터에서 pathname 주입 */
+const MgrKzzAcct = () => {
+  const location = useLocation(); // react-router v6
+  return <MemoMgrKzzAcctCore pathname={location?.pathname ?? ''} />;
+};
+
+export default MgrKzzAcct;

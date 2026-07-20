@@ -1,0 +1,17 @@
+                var tPayPrice = 0;
+                var sql90 = ` 
+                    select * 
+                      from ksv_stock_mem2    
+                    where matl_cd = '${tOne.MATL_CD}'
+                      and po_cd = '${tOne.PO_CD}'
+                      and (stsin_cd  is null or stsin_cd = '')
+                     `;
+                var ret90 = await prisma.$queryRaw(Prisma.raw(sql90));
+                if (ret90.length > 0) {
+                    var tMasterPrice = parseFloat(tEdit.PRICE);
+                    var tSurchargePrice = parseFloat(ret90[0].SURCHARGE_PRICE);
+                    var tPoPrice = tMasterPrice + tSurchargePrice;
+                    tPayPrice = tPoPrice;
+                } else {
+                    continue;
+                }

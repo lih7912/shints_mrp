@@ -1,0 +1,22 @@
+nohup: 입력 무시
+UNCAUGHT EXCEPTION: Error: listen EADDRINUSE: address already in use :::3202
+    at Server.setupListenHandle [as _listen2] (node:net:1372:16)
+    at listenInCluster (node:net:1420:12)
+    at Server.listen (node:net:1508:7)
+    at /home/afroba-dev/shints_mrp/server/src/server.ts:206:38
+    at step (/home/afroba-dev/shints_mrp/server/src/server.ts:33:23)
+    at Object.next (/home/afroba-dev/shints_mrp/server/src/server.ts:14:53)
+    at fulfilled (/home/afroba-dev/shints_mrp/server/src/server.ts:5:58)
+    at processTicksAndRejections (node:internal/process/task_queues:96:5) {
+  code: 'EADDRINUSE',
+  errno: -98,
+  syscall: 'listen',
+  address: '::',
+  port: 3202
+}
+(node:44796) NOTE: The AWS SDK for JavaScript (v2) is in maintenance mode.
+ SDK releases are limited to address critical bug fixes and security issues only.
+
+Please migrate your code to use AWS SDK for JavaScript (v3).
+For more information, check the blog post at https://a.co/cUPnyil
+(Use `node --trace-warnings ...` to show where the warning was created)

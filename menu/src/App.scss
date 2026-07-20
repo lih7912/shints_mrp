@@ -1,0 +1,654 @@
+/* 전체 애플리케이션에 Roboto 폰트 적용 */
+body {
+    font-family: "Roboto", sans-serif !important;
+}
+
+html {
+    font-size: 10px !important;
+}
+
+/* PrimeReact 기본 컴포넌트 폰트 설정 */
+.p-component {
+    font-family: "Roboto", sans-serif !important;
+}
+
+body {
+    background-color: #e5e5e5 !important;
+    transform-origin: top left;
+    transition: transform 0.5s ease;
+    overflow: hidden;
+}
+
+/* 모바일에서만 overflow 해제 */
+@media (max-width: 1000px) {
+    html,
+    body {
+        overflow: auto !important;
+    }
+}
+
+.hidden {
+    display: none;
+}
+.show0 {
+    z-index: 1;
+    display: block;
+}
+.wrapperClass9 {
+    position: "fixed";
+    padding: 0rem 0rem 0rem 0rem;
+    top: 0rem;
+    left: 0rem;
+    height: 67.3rem;
+    width: 139rem;
+}
+.layout-main-container9 {
+    z-index: 1;
+    position: "absolute";
+    padding: 1rem 0rem 0rem 1.5rem;
+    top: 1rem;
+    left: 19rem;
+    height: 65rem;
+    width: 124.5rem;
+}
+.layout-sidebar {
+    z-index: 1;
+    position: "absolute";
+    padding: 1rem 0rem 0rem 1rem;
+    top: 1rem;
+    left: 1rem;
+    height: 718px;
+    overflow-x: hidden;
+    box-shadow: none;
+    border-radius: 0px;
+}
+.p-tree {
+    padding: 0rem 0rem 0rem 0rem;
+    border: 0;
+}
+.p-tree-content {
+    margin: 0rem;
+    padding: 0rem;
+}
+.p-treenode .p-treenode-leaf {
+    padding: 3px 0 0px 0 !important;
+}
+
+#mainFooter {
+    position: fixed;
+    top: 715px;
+    width: 100%;
+    background-color: #e5e5e5;
+    height: 100vh;
+    z-index: 1000;
+}
+
+button {
+    background-color: #6366f1;
+    border-radius: 3px !important;
+    border: none;
+    color: white;
+    font-weight: 700;
+    font-size: 1rem;
+    cursor: pointer;
+}
+
+.p-treenode-icon {
+    display: none;
+}
+
+.p-treenode span {
+    font-weight: 650;
+    font-size: 1.2rem !important;
+}
+
+.p-treenode .p-treenode-children span {
+    font-weight: 400;
+    color: #000397;
+    font-size: 1rem !important;
+}
+
+.p-treenode .disabled {
+    opacity: 0.5 !important;
+    padding: 0 !important;
+    font-weight: 200 !important;
+    padding-left: 2px !important;
+}
+
+.p-menuitem-link {
+    cursor: pointer;
+}
+
+.testEnvLabel {
+    display: none;
+}
+
+.blink {
+    background: yellow;
+    animation: fadein 2s infinite;
+}
+
+.p-tree-container {
+    margin: 0;
+    padding: 0;
+    list-style-type: none;
+    overflow-y: auto;
+    overflow-x: hidden;
+}
+
+@keyframes fadein {
+    0% {
+        opacity: 1;
+    }
+    25% {
+        opacity: 0;
+    }
+    100% {
+        opacity: 1;
+    }
+}
+
+.p-tabmenu-nav li {
+    flex: 0 0 auto; /* 모든 탭의 너비를 동일하게 */
+    width: 133px; /* 원하는 고정 너비 설정 */
+}
+
+.p-tabmenu-nav li .p-menuitem-link {
+    justify-content: center; /* 중앙 정렬 */
+}
+
+.p-tabmenu .p-tabmenu-nav .p-tabmenuitem .p-menuitem-link {
+    text-align: center;
+}
+
+/* Dialog Overlay (모달 배경) 조정 */
+
+.p-dialog-mask {
+    position: fixed !important;
+    top: 0 !important;
+    left: 0 !important;
+    width: 100vw !important;
+    height: 100vh !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    z-index: 1000;
+}
+
+.workingMrpIcon {
+    display: none;
+    margin-left: 10px;
+}
+
+.workingMrpIcon dotlottie-player {
+}
+
+.workingMrpIcon span {
+    font-size: 1rem;
+    font-weight: 600;
+    vertical-align: middle;
+    margin-top: 6px;
+    margin-left: 5px;
+    color: rgb(196, 10, 10);
+}
+
+.p-tabmenu .p-tabmenu-nav .p-tabmenuitem .p-menuitem-link {
+    padding: 13px 10px;
+}
+
+.p-tree .p-tree-container .p-treenode .p-treenode-content.p-highlight {
+    color: #495057;
+}
+
+.p-tree
+    .p-tree-container
+    .p-treenode
+    .p-treenode-content.p-highlight
+    .p-tree-toggler {
+    color: #495057;
+}
+
+div:where(.swal2-container).swal2-top,
+div:where(.swal2-container).swal2-center,
+div:where(.swal2-container).swal2-bottom {
+    z-index: 1102;
+}
+
+div:where(.swal2-container).swal2-center > .swal2-popup {
+    position: fixed !important;
+    top: 33% !important;
+    left: 38% !important;
+    transform: translate(-50%, -50%) !important;
+}
+
+.p-tabview .p-tabview-panels {
+    padding: 0 !important;
+}
+
+.p-tabview-nav li .p-button-sm {
+    padding: 0;
+    margin-right: 0px;
+    font-size: 0.9rem;
+}
+
+.p-tabview-panels {
+    padding: 0px;
+    background: #fff;
+}
+
+.p-treenode-children li {
+    height: 20px !important;
+    margin-left: px;
+}
+
+.p-treenode-children .p-treenode-content button {
+    display: none;
+}
+
+.p-tree .p-tree-container .p-treenode .p-treenode-content {
+    padding: 0 !important;
+}
+
+.p-tree-container {
+    overflow: auto;
+    background-color: rgb(248, 249, 250);
+}
+
+#menuTree .p-tree-container {
+    height: calc(95vh - var(--dynamicOffset, 0px));
+}
+
+#favoritesWrapper {
+    border-bottom: 1px dashed #cbcbcb;
+    padding-bottom: 8px !important;
+}
+
+#favoritesWrapper .p-treenode-content button {
+    display: none;
+}
+
+#favoritesWrapper .tree-node-custom {
+    margin-left: 10px;
+}
+
+#favoritesWrapper .p-treenode span {
+    font-weight: normal;
+    font-size: 1rem !important;
+    color: #000397;
+}
+
+.p-tree .p-treenode-content {
+    padding: 6px 6px;
+    min-height: 15px;
+}
+.p-tree > .p-treenode > .p-treenode-content {
+    margin-top: 10px;
+    padding-top: 4px;
+    border-top: 1px solid #e5e7eb;
+}
+
+.p-tree > .p-treenode:first-child > .p-treenode-content {
+    border-top: none;
+    margin-top: 0;
+}
+.p-tree-toggler {
+    display: none !important;
+}
+
+.tab-container {
+    padding: 0 !important;
+}
+
+.p-tabview .p-tabview-nav li .p-tabview-nav-link {
+    border-top: 1px solid lightgray;
+    border-left: 1px solid lightgray;
+    border-right: 1px solid lightgray;
+    margin-top: 6px;
+    border-bottom-width: thick;
+}
+
+.p-tabview .p-tabview-nav li.p-highlight .p-tabview-nav-link {
+    border-top: 1px solid lightgray;
+    border-left: 1px solid lightgray;
+    border-right: 1px solid lightgray;
+    margin-top: 6px;
+    border-bottom-width: thick;
+}
+
+/* ============================= */
+/* iframe wrapper (핵심 구조) */
+/* ============================= */
+
+.iframe-scroll-wrapper {
+    width: 100%;
+    height: 100vh;
+    overflow-x: auto;
+    overflow-y: hidden;
+}
+
+/* iframe은 wrapper 안에서만 제어 */
+.iframe-scroll-wrapper iframe {
+    display: block;
+    width: 100%;
+    height: calc(100vh - 42px);
+    min-width: 100%;
+    border: none;
+    background-color: transparent !important;
+}
+
+/* ============================= */
+/* 모바일 대응 */
+/* ============================= */
+
+@media (max-width: 1000px) {
+    .iframe-scroll-wrapper {
+        width: 100%;
+        height: 100vh;
+        overflow-x: auto;
+        overflow-y: hidden;
+    }
+
+    .iframe-scroll-wrapper iframe {
+        width: 1280px;
+        height: 100%;
+        border: none;
+    }
+
+    /* 스크롤바 스타일 (보이게) */
+    .iframe-scroll-wrapper::-webkit-scrollbar {
+        width: 10px;
+        height: 10px;
+    }
+
+    .iframe-scroll-wrapper::-webkit-scrollbar-thumb {
+        background: rgba(120, 120, 120, 0.7);
+        border-radius: 999px;
+    }
+
+    .iframe-scroll-wrapper::-webkit-scrollbar-track {
+        background: rgba(0, 0, 0, 0.08);
+    }
+}
+
+.p-tabview-ink-bar {
+    display: none !important;
+}
+
+.af-div-main {
+    width: calc(100vw - 160px) !important;
+}
+.p-tabview .p-tabview-nav {
+    //    width: 1341px;
+    margin-top: 0px;
+    z-index: 1000;
+    position: relative;
+}
+
+.p-tabview-nav li {
+    width: 132px !important;
+    height: 42px !important;
+    margin-right: 0px !important;
+    margin-left: 2px !important;
+}
+
+.p-tabview .p-tabview-nav li .p-tabview-nav-link {
+    padding: 8px 3px 8px 3px;
+}
+
+/* TabPanel 컨테이너 스타일 조정 */
+.p-tabview-panels {
+    position: relative !important;
+}
+
+/* 각 TabPanel 내부 컨텐츠 기본 스타일 */
+.p-hidden {
+    position: absolute !important;
+    display: block !important;
+    top: 0 !important;
+    left: 0 !important;
+    width: 100% !important;
+    transition: opacity 0.1s ease !important;
+    z-index: 0 !important;
+    opacity: 0 !important;
+    pointer-events: none !important;
+}
+
+/* 활성화된 탭에 대한 스타일 오버라이드 */
+.p-tabview-panel[aria-hidden="false"] {
+    z-index: 999 !important;
+    opacity: 1 !important;
+    pointer-events: auto !important;
+    position: relative;
+}
+
+.table-row {
+    display: grid;
+    grid-template-columns: auto auto 1fr; /* 마지막 1fr이 남은 공간 */
+}
+
+.af-button:hover {
+    transform: scale(1.15) !important;
+    transition: transform 0.1s ease-in-out !important;
+}
+
+.tree-node-custom.p-treenode-label:hover {
+    background-color: #e9e9ff;
+    transform: scale(1.05) !important;
+    transition: transform 0.1s ease-in-out !important;
+}
+
+.tree-node-custom.p-treenode-label:active {
+    transform: scale(0.9) !important;
+    transition: transform 0.1s ease-in-out !important;
+}
+
+.tab-header {
+    height: 18px !important;
+}
+
+.p-button.p-button-icon-only {
+    width: 15px;
+}
+
+.p-treenode {
+    margin: 10px 0 10px 6px !important;
+}
+
+.p-treenode.p-treenode-leaf {
+    margin: 0 !important;
+}
+
+.p-tree .p-treenode-children {
+    padding: none !important;
+}
+
+.p-button .p-button-icon.pi.pi-trash {
+    font-size: 1.2rem; /* 원하는 크기 */
+}
+
+.p-tree .p-tree-container .p-treenode .p-treenode-content .p-tree-toggler {
+    margin-right: 0 !important;
+}
+
+#userInfoWrapper {
+    margin-top: 0.3rem;
+    width: 100%;
+    height: 4rem;
+    margin-bottom: 0rem;
+
+    display: flex;
+    flex-direction: column;
+}
+
+/* =========================
+   Sidebar Layout
+========================= */
+
+.sidebar {
+    position: relative;
+    width: 30px;
+    min-width: 30px;
+    height: 100vh;
+    background-color: rgb(248, 249, 250);
+
+    overflow-x: hidden;
+    overflow-y: hidden;
+
+    //transition: width 0.15s ease, min-width 0.15s ease;
+}
+
+/* hover 또는 pin 고정 시 펼쳐짐 */
+.sidebar:hover,
+.sidebar.pinned {
+    width: 160px;
+    min-width: 160px;
+    overflow-x: hidden;
+}
+
+/* =========================
+   Sidebar Content
+========================= */
+
+.sidebar-content {
+    width: 160px;
+}
+
+/* 접힌 상태에서는 텍스트만 숨김 */
+.sidebar:not(:hover):not(.pinned) .tree-node-custom span {
+    display: none;
+}
+
+/* 접힌 상태에서는 아이콘 중앙 정렬 */
+.sidebar:not(:hover):not(.pinned) .tree-node-custom {
+    justify-content: center;
+}
+
+.sidebar:not(:hover):not(.pinned) .p-treenode-children {
+    display: none;
+}
+
+.sidebar:not(:hover):not(.pinned) .tree-node-custom span {
+    display: none;
+}
+
+.sidebar:not(:hover):not(.pinned) .tree-node-custom {
+    justify-content: center;
+}
+
+/* 접힌 상태에서 상단 UI 숨기기 */
+.sidebar:not(:hover):not(.pinned) #userInfoWrapper,
+.sidebar:not(:hover):not(.pinned) #menuTopWrapper,
+.sidebar:not(:hover):not(.pinned) #favoritesWrapper {
+    visibility: hidden;
+}
+
+.sidebar:not(:hover):not(.pinned) .p-treenode-children {
+    display: none;
+}
+.tree-node-custom i {
+    font-size: 14px;
+    min-width: 14px;
+}
+
+/* =========================
+   Sidebar PIN Button
+========================= */
+
+.sidebar-pin {
+    position: fixed; /* 화면 기준 */
+    bottom: 4px;
+    left: 2px;
+
+    width: 28px;
+    height: 28px;
+
+    display: flex;
+    align-items: center;
+    justify-content: center;
+
+    border-radius: 6px;
+    cursor: pointer;
+
+    color: #6b7280;
+    z-index: 99999;
+}
+
+.sidebar-pin i {
+    font-size: 14px;
+    transition: transform 0.2s ease;
+}
+
+/* hover 효과 */
+.sidebar-pin:hover {
+    background: #eef2ff;
+    color: #4f46e5;
+}
+
+/* pinned 상태 */
+.sidebar-pin.pinned {
+    color: #4f46e5;
+}
+
+/* unpinned 상태 */
+.sidebar-pin.unpinned {
+    color: #6b7280;
+}
+
+/* pin 각도 */
+.sidebar-pin.pinned i {
+    transform: rotate(0deg);
+}
+
+.sidebar-pin.unpinned i {
+    transform: rotate(30deg);
+}
+
+@media (max-width: 1000px) {
+    .logo-placeholder {
+        display: none;
+    }
+}
+
+iframe {
+    background-color: transparent !important;
+}
+
+@media (max-width: 1000px) {
+    #userInfoWrapper,
+    #menuTopWrapper,
+    #favoritesWrapper {
+        display: none !important;
+    }
+
+    #menuTree .p-tree-container {
+        height: calc(100vh);
+    }
+
+    body {
+        transform-origin: top left;
+        transform: none !important;
+    }
+
+    #root {
+        height: calc(100vh / 0.9);
+        width: 100% !important;
+    }
+
+    .sidebar {
+        height: calc(100vh / 0.9);
+    }
+
+    .iframe-scroll-wrapper {
+        height: calc(100vh / 0.9);
+    }
+}
+
+#mobileLogOut {
+    display: none;
+}
+
+@media (max-width: 1000px) {
+    #mobileLogOut {
+        display: block !important;
+    }
+}

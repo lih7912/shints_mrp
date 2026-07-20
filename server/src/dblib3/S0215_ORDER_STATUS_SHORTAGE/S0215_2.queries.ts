@@ -1,0 +1,498 @@
+import { Prisma } from '@prisma/client';
+import prisma from '../../db'; //PrismaClient 사용하기 위해 불러오기
+import axios from 'axios';
+
+const fs = require('fs');
+import AFLib from '../../commlib'; //PrismaClient 사용하기 위해 불러오기
+
+const Excel = require('exceljs');
+const { generateUploadURL, generateDownloadURL, upload } = require('../../../routes/s3');
+const moment = require('moment');
+
+class S0215_QRY_COMM {
+    async makeReport(argData, contextValue, resultData) {
+        var tRetDate = AFLib.getCurrTime();
+        var tRetDate1 = tRetDate.substring(0, 8);
+        var tUserInfo = AFLib.getUserInfo(contextValue);
+
+        var tWExcelFile = `Buyer별Overage-Shortage_List-${tUserInfo.USER_ID}-${tRetDate1}`;
+
+        var tFactoryCd = '';
+        if (argData.ALL_FLAG === '1') tFactoryCd = '';
+        else if (argData.BVT_FLAG === '1') tFactoryCd = 'FC034';
+        else if (argData.ETP_FLAG === '1') tFactoryCd = 'FC044';
+
+        var tMonArray = new Array(12);
+        var tYY = argData.SHIP_DATE.substring(0, 4);
+        var tMMStr = '';
+        var tIdx9 = 0;
+        for (tIdx9 = 1; tIdx9 <= 12; tIdx9++) {
+            tMMStr = tIdx9;
+            if (tIdx9 < 10) tMMStr = `0${tIdx9}`;
+            var tStr = `${tYY}${tMMStr}`;
+
+            var tObj = {};
+            tObj.YY = tStr;
+            tObj.OVER = 0;
+            tObj.SHORT = 0;
+            tObj.TOTAL = 0;
+            tMonArray[tIdx9 - 1] =  tObj;
+        }
+
+        try {
+            // Excel Read
+            var tPath0 = '';
+            var tCols0 = __dirname.split('/');
+            var tFlag0 = 0;
+            tCols0.forEach((col, i) => {
+                if (col !== '') {
+                    if (col === 'src') {
+                        tPath0 += '/upload/excel_template';
+                        tFlag0 = 1;
+                    }
+                    if (tFlag0 === 0) {
+                        tPath0 += '/' + col;
+                    }
+                }
+            });
+            var tTemplateExcel = `${tPath0}/list.xlsx`;
+
+            const wb = new Excel.Workbook();
+            await wb.xlsx.readFile(tTemplateExcel);
+
+            var tSheetName = `Sheet1`;
+            const sheet = wb.getWorksheet(tSheetName);
+            // const sheet = wb.getWorksheet(1);
+
+            var sql0 = `
+                select distinct
+                    e.buyer_name,
+                    e.buyer_cd
+                from
+                    ksv_order_mst a,
+                    ksv_order_ship c,
+                    ksv_order_over_short d,
+                    kcd_buyer e
+                where
+                    c.order_cd = a.order_cd
+                    and a.order_cd = d.order_cd
+                    and a.order_status in ('8', '9')
+                    and e.buyer_cd = left(a.order_cd, 2)
+                    and a.factory_cd like '%${tFactoryCd}%'
+                    and left(a.order_cd, 2) like '%${argData.BUYER_CD}%'
+                    and a.sample_flag = '0'
+                    and left(a.order_cd, 2) not in ('SN')
+                    and a.order_cd in (
+                        select
+                            order_cd
+                        from
+                            ksv_order_ship
+                        where
+                            left(ship_date, 4) = '${tYY}'
+                    )
+                order by
+                    1
+            `;
+            var tRet0 = await prisma.$queryRaw(Prisma.raw(sql0));
+
+            tMonArray.forEach((col, i) => {
+                var tColIdx = (i + 1) * 3;
+                sheet.getCell(3, 0 + tColIdx).value = col.YY;
+                sheet.getCell(4, 0 + tColIdx).value = 'overage';
+                sheet.getCell(4, 1 + tColIdx).value = 'shortage';
+                sheet.getCell(4, 2 + tColIdx).value = 'Total';
+            });
+            sheet.getCell(3, 3 + 12 * 3).value = 'Total Amount';
+            sheet.getCell(3, 1).value = 'Buyer';
+
+            var tIdx0 = 0;
+            var tRowIdx = 5;
+            for (tIdx0 = 0; tIdx0 < tRet0.length; tIdx0++) {
+                var tOne = { ...tRet0[tIdx0] };
+                sheet.getCell(tRowIdx, 1).value = tOne.buyer_name;
+                sheet.getCell(tRowIdx, 2).value = tOne.buyer_cd;
+
+                var sql1 = `
+                    select
+                        sum(convert(float, d.confirm_amt)) as confirm_amt
+                    from
+                        ksv_order_mst a,
+                        ksv_order_ship c,
+                        ksv_order_over_short d
+                    where
+                        c.order_cd = a.order_cd
+                        and a.order_cd = d.order_cd
+                        and a.order_status in ('8', '9')
+                        and a.factory_cd like '%${tFactoryCd}%'
+                        and a.sample_flag = '0'
+                        and left(a.order_cd, 2) not in ('SN')
+                        and left(a.order_cd, 2) = '${tOne.buyer_cd}'
+                        and a.order_cd in (
+                            select
+                                order_cd
+                            from
+                                ksv_order_ship
+                            where
+                                left(ship_date, 4) = '${tYY}'
+                        )
+                `;
+                var tRet1 = await prisma.$queryRaw(Prisma.raw(sql1));
+                var tYearTot = 0;
+                if (tRet1.length > 0) tYearTot = tRet1[0].confirm_amt;
+                sheet.getCell(tRowIdx, 3 + 12 * 3).value = tYearTot;
+
+                var sql2 = `
+                        select kk.*
+                        from (
+                        select
+                            left(c.ship_date, 6) as ship_date, 'Over' as kind,  sum(convert(float, d.confirm_amt)) as confirm_amt
+                        from
+                            ksv_order_mst a,
+                            ksv_order_ship c,
+                            ksv_order_over_short d
+                        where
+                            c.order_cd = a.order_cd
+                            and a.order_cd = d.order_cd
+                            and a.order_status in ('8', '9')
+                            and a.factory_cd like '%${tFactoryCd}%'
+                            and a.sample_flag = '0'
+                            and left(a.order_cd, 2) not in ('SN')
+                            and left(a.order_cd, 2) = '${tOne.buyer_cd}'
+                            and d.vmd_qty > 0
+                            and a.order_cd in (
+                                select
+                                    order_cd
+                                from
+                                    ksv_order_ship
+                                where
+                                    left(ship_date, 4) = '${tYY}'
+                            )
+                        group by left(c.ship_date, 6) 
+                        union
+                        select
+                            left(c.ship_date, 6) as ship_date, 'Short' as kind,  sum(convert(float, d.confirm_amt)) as confirm_amt
+                        from
+                            ksv_order_mst a,
+                            ksv_order_ship c,
+                            ksv_order_over_short d
+                        where
+                            c.order_cd = a.order_cd
+                            and a.order_cd = d.order_cd
+                            and a.order_status in ('8', '9')
+                            and a.factory_cd like '%${tFactoryCd}%'
+                            and a.sample_flag = '0'
+                            and left(a.order_cd, 2) not in ('SN')
+                            and left(a.order_cd, 2) = '${tOne.buyer_cd}'
+                            and d.vmd_qty < 0
+                            and a.order_cd in (
+                                select 
+                                    order_cd 
+                                from
+                                    ksv_order_ship
+                                where
+                                    left(ship_date, 4) = '${tYY}'
+                            )
+                        group by left(c.ship_date, 6) 
+                        union
+                        select
+                            left(c.ship_date, 6) as ship_date, 'Total' as kind,  sum(convert(float, d.confirm_amt)) as confirm_amt
+                        from
+                            ksv_order_mst a,
+                            ksv_order_ship c,
+                            ksv_order_over_short d
+                        where
+                            c.order_cd = a.order_cd
+                            and a.order_cd = d.order_cd
+                            and a.order_status in ('8', '9')
+                            and a.factory_cd like '%${tFactoryCd}%'
+                            and a.sample_flag = '0'
+                            and left(a.order_cd, 2) not in ('SN')
+                            and left(a.order_cd, 2) = '${tOne.buyer_cd}'
+                            and a.order_cd in (
+                                select
+                                    order_cd
+                                from
+                                    ksv_order_ship
+                                where  
+                                    left(ship_date, 4) = '${tYY}'
+                            )
+                        group by left(c.ship_date, 6) 
+                        ) kk
+                        order by  kk.ship_date
+                `;
+                var tRet2 = await prisma.$queryRaw(Prisma.raw(sql2));
+
+                var tIdx2 =0;
+                for (tIdx2 = 0; tIdx2 < tRet2.length; tIdx2++) {
+                    var tObj = { ...tRet2[tIdx2] };
+
+                    var tIdx = parseInt(tObj.ship_date.substring(4, 6))-1;
+
+                    var tSaveObj = {  ...tMonArray[tIdx]  };
+                    if (tObj.kind === 'Over') tSaveObj.OVER = tObj.confirm_amt;
+                    if (tObj.kind === 'Short') tSaveObj.SHORT = tObj.confirm_amt;
+                    if (tObj.kind === 'Total') tSaveObj.TOTAL = tObj.confirm_amt;
+                    tMonArray[tIdx] = { ...tSaveObj };
+                }
+
+                for (tIdx2 = 0; tIdx2 < tMonArray.length; tIdx2++) {
+                    var tObj = { ...tMonArray[tIdx2] };
+                    var tColIdx = (tIdx2 + 1) * 3;
+                    sheet.getCell(tRowIdx, 0 + tColIdx).value = Number(tObj.OVER);
+                    sheet.getCell(tRowIdx, 1 + tColIdx).value = Number(tObj.SHORT);
+                    sheet.getCell(tRowIdx, 2 + tColIdx).value = Number(tObj.TOTAL);
+                }
+
+                tRowIdx += 1;
+            }
+
+            // Excel Write
+            var tPath = '';
+            var tCols = __dirname.split('/');
+            var tFlag = 0;
+            tCols.forEach((col, i) => {
+                if (col === 'src') {
+                    tPath += '/upload/excel';
+                    tFlag = 1;
+                }
+                if (tFlag === 0) {
+                    tPath += '/' + col;
+                }
+            });
+
+            // var tExcelFileName0 = `OrderSheet-${argData.ORDER_CD}-${tUserInfo.USER_ID}-${tRetDate}.xlsx`;
+            var tExcelFileName = `${tPath}/${tWExcelFile}.xlsx`;
+            const fileData = await wb.xlsx.writeBuffer();
+            fs.createWriteStream(tExcelFileName).write(fileData);
+
+            let fileUrl = '';
+            const response = await generateUploadURL(
+               `excel/${tWExcelFile}.xlsx`,
+            );
+            const presignedUrl = response.uploadURL;
+            await axios.put(
+                presignedUrl,
+                fileData,
+                {
+                    headers: {
+                        'Content-Type':
+                            'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+                    },
+                },
+            );
+            fileUrl = await generateDownloadURL(
+                response.imageName,
+                `${tWExcelFile}.xlsx`,
+            );
+            var tObj = {
+                    id: 1,
+                    CODE: 'SUCCESS',
+                    FILE_NAME: `${tWExcelFile}.xlsx`,
+                    URL: fileUrl,
+            };
+            console.log(` Return: ${tObj.id} / ${tObj.CODE} / ${tObj.FILE_NAME} / ${tObj.URL} `);
+            return tObj;
+        } catch (e) {
+            console.log(` Return: Error  ${e.message} `);
+            var tObj = {
+                    id: 1,
+                    CODE: `ERROR: ${e.message}`,
+                    FILE_NAME: ``,
+                    URL: ``,
+            };
+            return tObj;
+        }
+    }
+}
+
+// export default로 Query 내용 내보내기
+const moduleQuery_S0215_2 = {
+    Query: {
+        mgrQueryS0215_EXCEL_REPORT: async (_, args, contextValue) => {
+            var tRetDate = AFLib.getCurrTime();
+            var tRetDate1 = tRetDate.substring(0, 8);
+            var tUserInfo = AFLib.getUserInfo(contextValue);
+
+            var tWExcelFile = `Buyer별Overage-Shortage_List-${tUserInfo.USER_ID}-${tRetDate1}`;
+
+            var tFactoryCd = '';
+            if (args.data.ALL_FLAG === '1') tFactoryCd = '';
+            else if (args.data.BVT_FLAG === '1') tFactoryCd = 'FC034';
+            else if (args.data.ETP_FLAG === '1') tFactoryCd = 'FC044';
+
+            var tMonArray = new Array(12);
+            var tYY = args.data.SHIP_DATE.substring(0, 4);
+            var tMMStr = '';
+            var tIdx9 = 0;
+            for (tIdx9 = 1; tIdx9 <= 12; tIdx9++) {
+                tMMStr = tIdx9;
+                if (tIdx9 < 10) tMMStr = `0${tIdx9}`;
+                var tStr = `${tYY}${tMMStr}`;
+                tMonArray[tIdx9 - 1] = tStr;
+            }
+
+            var tFunc = new S0215_QRY_COMM();
+            var tRetObj = tFunc.makeReport(
+                args.data,
+                contextValue,
+                tRetArray,
+            );
+            var tRetArray = [];
+            tRetArray.push(tRetObj);
+            return tRetArray;
+        },
+        mgrQueryS0215_2: async (_, args) => {
+            var tSQL = '';
+            if (args.data.TYPE === 'Overage') {
+                tSQL += `HAVING (SUM(C.SHIP_CNT)-A.TOT_CNT) > 0 `;
+            } else if (args.data.TYPE === 'Shortage') {
+                tSQL += `HAVING (SUM(C.SHIP_CNT)-A.TOT_CNT) < 0 `;
+            } else {
+                tSQL += `HAVING (SUM(C.SHIP_CNT)-A.TOT_CNT) <> 0 `;
+            }
+
+            var tFactoryCd = '';
+            if (args.data.ALL_FLAG === '1') tFactoryCd = '';
+            else if (args.data.BVT_FLAG === '1')
+                tFactoryCd = `and a.factory_cd in ('FC034','FC113','FC087')`;
+            else if (args.data.ETP_FLAG === '1')
+                tFactoryCd = `and a.factory_cd in ('FC044')`;
+
+            let orderStatusClause = `AND A.ORDER_STATUS IN ('8','9')`;
+
+            var tYear1 = parseInt(args.data.SHIP_DATE.substring(0, 4));
+            var tMon1 = parseInt(args.data.SHIP_DATE.substring(4, 6));
+            if (parseFloat(tMon1) === 12) {
+                tYear1 += 1;
+                tMon1 = 1;
+                if (tMon1 < 10) tMon1 = `0${tMon1}`;
+                else tMon1 = `${tMon1}`;
+            } else {
+                tMon1 += 1;
+                if (tMon1 < 10) tMon1 = `0${tMon1}`;
+                else tMon1 = `${tMon1}`;
+            }
+            var tSearchMonth = `${tYear1}${tMon1}`;
+
+
+            let sqlStr = `
+                SELECT
+                    F.PO_CD,
+                    A.ORDER_CD,
+                    A.BUYER_TEAM,
+                    B.STYLE_NAME,
+                    A.TOT_CNT,
+                    isnull(SUM(C.SHIP_CNT), 0) AS SHIP_CNT,
+                    (isnull(SUM(C.SHIP_CNT), 0) - A.TOT_CNT) AS DIFF_CNT,
+                    isnull(D.VMD_QTY, '') as VMD_QTY,
+                    isnull(D.VMD_SUB_QTY, '') as VMD_SUB_QTY,
+                    isnull(D.SMD_QTY, '') as SMD_QTY,
+                    isnull(MAX(C.SHIP_DATE), '') AS MAX_SHIP_DATE,
+                    isnull(D.CONFIRM_USER, '') as CONFIRM_USER,
+                    '0' AS COL1,
+                    isnull(D.CONFIRM_AMT, '0') as CONFIRM_AMT,
+                    isnull(A.USD_PRICE, 0) as USD_PRICE,
+                    isnull(A.FC_PRICE, 0) as FC_PRICE,
+                    E.CD_NAME AS ORDER_STATUS_NAME,
+                    isnull(D.STS_COMMENT, '') as STS_COMMENT,
+                    isnull(D.BVT_COMMENT, '') as BVT_COMMENT,
+                    isnull(D.SUP_QTY, '') as SUP_QTY,
+                    isnull(D.BUYER_QTY, '') as BUYER_QTY,
+                    isnull(D.STS_QTY, '') as STS_QTY,
+                    A.REMARK,
+                    isnull(D.END_FLAG, '') as END_FLAG,
+                    isnull(D.END_DATE, '') as END_DATE,
+                    isnull(LEFT(A.END_DATETIME, 8), '') as ORDER_END_DATE
+                FROM
+                    KSV_ORDER_MST A
+                    LEFT JOIN KSV_ORDER_OVER_SHORT D ON D.ORDER_CD = A.ORDER_CD,
+                    KCD_STYLE B,
+                    KSV_ORDER_SHIP C,
+                    KCD_CODE E,
+                    KSV_PO_MEM F
+                WHERE
+                    A.STYLE_CD = B.STYLE_CD
+                    AND C.ORDER_CD = A.ORDER_CD ${orderStatusClause}
+                    AND E.CD_CODE = A.ORDER_STATUS
+                    AND E.CD_GROUP = 'ORDER_STATUS' ${tFactoryCd}
+                    AND A.SAMPLE_FLAG = '0'
+                    AND LEFT(A.ORDER_CD, 2) NOT IN ('SN')
+                    AND F.PO_CD LIKE '%${args.data.PO_CD}%'
+                    AND F.PO_SEQ = '1'
+                    AND A.ORDER_CD LIKE '%${args.data.ORDER_CD}%'
+                    -- AND LEFT(C.SHIP_DATE, 6) = '${moment(args.data.SHIP_DATE, 'YYYYMM').format('YYYYMM')}'
+                    -- AND LEFT(A.END_DATETIME, 6) = '${moment(args.data.SHIP_DATE, 'YYYYMM').format('YYYYMM')}'
+                    AND LEFT(A.END_DATETIME, 6) = '${tSearchMonth}'
+                    AND LEFT(A.ORDER_CD, 2) LIKE '%${args.data.BUYER_CD}%'
+                    AND A.ORDER_STATUS in ('8', '9') 
+                    AND A.BUYER_TEAM LIKE '%${args.data.TEAM}%'
+                    AND F.ORDER_CD = A.ORDER_CD
+                GROUP BY
+                    F.PO_CD,
+                    A.ORDER_CD,
+                    A.BUYER_TEAM,
+                    B.STYLE_NAME,
+                    A.TOT_CNT,
+                    D.VMD_QTY,
+                    D.SMD_QTY,
+                    D.VMD_SUB_QTY,
+                    D.SUP_QTY,
+                    D.BUYER_QTY,
+                    D.STS_QTY,
+                    D.CONFIRM_USER,
+                    D.CONFIRM_AMT,
+                    A.USD_PRICE,
+                    A.FC_PRICE,
+                    E.CD_NAME,
+                    D.STS_COMMENT,
+                    D.BVT_COMMENT,
+                    A.REMARK,
+                    D.END_FLAG,
+                    D.END_DATE, 
+                    isnull(LEFT(A.END_DATETIME, 8), '')
+                    ${tSQL}
+                ORDER BY
+                    1
+            `;
+
+            var tRet = await prisma.$queryRaw(Prisma.raw(sqlStr));
+            var tRetData = {};
+            var tRetArray = [];
+            var tIdx = 0;
+            console.log(`Record Over/Short: ${tRet.length}`);
+            tRet.forEach((col, i) => {
+                var tObj = { ...col };
+
+                if (
+                    parseFloat(tObj.VMD_QTY) === 0 &&
+                    parseFloat(tObj.CONFIRM_AMT) < 0
+                ) {
+                    tObj.CONFIRM_AMT = '0.00';
+                }
+
+                if (args.data.END_TYPE === 'Ongoing') {
+                    if (tObj.END_FLAG !== '1') {
+                        if (tObj.DIFF_CNT < 0) {
+                            if (tObj.FC_PRICE > tObj.UNIT_PRICE)
+                                tObj.CONFIRM_AMT = 0;
+                        }
+                        tRetArray.push(tObj);
+                    }
+                } else {
+                    if (tObj.END_FLAG === '1') {
+                        if (tObj.DIFF_CNT < 0) {
+                            if (tObj.FC_PRICE > tObj.UNIT_PRICE)
+                                tObj.CONFIRM_AMT = 0;
+                        }
+                        tRetArray.push(tObj);
+                    } else {
+                        tRetArray.push(tObj);
+                    }
+                }
+            });
+            return tRetArray;
+        },
+    },
+};
+
+export default moduleQuery_S0215_2;

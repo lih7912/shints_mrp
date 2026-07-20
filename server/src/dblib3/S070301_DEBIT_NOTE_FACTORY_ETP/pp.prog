@@ -1,0 +1,4 @@
+BEGIN { FS=" "; }
+{
+tmps = sprintf ("mv %s kk_%s ", $0, $0); print tmps;
+}

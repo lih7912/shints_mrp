@@ -1,0 +1,1374 @@
+import { Prisma } from '@prisma/client';
+import prisma from '../../db'; //PrismaClient 사용하기 위해 불러오기
+import AFLib from '../../commlib'; //PrismaClient 사용하기 위해 불러오기
+const fs = require('fs');
+
+///
+
+const loadInspectFileInfoMap = async (fileKeys: string[]) => {
+    var saveKeyMap: Record<string, string> = {};
+    var inSqlFileKey = '';
+
+    fileKeys.forEach((fileKey0) => {
+        if (!fileKey0 || saveKeyMap[fileKey0]) return;
+
+        var tCols = fileKey0.split(/-/);
+        var fileKey = '';
+        if (tCols.length >= 2) {
+            var fileKey = `${tCols[0]}-${tCols[1]}`;
+            saveKeyMap[fileKey] = '1';
+            if (inSqlFileKey === '') inSqlFileKey = `'${fileKey}'`;
+            else inSqlFileKey += `,'${fileKey}'`;
+        }
+    });
+
+    if (!inSqlFileKey) {
+        return {};
+    }
+
+    let sqlStr = `
+        select
+            file_key as FILE_KEY,
+            name as NAME,
+            url as URL
+        from
+            kcd_fileinfo
+        where
+            kind = 'INSPECT'
+            and file_key in (${inSqlFileKey})
+    `;
+    var tRet = (await prisma.$queryRaw(Prisma.raw(sqlStr))) as any[];
+    var tRetMap: Record<string, any> = {};
+
+    tRet.forEach((col) => {
+        if (!tRetMap[col.FILE_KEY]) {
+            tRetMap[col.FILE_KEY] = {
+                ...col,
+            };
+        }
+    });
+
+    return tRetMap;
+};
+
+// export default로 Query 내용 내보내기
+const moduleQuery_S051901_2 = {
+    Query: {
+        mgrQueryS051901_2: async (_, args, contextValue) => {
+            var tRetDate = AFLib.getCurrTime();
+            var tRetDate1 = tRetDate.substring(0, 8);
+            var tUserInfo = AFLib.getUserInfo(contextValue);
+
+            var sqlDestination = '';
+            if (args.data.IS_BVT === '1') {
+                sqlDestination = `AND left(a5.po_cd, 1) = 'P' `;
+            }
+            if (args.data.IS_ETP === '1') {
+                sqlDestination = `AND left(a5.po_cd, 1) = 'E' `;
+            }
+
+            var sqlATA = '';
+            var sATA = args.data.S_ATA;
+            var eATA = args.data.E_ATA;
+            if (!sATA && !eATA) {
+            } else {
+                if (!sATA) sATA = `${tRetDate1.substring(0, 6)}01`;
+                if (!eATA) eATA = `99999999`;
+                sqlATA = `and a3.ata between '${sATA}' and '${eATA}' `;
+            }
+
+            var sqlFACIN_DATE = '';
+            var sFACIN_DATE = args.data.S_FACIN_DATE;
+            var eFACIN_DATE = args.data.E_FACIN_DATE;
+            if (!sFACIN_DATE && !eFACIN_DATE) {
+                sFACIN_DATE = `${tRetDate1.substring(0, 4)}0101`;
+                eFACIN_DATE = `99999999`;
+            } else {
+                if (!sFACIN_DATE) sFACIN_DATE = `${tRetDate1.substring(0, 4)}0101`;
+                if (!eFACIN_DATE) eFACIN_DATE = `99999999`;
+            }
+            sqlFACIN_DATE = `and a.in_date between '${sFACIN_DATE}' and '${eFACIN_DATE}' `;
+
+            var sqlCustomsNo = '';
+            if (args.data.CUSTOMS_NO) {
+                sqlCustomsNo = `and a3.CLEARANCE_NO like '%${args.data.CUSTOMS_NO}%' `;
+            }
+
+            var sqlBlNo = '';
+            if (args.data.BL_NO) {
+                sqlBlNo = `and a3.bl_no like '%${args.data.BL_NO}%'  `;
+            }
+
+            var sqlBuyerCd = '';
+            if (args.data.BUYER_CD) {
+                sqlBuyerCd = `and a6.buyer_cd = '${args.data.BUYER_CD}'  `;
+            }
+
+            var sqlRemark = '';
+            if (args.data.REMARK) {
+                sqlRemark = `and (a3.invoice_no like  '%${args.data.REMARK}%' or a3.bl_no like '%${args.data.REMARK}%' )   `;
+            }
+
+            var sqlMatlName = '';
+            if (args.data.DESCRIPTION) {
+                sqlMatlName = `and   a4.matl_name  like '%${args.data.DESCRIPTION}%'  `;
+            }
+
+            var sqlSpec = '';
+            if (args.data.SPEC) {
+                sqlSpec = `and   a4.spec  like '%${args.data.SPEC}%'  `;
+            }
+
+            var sqlUnit = '';
+            if (args.data.UNIT) {
+                sqlUnit = `and   a4.unit  like '%${args.data.UNIT}%'  `;
+            }
+
+            var sqlColor = '';
+            if (args.data.COLOR) {
+                sqlColor = `and   a4.color  like '%${args.data.COLOR}%'  `;
+            }
+
+            var sqlVendor = '';
+            if (args.data.SUPPLIER) {
+                sqlVendor = `and   a7.vendor_name  like '%${args.data.SUPPLIER}%'  `;
+            }
+
+            let sqlStr = `
+                 select 
+                      kk.ATA,
+                      kk.BUYER_CD,
+                      kk.VENDOR_NAME,
+                      kk.USER_ID,
+                      kk.DELIVERY_TYPE,
+                      kk.DELIVERY_TYPE_N,
+                      kk.BL_NO,
+                      kk.CUSTOMS_NO,
+                      kk.ORIGIN_PORT,
+                      kk.PO_CD,
+                      kk.MATL_CD,
+                      kk.MATL_NAME,
+                      kk.COLOR,
+                      kk.SPEC,
+                      kk.UNIT,
+                      isnull(sum(kk.S_OUT_QTY), 0) as S_OUT_QTY,
+                      isnull(sum(kk.MOQ_QTY), 0) as MOQ_QTY,
+                      kk.SHORTAGE_QTY,
+                      kk.DEFECT_QTY,
+                      kk.FACIN_QTY,
+                      kk.ERR_QTY,
+                      kk.LOCATION,
+                      kk.DELIVERY as DELIVERY_ORG,
+                      kk.WEIGHT,
+                      kk.CBM,
+                      kk.CT_NO,
+                      kk.MC_ID,
+                      kk.PU_CD,
+                      kk.STATUS_CD,
+                      kk.STATUS_CD_N,
+                      kk.FACTORY_CD,
+                      kk.FACTORY_CD_N,
+                      kk.SHIPMENT_CD,
+                      kk.CLEARANCE_NO,
+                      kk.SHIP_MODE,
+                      kk.STSOUT_CD,
+                      kk.VENDOR_CD,
+                      kk.FILE_NAME,
+                      kk.FILE_URL,
+                      kk.FACIN_DATE,
+                      kk.FACIN_CD,
+                      kk.PACK_CD,
+                      kk.INSPECT_DATE
+                 from 
+                 (
+                 select
+                      distinct
+                      isnull(a3.ata, '') as ATA,
+                      isnull(a6.buyer_cd, '') as BUYER_CD,
+                      isnull(a7.vendor_name, '') as VENDOR_NAME,
+                      isnull(a.reg_user, '') as USER_ID,
+                      isnull(a1.delivery_type, '') as DELIVERY_TYPE,
+                      -- isnull(a8.cd_name, '') as DELIVERY_TYPE_N,
+                      (case when a3.invoice_no is not null and a3.invoice_no <> '' then isnull(a3.invoice_no, '') 
+                            when a3.remark is not null and a3.remark <> '' then isnull(a3.remark, '') 
+                            else '' end) as DELIVERY_TYPE_N,
+                      isnull(a3.bl_no, '') as BL_NO,
+                      isnull(a3.CLEARANCE_NO, '') as CUSTOMS_NO,
+                      isnull(a3.ORIGIN_PORT, '') as ORIGIN_PORT,
+                      isnull(a.PO_CD, '') as PO_CD,
+                      isnull(a.MATL_CD, '') as MATL_CD,
+                      isnull(a4.MATL_NAME, '') as MATL_NAME,
+                      isnull(a4.COLOR, '') as COLOR,
+                      isnull(a4.SPEC, '') as SPEC,
+                      isnull(a4.UNIT, '') as UNIT,
+                      isnull(a1.ORDER_CD, '') as S_ORDER_CD,
+                      isnull(a1.OUT_QTY, '') as S_OUT_QTY,
+                      isnull(a.SHORTAGE_QTY, '') as SHORTAGE_QTY,
+                      isnull(a.DEFECT_QTY, '') as DEFECT_QTY,
+                      isnull(a.IN_QTY, '') as FACIN_QTY,
+                      isnull(a.ERR_QTY, '') as ERR_QTY,
+                      isnull(a.LOCATION, '') as LOCATION,
+                      isnull(a.DELIVERY, '') as DELIVERY,
+                      -- isnull(a2.WEIGHT, '0') as WEIGHT,
+                      -- isnull(a2.CBM, '0') as CBM,
+                      -- isnull(a2.CT_QTY, '0') as CT_NO,
+                      isnull(a3.A_WEIGHT, '0') as WEIGHT,
+                      isnull(a3.A_CBM, '0') as CBM,
+                      isnull(a3.A_CT_QTY, '0') as CT_NO,
+                      isnull(a1.REG_USER, '') as MC_ID,
+                      isnull(a1.PU_CD, '') as PU_CD,
+                      isnull(a12.STOCK_STATUS, '') as STATUS_CD,
+                      isnull(a9.cd_name, '') as STATUS_CD_N,
+                      isnull(a1.OUT_FACTORY_CD, '') as FACTORY_CD,
+                      isnull(a10.FACTORY_NAME, '') as FACTORY_CD_N,
+                      isnull(a3.SHIPMENT_CD, '') as SHIPMENT_CD,
+                      isnull(a3.CLEARANCE_NO, '') as CLEARANCE_NO,
+                      isnull(a3.SHIP_MODE, '') as SHIP_MODE,
+                      isnull(a.STSOUT_CD, '') as STSOUT_CD,
+                      isnull(a7.VENDOR_CD, '') as VENDOR_CD,
+                      isnull(a.FILE_NAME, '') as FILE_NAME,
+                      isnull(a.FILE_URL, '') as FILE_URL,
+                      isnull(a.IN_DATE, '') as FACIN_DATE,
+                      isnull(a.FACIN_CD, '') as FACIN_CD,
+                      isnull(a.INSPECT_DATE, '') as INSPECT_DATE,
+                      isnull(a1.PACK_CD, '') as PACK_CD, 
+                      (case when (a1.po_seq = 99 or a1.po_seq = 98) then a1.OUT_QTY else 0 end) - isnull(a13.USE_QTY, 0) as MOQ_QTY
+                 from ksv_stock_facin a 
+                      left join ksv_stock_out a1 on a1.stsout_cd = a.stsout_cd
+                                                and a1.po_cd = a.po_cd
+                                                and a1.matl_cd = a.matl_cd
+                      left join (
+                          select
+                              USE_PO_CD,
+                              USE_MATL_CD,
+                              sum(USE_QTY) as USE_QTY
+                          from
+                              KSV_STOCK_USE
+                          group by
+                              USE_PO_CD,
+                              USE_MATL_CD
+                      ) a13 on a13.USE_PO_CD = a1.PO_CD
+                           and a13.USE_MATL_CD = a1.MATL_CD
+                      left join ksv_shipment_mem a2 on a2.stsout_cd = a.stsout_cd
+                      left join ksv_shipment_mst a3 on a3.shipment_cd = a2.shipment_cd 
+                      left join kcd_matl_mst a4 on a4.matl_cd = a.matl_cd
+                      left join kcd_vendor a7 on a7.vendor_cd = a4.vendor_cd
+                      left join ksv_po_mem a5 on a5.po_cd = a.po_cd and  a5.po_seq = 1
+                      left join kcd_buyer a6 on a6.buyer_cd = left(a5.order_cd, 2)
+                      left join (
+                          select
+                              po_cd,
+                              matl_cd,
+                              max(stock_idx) as stock_idx
+                          from
+                              ksv_stock_matl
+                          where
+                              remain_qty >= 1
+                          group by
+                              po_cd,
+                              matl_cd
+                      ) a12k on a12k.po_cd = a.po_cd and a12k.matl_cd = a.matl_cd
+                      left join ksv_stock_matl a12 on a12.stock_idx = a12k.stock_idx
+                          and a12.po_cd = a.po_cd
+                          and a12.matl_cd = a.matl_cd
+                          and a12.remain_qty >= 1
+                      left join kcd_code a8 on a8.cd_code = a1.delivery_type and a8.cd_group = 'DELIVERY_TYPE'
+                      left join kcd_code a9 on a9.cd_code = a12.stock_status and a9.cd_group = 'STOCK_STATUS_S'
+                      left join kcd_factory a10 on a10.factory_cd = a1.out_factory_cd
+                      left join kcd_code a11 on a11.cd_code  = a3.ship_mode and a11.cd_group = 'shipment_ship_mode'
+                 where  1 = 1
+                 and   isnull(a3.CLEARANCE_NO, '') <> ''
+                 and   a.po_cd  like '%${args.data.PO_CD}%'
+                 and   a.matl_cd  like '%${args.data.MATL_CD}%'
+                 ${sqlVendor}
+                 ${sqlMatlName}
+                 ${sqlSpec}
+                 ${sqlUnit}
+                 ${sqlColor}
+                 ${sqlRemark}
+                 ${sqlDestination}
+                 ${sqlATA}
+                 ${sqlFACIN_DATE}
+                 ${sqlCustomsNo}
+                 ${sqlBlNo}
+                 ${sqlBuyerCd}
+                 ) kk
+                 group by  
+                      kk.ATA,
+                      kk.BUYER_CD,
+                      kk.VENDOR_NAME,
+                      kk.USER_ID,
+                      kk.DELIVERY_TYPE,
+                      kk.DELIVERY_TYPE_N,
+                      kk.BL_NO,
+                      kk.CUSTOMS_NO,
+                      kk.ORIGIN_PORT,
+                      kk.PO_CD,
+                      kk.MATL_CD,
+                      kk.MATL_NAME,
+                      kk.COLOR,
+                      kk.SPEC,
+                      kk.UNIT,
+                      kk.SHORTAGE_QTY,
+                      kk.DEFECT_QTY,
+                      kk.FACIN_QTY,
+                      kk.ERR_QTY,
+                      kk.LOCATION,
+                      kk.DELIVERY,
+                      kk.WEIGHT,
+                      kk.CBM,
+                      kk.CT_NO,
+                      kk.MC_ID,
+                      kk.PU_CD,
+                      kk.STATUS_CD,
+                      kk.STATUS_CD_N,
+                      kk.FACTORY_CD,
+                      kk.FACTORY_CD_N,
+                      kk.SHIPMENT_CD,
+                      kk.CLEARANCE_NO,
+                      kk.SHIP_MODE,
+                      kk.STSOUT_CD,
+                      kk.VENDOR_CD,
+                      kk.FILE_NAME,
+                      kk.FILE_URL,
+                      kk.FACIN_DATE,
+                      kk.FACIN_CD,
+                      kk.PACK_CD,
+                      kk.INSPECT_DATE
+            `;
+            console.log(sqlStr);
+
+            let sqlStr2 = `
+                 select 
+                      kk.ATA,
+                      kk.BUYER_CD,
+                      kk.VENDOR_NAME,
+                      kk.USER_ID,
+                      kk.DELIVERY_TYPE,
+                      kk.DELIVERY_TYPE_N,
+                      kk.BL_NO,
+                      kk.CUSTOMS_NO,
+                      kk.ORIGIN_PORT,
+                      kk.PO_CD,
+                      kk.MATL_CD,
+                      kk.MATL_NAME,
+                      kk.COLOR,
+                      kk.SPEC,
+                      kk.UNIT,
+                      isnull(sum(kk.S_OUT_QTY), 0) as S_OUT_QTY,
+                      isnull(sum(kk.MOQ_QTY), 0) as MOQ_QTY,
+                      kk.SHORTAGE_QTY,
+                      kk.DEFECT_QTY,
+                      kk.FACIN_QTY,
+                      kk.ERR_QTY,
+                      kk.LOCATION,
+                      kk.DELIVERY as DELIVERY_ORG,
+                      kk.WEIGHT,
+                      kk.CBM,
+                      kk.CT_NO,
+                      kk.MC_ID,
+                      kk.PU_CD,
+                      kk.STATUS_CD,
+                      kk.STATUS_CD_N,
+                      kk.FACTORY_CD,
+                      kk.FACTORY_CD_N,
+                      kk.SHIPMENT_CD,
+                      kk.CLEARANCE_NO,
+                      kk.SHIP_MODE,
+                      kk.STSOUT_CD,
+                      kk.VENDOR_CD,
+                      kk.FILE_NAME,
+                      kk.FILE_URL,
+                      kk.FACIN_DATE,
+                      kk.FACIN_CD,
+                      kk.PACK_CD
+                 from 
+                 (
+                 select
+                      distinct
+                      isnull(a3.ata, '') as ATA,
+                      isnull(a6.buyer_cd, '') as BUYER_CD,
+                      isnull(a7.vendor_name, '') as VENDOR_NAME,
+                      a1.REG_USER as USER_ID,
+                      isnull(a1.delivery_type, '') as DELIVERY_TYPE,
+                      (case when a3.invoice_no is not null and a3.invoice_no <> '' then isnull(a3.invoice_no, '') 
+                            when a3.remark is not null and a3.remark <> '' then isnull(a3.remark, '') 
+                            else '' end) as DELIVERY_TYPE_N,
+                      isnull(a3.bl_no, '') as BL_NO,
+                      isnull(a3.CLEARANCE_NO, '') as CUSTOMS_NO,
+                      isnull(a3.ORIGIN_PORT, '') as ORIGIN_PORT,
+                      isnull(a1.PO_CD, '') as PO_CD,
+                      isnull(a1.MATL_CD, '') as MATL_CD,
+                      isnull(a4.MATL_NAME, '') as MATL_NAME,
+                      isnull(a4.COLOR, '') as COLOR,
+                      isnull(a4.SPEC, '') as SPEC,
+                      isnull(a4.UNIT, '') as UNIT,
+                      isnull(a1.OUT_QTY, '') as S_OUT_QTY,
+                      '' as SHORTAGE_QTY,
+                      '' as DEFECT_QTY,
+                      '' as FACIN_QTY,
+                      '' as ERR_QTY,
+                      '' as LOCATION,
+                      '' as DELIVERY,
+                      -- isnull(a2.WEIGHT, '0') as WEIGHT,
+                      -- isnull(a2.CBM, '0') as CBM,
+                      -- isnull(a2.CT_QTY, '0') as CT_NO,
+                      isnull(a3.A_WEIGHT, '0') as WEIGHT,
+                      isnull(a3.A_CBM, '0') as CBM,
+                      isnull(a3.A_CT_QTY, '0') as CT_NO,
+                      isnull(a1.REG_USER, '') as MC_ID,
+                      isnull(a1.PU_CD, '') as PU_CD,
+                      isnull(a12.STOCK_STATUS, '') as STATUS_CD,
+                      isnull(a9.cd_name, '') as STATUS_CD_N,
+                      isnull(a1.OUT_FACTORY_CD, '') as FACTORY_CD,
+                      isnull(a10.FACTORY_NAME, '') as FACTORY_CD_N,
+                      isnull(a3.SHIPMENT_CD, '') as SHIPMENT_CD,
+                      isnull(a3.CLEARANCE_NO, '') as CLEARANCE_NO,
+                      isnull(a3.SHIP_MODE, '') as SHIP_MODE,
+                      isnull(a1.STSOUT_CD, '') as STSOUT_CD,
+                      isnull(a7.VENDOR_CD, '') as VENDOR_CD,
+                      '' as FILE_NAME,
+                      '' as FILE_URL,
+                      isnull(a.IN_DATE, '') as FACIN_DATE,
+                      isnull(a.FACIN_CD, '') as FACIN_CD,
+                      isnull(a1.PACK_CD, '') as PACK_CD,
+                      (case when (a1.po_seq = 99 or a1.po_seq = 98) then a1.OUT_QTY else 0 end) - isnull(a13.USE_QTY, 0) as MOQ_QTY
+                 from ksv_stock_out a1
+                      left join ksv_stock_facin a on a1.stsout_cd = a.stsout_cd
+                                                  and a1.po_cd = a.po_cd
+                                                  and a1.matl_cd = a.matl_cd
+                      left join (
+                          select
+                              USE_PO_CD,
+                              USE_MATL_CD,
+                              sum(USE_QTY) as USE_QTY
+                          from
+                              KSV_STOCK_USE
+                          group by
+                              USE_PO_CD,
+                              USE_MATL_CD
+                      ) a13 on a13.USE_PO_CD = a1.PO_CD
+                           and a13.USE_MATL_CD = a1.MATL_CD
+                      left join ksv_shipment_mem a2 on a2.stsout_cd = a1.stsout_cd
+                      left join ksv_shipment_mst a3 on a3.shipment_cd = a2.shipment_cd 
+                      left join kcd_matl_mst a4 on a4.matl_cd = a1.matl_cd
+                      left join kcd_vendor a7 on a7.vendor_cd = a4.vendor_cd
+                      left join ksv_po_mem a5 on a5.po_cd = a1.po_cd and  a5.po_seq = 1
+                      left join kcd_buyer a6 on a6.buyer_cd = left(a5.order_cd, 2)
+                      left join (
+                          select
+                              po_cd,
+                              matl_cd,
+                              max(stock_idx) as stock_idx
+                          from
+                              ksv_stock_matl
+                          where
+                              remain_qty >= 1
+                          group by
+                              po_cd,
+                              matl_cd
+                      ) a12k on a12k.po_cd = a1.po_cd and a12k.matl_cd = a1.matl_cd
+                      left join ksv_stock_matl a12 on a12.stock_idx = a12k.stock_idx
+                          and a12.po_cd = a1.po_cd
+                          and a12.matl_cd = a1.matl_cd
+                          and a12.remain_qty >= 1
+                      left join kcd_code a8 on a8.cd_code = a1.delivery_type and a8.cd_group = 'DELIVERY_TYPE'
+                      left join kcd_code a9 on a9.cd_code = a12.stock_status and a9.cd_group = 'STOCK_STATUS_S'
+                      left join kcd_factory a10 on a10.factory_cd = a1.out_factory_cd
+                      left join kcd_code a11 on a11.cd_code  = a3.ship_mode and a11.cd_group = 'shipment_ship_mode'
+                 where  1 = 1
+                 and   isnull(a.IN_DATE, '') = ''
+                 and   isnull(a2.stsout_cd , '') <> ''
+                 and   isnull(a3.CLEARANCE_NO, '') <> ''
+                 and   a1.po_cd  like '%${args.data.PO_CD}%'
+                 and   a1.matl_cd  like '%${args.data.MATL_CD}%'
+                 ${sqlVendor}
+                 ${sqlMatlName}
+                 ${sqlSpec}
+                 ${sqlUnit}
+                 ${sqlColor}
+                 ${sqlRemark}
+                 ${sqlDestination}
+                 ${sqlATA}
+                 ${sqlCustomsNo}
+                 ${sqlBlNo}
+                 ${sqlBuyerCd}
+                 ) kk
+                 group by  
+                      kk.ATA,
+                      kk.BUYER_CD,
+                      kk.VENDOR_NAME,
+                      kk.USER_ID,
+                      kk.DELIVERY_TYPE,
+                      kk.DELIVERY_TYPE_N,
+                      kk.BL_NO,
+                      kk.CUSTOMS_NO,
+                      kk.ORIGIN_PORT,
+                      kk.PO_CD,
+                      kk.MATL_CD,
+                      kk.MATL_NAME,
+                      kk.COLOR,
+                      kk.SPEC,
+                      kk.UNIT,
+                      kk.SHORTAGE_QTY,
+                      kk.DEFECT_QTY,
+                      kk.FACIN_QTY,
+                      kk.ERR_QTY,
+                      kk.LOCATION,
+                      kk.DELIVERY,
+                      kk.WEIGHT,
+                      kk.CBM,
+                      kk.CT_NO,
+                      kk.MC_ID,
+                      kk.PU_CD,
+                      kk.STATUS_CD,
+                      kk.STATUS_CD_N,
+                      kk.FACTORY_CD,
+                      kk.FACTORY_CD_N,
+                      kk.SHIPMENT_CD,
+                      kk.CLEARANCE_NO,
+                      kk.SHIP_MODE,
+                      kk.STSOUT_CD,
+                      kk.VENDOR_CD,
+                      kk.FILE_NAME,
+                      kk.FILE_URL,
+                      kk.FACIN_DATE,
+                      kk.FACIN_CD,
+                      kk.PACK_CD
+            `;
+
+            /*
+            var sqlStr0 = `
+                ${sqlStr} 
+                union
+                ${sqlStr2}
+                order by kk.PO_Cd, kk.MATL_CD
+            `;
+            */
+            var sqlStr0 = `
+                ${sqlStr} 
+                order by kk.PO_Cd, kk.MATL_CD
+            `;
+
+            var tRet = (await prisma.$queryRaw(Prisma.raw(sqlStr0))) as any[];
+						console.log(`Count: ${tRet.length}`);
+
+            var fileKeyList: string[] = [];
+            tRet.forEach((col) => {
+                // if (col.STSOUT_CD) fileKeyList.push(col.STSOUT_CD);
+                if (col.FACIN_CD && col.FACIN_CD.substring(0, 5) === 'FACIN') fileKeyList.push(col.FACIN_CD);
+            });
+            var fileInfoMap = await loadInspectFileInfoMap(fileKeyList);
+            var tRetArray: any[] = [];
+
+            var tIdx = 0;
+            for (tIdx = 0; tIdx < tRet.length; tIdx++) {
+                var tOne = {
+                    ...tRet[tIdx],
+                };
+
+                var tCols = (tOne.FACIN_CD || '').split(/-/);
+                var tFileKey = '';
+                if (tCols.length >= 2) {
+                    tFileKey = `${tCols[0]}-${tCols[1]}`;
+                }
+                if (tFileKey) {
+                    var tFileInfo = fileInfoMap[tFileKey];
+                    if (tFileInfo) {
+                        tOne.FILE_NAME = tFileInfo.NAME;
+                        tOne.FILE_URL = tFileInfo.URL;
+                    }
+                } else {
+                    tOne.FILE_NAME = '';
+                    tOne.FILE_URL = '';
+                }
+
+                const statusCode = String(tOne.STATUS_CD || '').trim();
+                const statusName = String(tOne.STATUS_CD_N || '').trim();
+                if (statusCode && statusName) {
+                    tOne.STATUS_CD_N = `${statusCode} ${statusName}`;
+                } else {
+                    tOne.STATUS_CD_N = statusCode || statusName;
+                }
+
+                // Won . 260706 수정. 무조건 Clearans Arrival 정보로 Deliver# 생성 및 출력
+                var w_weight = parseFloat(tOne.WEIGHT).toFixed(2);
+                var w_ct_qty = parseFloat(tOne.CT_NO).toFixed(2);
+                var w_cbm = parseFloat(tOne.CBM).toFixed(2);
+                if (tOne.CLEARANCE_NO)  tOne.DELIVERY = `${tOne.CLEARANCE_NO} = ${w_ct_qty}Pkg ${w_weight}kg ${w_cbm}cbm`;
+                else   tOne.DELIVERY = `${w_ct_qty}Pkg ${w_weight}kg ${w_cbm}cbm`;
+                /*
+                if (!tOne.DELIVERY) {
+                    if (tOne.CLEARANCE_NO)  tOne.DELIVERY = `${tOne.CLEARANCE_NO} = ${tOne.CT_NO}Pkg ${tOne.WEIGHT}kg ${tOne.CBM}cbm`;
+                    else   tOne.DELIVERY = `${tOne.CT_NO}Pkg ${tOne.WEIGHT}kg ${tOne.CBM}cbm`;
+                }
+                */
+
+                tRetArray.push(tOne);
+            }
+            var tIdx = 0;
+            return tRetArray;
+        },
+
+        mgrQueryS051901_2_260205: async (_, args, contextValue) => {
+            var tRetDate = AFLib.getCurrTime();
+            var tRetDate1 = tRetDate.substring(0, 8);
+            var tUserInfo = AFLib.getUserInfo(contextValue);
+
+            var tPackCd = '';
+
+            var sqlDestination = '';
+            if (args.data.IS_BVT === '1')
+                sqlDestination = `AND H.DESTINATION = 'BVT' `;
+            if (args.data.IS_ETP === '1')
+                sqlDestination = `AND H.DESTINATION = 'ETP' `;
+
+            var sqlATA = '';
+            var sATA = args.data.S_ATA;
+            var eATA = args.data.E_ATA;
+            if (!sATA && !eATA) {
+            } else {
+                if (!sATA) sATA = `${tRetDate1.substring(6)}01`;
+                if (!eATA) eATA = `${tRetDate1.substring(6)}31`;
+                sqlATA = `and H.ata between '${sATA}' and '${eATA}' `;
+            }
+
+            var sqlFACIN_DATE = '';
+            var sFACIN_DATE = args.data.S_FACIN_DATE;
+            var eFACIN_DATE = args.data.E_FACIN_DATE;
+            if (!sFACIN_DATE && !eFACIN_DATE) {
+            } else {
+                if (!sFACIN_DATE) sFACIN_DATE = `${tRetDate1.substring(6)}01`;
+                if (!eFACIN_DATE) eFACIN_DATE = `${tRetDate1.substring(6)}31`;
+                sqlFACIN_DATE = `and   a1.in_date between '${sFACIN_DATE}' and '${eFACIN_DATE}' `;
+            }
+
+            let sqlStr = `
+                SELECT
+                    isnull(H.ATA, '') as ATA,
+                    left(F.ORDER_CD, 2) as BUYER_CD,
+                    E.BUYER_NAME,
+                    F.REG_USER as USER_ID,
+                    isnull(H.SHIP_MODE, '') as SHIP_MODE,
+                    isnull(H1.CD_NAME, '') as SHIP_MODE_N,
+                    isnull(H.BL_NO, '') as BL_NO,
+                    isnull(H.ORIGIN_PORT, '') as ORIGIN_PORT,
+                    isnull(C.CBM, '0') as CBM,
+                    isnull(F.CT_QTY, '0') as CT_NO,
+                    isnull(H.REG_USER, '') as MC_ID,
+                    F.PO_CD,
+                    isnull(F.PU_CD, '') as PU_CD,
+                    isnull(H.STATUS_CD, '') as STATUS_CD,
+                    isnull(H2.CD_NAME, '') as STATUS_CD_N,
+                    isnull(H.DESTINATION, '') as FACTORY_CD,
+                    '' as FACTORY_CD_N,
+                    isnull(H.SHIPMENT_CD, '') as SHIPMENT_CD,
+                    isnull(H.CLEARANCE_NO, '') as CLEARANCE_NO,
+                    isnull(F.STSOUT_CD, '') as STSOUT_CD,
+                    B.VENDOR_CD,
+                    B.VENDOR_NAME,
+                    '' as FILE_NAME,
+                    '' as FILE_URL,
+                    '' as FACIN_DATE,
+                    isnull(F.PACK_CD, '') as PACK_CD,
+                    isnull(C.INVOICE_NO, '') as INVOICE_NO,
+                    isnull(C.TRADE_TERM, '') as TRADE_TERM,
+                    '' as ETA,
+                    isnull(C.DESTINATION, '') as DESTINATION,
+                    isnull(F.CT_NO, '') as CT_NO,
+                    isnull(H.REMARK, '') as DELIVERY_TYPE_N,
+                    isnull(max(C.GROSS_WEIGHT), '0') as GROSS_WEIGHT,
+                    isnull(sum(C.WEIGHT), '0') as WEIGHT,
+                    isnull(max(C.READY_DATE), '') as READY_DATE,
+                    isnull(max(C.ORIGIN_PORT), '') as ORIGIN_PORT_2
+                from
+                    ksv_stock_out F
+                    left join ksv_stock_out_mst C ON F.STSOUT_CD = C.STSOUT_CD,
+                    kcd_vendor B,
+                    kcd_buyer E,
+                    kcd_matl_mst G,
+                    ksv_shipment_mst H
+                    left join kcd_code H1 on H1.CD_CODE = H.SHIP_MODE
+                    and H1.CD_GROUP = 'shipment_ship_mode'
+                    left join kcd_code H2 on H2.CD_CODE = H.STATUS_CD
+                    and H2.CD_GROUP = 'shipment_status'
+                WHERE
+                    F.PACK_CD like '%${tPackCd}%'
+                    AND F.PO_CD like '%${args.data.PO_CD}%'
+                    AND F.PU_CD like '%${args.data.PU_NO}%'
+                    AND H.BL_NO like '%${args.data.BL_NO}%'
+                    AND H.SHIPMENT_CD like '%${args.data.SHIPMENT_CD}%'
+                    AND H.CLEARANCE_NO like '%${args.data.CUSTOMS_NO}%'
+                    AND left(F.ORDER_CD, 2) like '%${args.data.BUYER_CD}%'
+                    AND F.REG_USER like '%${args.data.USER_ID}%'
+                    AND H.REG_USER like '%${args.data.MC_ID}%'
+                    AND left(F.ORDER_CD, 2) = E.BUYER_CD
+                    AND F.MATL_CD = G.MATL_CD
+                    AND G.VENDOR_CD = B.VENDOR_CD
+                    AND H.REMARK = F.PACK_CD
+                    AND H.ATA is not null
+                    AND H.ATA <> '' ${sqlATA} ${sqlDestination}
+                group by
+                    isnull(H.ATA, ''),
+                    left(F.ORDER_CD, 2),
+                    E.BUYER_NAME,
+                    F.REG_USER,
+                    isnull(H.SHIP_MODE, ''),
+                    isnull(H1.CD_NAME, ''),
+                    isnull(H.BL_NO, ''),
+                    isnull(H.ORIGIN_PORT, ''),
+                    isnull(C.CBM, '0'),
+                    isnull(F.CT_QTY, '0'),
+                    isnull(H.REG_USER, ''),
+                    F.PO_CD,
+                    isnull(F.PU_CD, ''),
+                    isnull(H.STATUS_CD, ''),
+                    isnull(H2.CD_NAME, ''),
+                    isnull(H.DESTINATION, ''),
+                    isnull(H.SHIPMENT_CD, ''),
+                    isnull(H.CLEARANCE_NO, ''),
+                    isnull(F.STSOUT_CD, ''),
+                    B.VENDOR_CD,
+                    B.VENDOR_NAME,
+                    isnull(F.PACK_CD, ''),
+                    isnull(C.INVOICE_NO, ''),
+                    isnull(C.TRADE_TERM, ''),
+                    isnull(C.DESTINATION, ''),
+                    isnull(F.CT_NO, ''),
+                    isnull(H.REMARK, '')
+                    -- isnull(C.GROSS_WEIGHT, '0') 
+                    -- order by B.VENDOR_CD, F.PACK_CD, F.CT_QTY, F.STSOUT_CD
+            `;
+            var tRet = (await prisma.$queryRaw(Prisma.raw(sqlStr))) as any[];
+            var fileKeyList: string[] = [];
+            tRet.forEach((col) => {
+                if (col.STSOUT_CD) fileKeyList.push(col.STSOUT_CD);
+            });
+            var fileInfoMap = await loadInspectFileInfoMap(fileKeyList);
+            var tRetArray: any[] = [];
+
+            var tIdx = 0;
+            for (tIdx = 0; tIdx < tRet.length; tIdx++) {
+                var tOne = {
+                    ...tRet[tIdx],
+                };
+
+                tOne.FACTORY_CD_N = tOne.FACTORY_CD;
+                var tFileInfo = fileInfoMap[tOne.STSOUT_CD];
+                if (tFileInfo) {
+                    tOne.FILE_NAME = tFileInfo.NAME;
+                    tOne.FILE_URL = tFileInfo.URL;
+                }
+
+                tOne.STATUS_CD_N = '-';
+                tRetArray.push(tOne);
+                /*
+                if (tOne.FILE_NAME) {
+                    tOne.STATUS_CD_N = 'Done';
+                    tRetArray.push(tOne);
+                }
+                */
+            }
+
+            var tInput = {
+                ...args.data,
+            };
+            tInput.VENDOR_CD = '';
+            tInput.BUYER_CD = '';
+            tInput.PO_CD = '';
+            tInput.MATL_NAME = '';
+            tInput.SPEC = '';
+            tInput.COLOR = '';
+            tInput.UNIT = '';
+
+            var tRetArray1: any[] = [];
+            tIdx = 0;
+            for (tIdx = 0; tIdx < tRetArray.length; tIdx++) {
+                var tOne = {
+                    ...tRetArray[tIdx],
+                };
+
+                let sqlStr = `
+                    select
+                        kk.*
+                    from
+                        (
+                            select
+                                a.PO_CD,
+                                a.MATL_CD,
+                                b.MATL_NAME,
+                                b.COLOR,
+                                b.SPEC,
+                                b.UNIT,
+                                a.PACK_CD,
+                                isnull(sum(a.OUT_QTY), 0) as S_OUT_QTY,
+                                isnull(sum(a1.in_qty), 0) as S_FACIN_QTY
+                            from
+                                ksv_stock_out a
+                                left join ksv_stock_facin_order a1 on a1.po_cd = a.po_cd
+                                and a1.po_seq = a.po_seq
+                                and a1.order_cd = a.order_cd
+                                and a1.matl_cd = a.matl_cd
+                                and a1.mrp_seq = a.mrp_seq
+                                and a1.matl_seq = a.matl_seq,
+                                kcd_matl_mst b,
+                                kcd_vendor c
+                            where
+                                a.matl_cd = b.matl_cd
+                                and b.vendor_cd = c.vendor_cd
+                                and b.vendor_cd = '${tOne.VENDOR_CD}'
+                                and c.vendor_name like '%${tInput.VENDOR_CD}%'
+                                and left(a.order_cd, 2) like '%%'
+                                and a.po_cd like '%${tOne.PO_CD}%'
+                                and b.matl_name like '%${tInput.DESCRIPTION}%'
+                                and b.matl_cd like '%${tInput.MATL_CD}%'
+                                and b.spec like '%${tInput.SPEC}%'
+                                and b.color like '%${tInput.COLOR}%'
+                                and b.unit like '%${tInput.UNIT}%'
+                                and a.stsout_cd = '${tOne.STSOUT_CD}' ${sqlFACIN_DATE}
+                            group by
+                                a.PO_CD,
+                                a.MATL_CD,
+                                b.MATL_NAME,
+                                b.COLOR,
+                                b.SPEC,
+                                b.UNIT,
+                                a.PACK_CD
+                        ) kk
+                    where
+                        kk.S_FACIN_QTY > 0
+                `;
+                var tRet = (await prisma.$queryRaw(
+                    Prisma.raw(sqlStr),
+                )) as any[];
+                console.log(`Stsout Count:${tRet.length}`);
+
+                var tIdx1 = 0;
+                for (tIdx1 = 0; tIdx1 < tRet.length; tIdx1++) {
+                    var tOne2 = {
+                        ...tRet[tIdx1],
+                    };
+
+                    var tOne3 = {
+                        ...tOne,
+                    };
+
+                    if (parseFloat(tOne2.S_FACIN_QTY) <= 0) continue;
+
+                    /*
+                    var tTmp = parseFloat(tOne2.S_OUT_QTY) - parseFloat(tOne2.S_FACIN_QTY);
+                    if (tTmp <= 0) continue;
+                    */
+
+                    tOne3.MATL_CD = tOne2.MATL_CD;
+                    tOne3.MATL_NAME = tOne2.MATL_NAME;
+                    tOne3.COLOR = tOne2.COLOR;
+                    tOne3.SPEC = tOne2.SPEC;
+                    tOne3.UNIT = tOne2.UNIT;
+                    tOne3.PACK_CD = tOne2.PACK_CD;
+                    tOne3.S_OUT_QTY = tOne2.S_OUT_QTY;
+                    tOne3.DEFECT_QTY = '0';
+                    tOne3.SHORTAGE_QTY = '0';
+                    tOne3.LOCATION = '';
+                    tOne3.FACIN_DATE = '';
+                    tOne3.MOQ = 0;
+
+                    let sqlStr1 = `
+                        select
+                            isnull(DELIVERY, '') as DELIVERY,
+                            isnull(LOCATION, '') as LOCATION,
+                            isnull(IN_DATE, '') as IN_DATE,
+                            isnull(SHORTAGE_QTY, '') as SHORTAGE_QTY,
+                            isnull(DEFECT_QTY, '') as DEFECT_QTY,
+                            isnull((select sum(remain_qty) from ksv_stock_matl where po_cd = '${tOne.PO_CD}' and matl_cd = '${tOne3.MATL_CD}' and stock_status in ('W','N')), 0) as MOQ_BASE,
+                            isnull((select sum(po_qty) from ksv_stock_mem where po_cd = '${tOne.PO_CD}' and matl_cd = '${tOne3.MATL_CD}' and po_seq in (98, 99)), 0) as OVERIN
+                        from
+                            ksv_stock_facin
+                        where
+                            po_cd = '${tOne.PO_CD}'
+                            and matl_cd = '${tOne3.MATL_CD}'
+                            -- and   stsout_cd = '${tOne.STSOUT_CD}'
+                    `;
+                    var tRet1 = (await prisma.$queryRaw(
+                        Prisma.raw(sqlStr1),
+                    )) as any[];
+                    tRet1.forEach((col2, i2) => {
+                        if (col2.DELIVERY) tOne3.DELIVERY = col2.DELIVERY;
+                        if (col2.LOCATION) tOne3.LOCATION = col2.LOCATION;
+                        if (col2.IN_DATE) tOne3.FACIN_DATE = col2.IN_DATE;
+                        if (col2.DEFECT_QTY) tOne3.DEFECT_QTY = col2.DEFECT_QTY;
+                        if (col2.SHORTAGE_QTY)
+                            tOne3.SHORTAGE_QTY = col2.SHORTAGE_QTY;
+                        if (col2.MOQ_BASE || col2.OVERIN) {
+                            tOne3.MOQ = Number(col2.MOQ_BASE || 0) + Number(col2.OVERIN || 0);
+                        }
+                        console.log(`====> ${col2.DELIVERY}/${col2.LOCATION}`);
+                    });
+
+                    if (args.data.BL_NO) {
+                        var tVal1 = tOne3.BL_NO.replace(
+                            / /gi,
+                            '',
+                        ).toUpperCase();
+                        var tVal2 = args.data.BL_NO.replace(
+                            / /gi,
+                            '',
+                        ).toUpperCase();
+                        if (!tVal1.includes(tVal2)) continue;
+                    }
+
+                    if (args.data.REMARK) {
+                        var tVal1 = tOne3.DELIVERY_TYPE_N.replace(
+                            / /gi,
+                            '',
+                        ).toUpperCase();
+                        var tVal2 = args.data.REMARK.replace(
+                            / /gi,
+                            '',
+                        ).toUpperCase();
+                        if (!tVal1.includes(tVal2)) continue;
+                    }
+
+                    tRetArray1.push(tOne3);
+                }
+            }
+            // console.log(`Facin List Count: ${tRet.length}`);
+            // console.log(sqlStr); return (tRetArray1); },
+            var tIdx = 0;
+            return tRetArray1;
+        },
+
+        mgrQueryS051901_2_bak: async (_, args, contextValue) => {
+            var tRetDate = AFLib.getCurrTime();
+            var tRetDate1 = tRetDate.substring(0, 8);
+            var tUserInfo = AFLib.getUserInfo(contextValue);
+
+            var tSQL = '';
+            if (args.data.STYLE_CD !== '') {
+                tSQL += `AND STYLE_NAME like '%${args.data.STYLE_CD}%' `;
+            }
+
+            var sATA = args.data.S_ATA;
+            var eATA = args.data.E_ATA;
+            if (sATA === '') sATA = `${tRetDate1.substring(0, 6)}01`;
+            if (eATA === '') eATA = '99999999';
+            tSQL = `and c.ata between '${sATA}' and '${eATA}' `;
+
+            let sqlStr = `
+                select
+                    isnull(c.ATA, '') as ATA,
+                    '' as STATUS_CD_N,
+                    '' as STATUS_CD,
+                    isnull(c.BL_NO, '') as BL_NO,
+                    isnull(c.CLEARANCE_NO, '') as CLEARANCE_NO,
+                    f.BUYER_CD,
+                    a.PO_CD,
+                    e.VENDOR_NAME,
+                    a.MATL_CD,
+                    b.MATL_NAME,
+                    b.COLOR,
+                    b.SPEC,
+                    b.UNIT,
+                    isnull(c.REG_USER, '') as REG_USER,
+                    isnull(c.SHIPMENT_CD, '') as SHIPMENT_CD,
+                    isnull(c.SHIP_MODE, '') as SHIP_MODE,
+                    a.STSOUT_CD,
+                    b.VENDOR_CD,
+                    a.DELIVERY_TYPE,
+                    f.PAYER,
+                    -- isnull(h.FACIN_CD , '') as FACIN_CD,
+                    a.OUT_DATETIME,
+                    sum(a.OUT_QTY) as S_OUT_QTY
+                    -- isnull(sum(h.IN_QTY) , '0') as FACIN_QTY,
+                    -- isnull(sum(h.SHORTAGE_QTY), '0') as SHORTAGE_QTY,
+                    -- isnull(sum(h.DEFECT_QTY), '0') as DEFECT_QTY
+                from
+                    ksv_stock_out a
+                    left join ksv_pu_mst2 f on a.pu_cd = f.pu_cd
+                    and f.buyer_cd like '%${args.data.BUYER_CD}%'
+                    left join ksv_stock_out_mst g on a.stsout_cd = g.stsout_cd
+                    and g.ready_facin_flag = '1'
+                    -- left join ksv_stock_facin h on h.stsout_cd = a.stsout_cd 
+                    --                           and h.matl_cd = a.matl_cd
+                    --                           and h.po_cd = a.po_cd
+                    left join ksv_shipment_mst c on c.shipment_cd in (
+                        select
+                            shipment_cd
+                        from
+                            ksv_shipment_mem
+                        where
+                            stsout_cd = a.stsout_cd
+                    )
+                    and c.destination <> 'SINGAPORE' ${tSQL}
+                    and c.ata is not null
+                    and c.ata <> '',
+                    -- left join ksv_shipment_mem d on d.shipment_cd = a.shipment_cd and d.stsout_cd = a.stsout_cd,
+                    kcd_matl_mst b,
+                    kcd_vendor e
+                where
+                    a.matl_cd = b.matl_cd
+                    and (
+                        e.vendor_cd like '%${args.data.VENDOR_CD}%'
+                        or e.vendor_name like '%${args.data.VENDOR_CD}%'
+                    )
+                    and a.po_cd like '%${args.data.PO_CD}%'
+                    and b.vendor_cd = e.vendor_cd
+                    and (
+                        e.vendor_cd like '%${args.data.VENDOR_CD}%'
+                        or e.vendor_name like '%${args.data.VENDOR_CD}%'
+                    )
+                group by
+                    c.ATA,
+                    c.BL_NO,
+                    c.SHIPMENT_CD,
+                    c.SHIP_MODE,
+                    c.BL_NO,
+                    c.CLEARANCE_NO,
+                    a.STSOUT_CD,
+                    a.PO_CD,
+                    a.MATL_CD,
+                    b.MATL_NAME,
+                    b.COLOR,
+                    b.SPEC,
+                    b.UNIT,
+                    a.OUT_DATETIME,
+                    b.VENDOR_CD,
+                    e.VENDOR_NAME,
+                    a.DELIVERY_TYPE,
+                    f.PAYER,
+                    -- h.FACIN_CD, 
+                    f.BUYER_CD,
+                    c.REG_USER
+            `;
+            var tRet = await prisma.$queryRaw(Prisma.raw(sqlStr));
+            var tRetData = {};
+            var tRetArray = [];
+
+            var tIdx = 0;
+            for (tIdx = 0; tIdx < tRet.length; tIdx++) {
+                var tObj = {
+                    ...tRet[tIdx],
+                };
+
+                let sql100 = `
+                    select
+                        isnull(facin_cd, '') as FACIN_CD,
+                        isnull(sum(in_qty), '0') as FACIN_QTY,
+                        isnull(sum(shortage_qty), '0') as SHORTAGE_QTY,
+                        isnull(sum(defect_qty), '0') as DEFECT_QTY
+                    from
+                        ksv_stock_facin
+                    where
+                        stsout_cd = '${tObj.STSOUT_CD}'
+                        and matl_cd = '${tObj.MATL_CD}'
+                        and po_cd = '${tObj.PO_CD}'
+                    group by
+                        facin_cd
+                `;
+                var tRet100 = await prisma.$queryRaw(Prisma.raw(sql100));
+
+                tObj.FACIN_CD = '';
+                tObj.FACIN_QTY = '0';
+                tObj.SHORTAGE_QTY = '0';
+                tObj.DEFECT_QTY = '0';
+                if (tRet100.length > 0) {
+                    tObj.FACIN_CD = String(tRet100[0].FACIN_CD);
+                    tObj.FACIN_QTY = String(tRet100[0].FACIN_QTY);
+                    tObj.SHORTAGE_QTY = String(tRet100[0].SHORTAGE_QTY);
+                    tObj.DEFECT_QTY = String(tRet100[0].DEFECT_QTY);
+                }
+
+                tObj.STATUS_CD = '0';
+                tObj.STATUS_CD_N = 'Waiting';
+                tObj.FILE_NAME = '';
+                tObj.FILE_URL = '';
+                if (args.data.STATUS_CD !== '1') {
+                    if (tObj.FACIN_CD !== '') {
+                        // Waiting
+                        continue;
+                    }
+                } else {
+                    if (tObj.FACIN_CD === '') {
+                        // Waiting
+                        continue;
+                    }
+                }
+                /*
+                if (args.data.STATUS_CD === '0' && tObj.FACIN_CD !== '') { // Waiting
+                    continue;
+                }
+                if (args.data.STATUS_CD === '1' && tObj.FACIN_CD === '') { // Done 
+                    continue;
+                }
+                */
+                if (tObj.SHIPMENT_CD !== '') {
+                    if (parseFloat(tObj.ATA) < parseFloat(sATA)) continue;
+                    if (parseFloat(tObj.ATA) > parseFloat(eATA)) continue;
+                } else {
+                    var tOutDate = tObj.OUT_DATETIME.substring(0, 8);
+                    if (parseFloat(tOutDate) < parseFloat(sATA)) continue;
+                    if (parseFloat(tOutDate) > parseFloat(eATA)) continue;
+                }
+                /*
+                if (tObj.SHIPMENT_CD !== '') {
+                    if (parseFloat(tObj.ATA) < parseFloat(args.data.S_ATA)) continue;
+                    if (parseFloat(tObj.ATA) > parseFloat(args.data.E_ATA)) continue;
+                } else {
+                    var tOutDate = tObj.OUT_DATETIME.substring(0, 8);
+                    if (parseFloat(tOutDate) < parseFloat(args.data.S_ATA)) continue;
+                    if (parseFloat(tOutDate) > parseFloat(args.data.E_ATA)) continue;
+                }
+                */
+                var tBalQty =
+                    parseFloat(tObj.S_OUT_QTY) -
+                    (parseFloat(tObj.FACIN_QTY) +
+                        parseFloat(tObj.SHORTAGE_QTY) +
+                        parseFloat(tObj.DEFECT_QTY));
+                tObj.BAL_QTY = String(tBalQty);
+                tObj.UPDATE_QTY = String(tBalQty);
+                console.log(`FACIN List=>${tObj.SHIPMENT_CD},${tObj.PAYER} `);
+                if (
+                    tObj.SHIPMENT_CD !== '' ||
+                    tObj.PAYER === 'FACTORY' ||
+                    tObj.PAYER === 'BVT' ||
+                    tObj.PAYER === 'ETP'
+                ) {
+                    if (tObj.FACIN_CD !== '') {
+                        tObj.STATUS_CD = '1';
+                        tObj.STATUS_CD_N = 'Done';
+
+                        var tFileCd = tObj.FACIN_CD.substring(0, 20);
+                        let sql0 = `
+                            select
+                                *
+                            from
+                                kcd_fileinfo
+                            where
+                                kind = 'INSPECT'
+                                and file_key = '${tFileCd}'
+                        `;
+                        var tRet0 = await prisma.$queryRaw(Prisma.raw(sql0));
+                        if (tRet0.length > 0) {
+                            tObj.FILE_NAME = tRet0[0].NAME;
+                            tObj.FILE_URL = tRet0[0].URL;
+                        }
+                    }
+                    if (args.data.STATUS_CD === '0') {
+                        if (parseFloat(tObj.BAL_QTY) > 0) tRetArray.push(tObj);
+                    } else {
+                        tRetArray.push(tObj);
+                    }
+                }
+            }
+            console.log(`Facin List Count: ${tRet.length}`);
+            console.log(sqlStr);
+
+            var tIdx = 0;
+            return tRetArray;
+        },
+
+        mgrQueryS051901_2_bak1: async (_, args, contextValue) => {
+            var tRetDate = AFLib.getCurrTime();
+            var tRetDate1 = tRetDate.substring(0, 8);
+            var tUserInfo = AFLib.getUserInfo(contextValue);
+
+            var tSQL = '';
+            if (args.data.STYLE_CD !== '') {
+                tSQL += `AND STYLE_NAME like '%${args.data.STYLE_CD}%' `;
+            }
+
+            var sATA = args.data.S_ATA;
+            var eATA = args.data.E_ATA;
+            if (sATA === '') sATA = `${tRetDate1.substring(0, 6)}01`;
+            if (eATA === '') eATA = '99999999';
+            tSQL = `and c.ata between '${sATA}' and '${eATA}' `;
+
+            let sqlStr = `
+                select
+                    isnull(c.ATA, '') as ATA,
+                    '' as STATUS_CD_N,
+                    '' as STATUS_CD,
+                    isnull(c.BL_NO, '') as BL_NO,
+                    isnull(c.CLEARANCE_NO, '') as CLEARANCE_NO,
+                    f.BUYER_CD,
+                    a.PO_CD,
+                    e.VENDOR_NAME,
+                    a.MATL_CD,
+                    b.MATL_NAME,
+                    b.COLOR,
+                    b.SPEC,
+                    b.UNIT,
+                    isnull(c.REG_USER, '') as REG_USER,
+                    isnull(c.SHIPMENT_CD, '') as SHIPMENT_CD,
+                    isnull(c.REMARK, '') as REMARK,
+                    isnull(c.SHIP_MODE, '') as SHIP_MODE,
+                    '' as STSOUT_CD,
+                    b.VENDOR_CD,
+                    a.DELIVERY_TYPE,
+                    f.PAYER,
+                    '' as OUT_DATETIME,
+                    sum(a.OUT_QTY) as S_OUT_QTY
+                from
+                    ksv_stock_out a
+                    left join ksv_pu_mst2 f on a.pu_cd = f.pu_cd
+                    and f.buyer_cd like '%${args.data.BUYER_CD}%'
+                    left join ksv_stock_out_mst g on a.stsout_cd = g.stsout_cd
+                    and g.ready_facin_flag = '1'
+                    left join ksv_shipment_mst c on c.shipment_cd in (
+                        select
+                            shipment_cd
+                        from
+                            ksv_shipment_mem
+                        where
+                            stsout_cd = a.stsout_cd
+                    )
+                    and c.destination <> 'SINGAPORE' ${tSQL}
+                    and c.ata is not null
+                    and c.ata <> '',
+                    kcd_matl_mst b,
+                    kcd_vendor e
+                where
+                    a.matl_cd = b.matl_cd
+                    and (
+                        e.vendor_cd like '%${args.data.VENDOR_CD}%'
+                        or e.vendor_name like '%${args.data.VENDOR_CD}%'
+                    )
+                    and a.po_cd like '%${args.data.PO_CD}%'
+                    and b.vendor_cd = e.vendor_cd
+                    and (
+                        e.vendor_cd like '%${args.data.VENDOR_CD}%'
+                        or e.vendor_name like '%${args.data.VENDOR_CD}%'
+                    )
+                group by
+                    c.ATA,
+                    c.BL_NO,
+                    c.SHIPMENT_CD,
+                    c.REMARK,
+                    c.SHIP_MODE,
+                    c.BL_NO,
+                    c.CLEARANCE_NO,
+                    -- a.STSOUT_CD, 
+                    a.PO_CD,
+                    a.MATL_CD,
+                    b.MATL_NAME,
+                    b.COLOR,
+                    b.SPEC,
+                    b.UNIT,
+                    -- a.OUT_DATETIME,
+                    b.VENDOR_CD,
+                    e.VENDOR_NAME,
+                    a.DELIVERY_TYPE,
+                    f.PAYER,
+                    f.BUYER_CD,
+                    c.REG_USER
+            `;
+            var tRet = await prisma.$queryRaw(Prisma.raw(sqlStr));
+            var tRetData = {};
+            var tRetArray = [];
+
+            var tIdx = 0;
+            for (tIdx = 0; tIdx < tRet.length; tIdx++) {
+                var tObj = {
+                    ...tRet[tIdx],
+                };
+
+                var tDelivery = `${tRemark}-#${col.CLEANCE_NO}-#${col.BL_NO}`;
+
+                let sql100 = `
+                    select
+                        isnull(sum(in_qty), '0') as FACIN_QTY,
+                        isnull(sum(shortage_qty), '0') as SHORTAGE_QTY,
+                        isnull(sum(defect_qty), '0') as DEFECT_QTY
+                    from
+                        ksv_stock_facin
+                    where
+                        matl_cd = '${tObj.MATL_CD}'
+                        and po_cd = '${tObj.PO_CD}'
+                        and in_date = '${tRetDate1}'
+                        and delivery = '${tDelivery}'
+                `;
+                var tRet100 = await prisma.$queryRaw(Prisma.raw(sql100));
+
+                tObj.FACIN_QTY = '0';
+                tObj.SHORTAGE_QTY = '0';
+                tObj.DEFECT_QTY = '0';
+                if (tRet100.length > 0) {
+                    tObj.FACIN_QTY = String(tRet100[0].FACIN_QTY);
+                    tObj.SHORTAGE_QTY = String(tRet100[0].SHORTAGE_QTY);
+                    tObj.DEFECT_QTY = String(tRet100[0].DEFECT_QTY);
+                }
+
+                tObj.STATUS_CD = '0';
+                tObj.STATUS_CD_N = 'Waiting';
+                tObj.FILE_NAME = '';
+                tObj.FILE_URL = '';
+                if (args.data.STATUS_CD !== '1') {
+                    if (tObj.FACIN_CD !== '') {
+                        // Waiting
+                        continue;
+                    }
+                } else {
+                    if (tObj.FACIN_CD === '') {
+                        // Waiting
+                        continue;
+                    }
+                }
+                if (tObj.SHIPMENT_CD !== '') {
+                    if (parseFloat(tObj.ATA) < parseFloat(sATA)) continue;
+                    if (parseFloat(tObj.ATA) > parseFloat(eATA)) continue;
+                } else {
+                    var tOutDate = tObj.OUT_DATETIME.substring(0, 8);
+                    if (parseFloat(tOutDate) < parseFloat(sATA)) continue;
+                    if (parseFloat(tOutDate) > parseFloat(eATA)) continue;
+                }
+                var tBalQty =
+                    parseFloat(tObj.S_OUT_QTY) -
+                    (parseFloat(tObj.FACIN_QTY) +
+                        parseFloat(tObj.SHORTAGE_QTY) +
+                        parseFloat(tObj.DEFECT_QTY));
+                tObj.BAL_QTY = String(tBalQty);
+                tObj.UPDATE_QTY = String(tBalQty);
+                console.log(`FACIN List=>${tObj.SHIPMENT_CD},${tObj.PAYER} `);
+                if (
+                    tObj.SHIPMENT_CD !== '' ||
+                    tObj.PAYER === 'FACTORY' ||
+                    tObj.PAYER === 'BVT' ||
+                    tObj.PAYER === 'ETP'
+                ) {
+                    if (tObj.FACIN_CD !== '') {
+                        tObj.STATUS_CD = '1';
+                        tObj.STATUS_CD_N = 'Done';
+
+                        var tFileCd = tObj.FACIN_CD.substring(0, 20);
+                        let sql0 = `
+                            select
+                                *
+                            from
+                                kcd_fileinfo
+                            where
+                                kind = 'INSPECT'
+                                and file_key = '${tFileCd}'
+                        `;
+                        var tRet0 = await prisma.$queryRaw(Prisma.raw(sql0));
+                        if (tRet0.length > 0) {
+                            tObj.FILE_NAME = tRet0[0].NAME;
+                            tObj.FILE_URL = tRet0[0].URL;
+                        }
+                    }
+                    if (args.data.STATUS_CD === '0') {
+                        if (parseFloat(tObj.BAL_QTY) > 0) tRetArray.push(tObj);
+                    } else {
+                        tRetArray.push(tObj);
+                    }
+                }
+            }
+            console.log(`Facin List Count: ${tRet.length}`);
+            console.log(sqlStr);
+
+            var tIdx = 0;
+            return tRetArray;
+        },
+    },
+};
+
+export default moduleQuery_S051901_2;

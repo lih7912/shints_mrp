@@ -1,0 +1,335 @@
+.p-inputtext {
+    padding: 0.2rem 0.2rem;
+}
+
+.p-divider.p-divider-horizontal {
+    margin: 0.5rem 0;
+    padding: 0 1.25rem;
+}
+
+p {
+    text-align: right;
+}
+
+.af_label {
+    text-align: right;
+    width: 8rem;
+    display: "inline-block";
+}
+
+.p-dialog-header {
+    padding: 0 0 0 0;
+    margin: 0 0 0 0;
+}
+.p-dialog-content {
+    padding: 0 0 0 0;
+    margin: 0 0 0 0;
+}
+
+.af-button {
+    height: 2rem;
+    margin: 0rem 0rem 0rem 0rem;
+    padding-top: 0.2rem;
+    padding-bottom: 0.2rem;
+}
+
+.af-div-main {
+    margin-top: 0rem;
+    margin-left: 0rem;
+    min-width: 120rem;
+}
+
+.af-div-first {
+    float: left;
+    background-color: white;
+    display: inline-block;
+    margin-top: 0.5rem;
+    margin-left: 0rem;
+}
+
+.af-div-second-0 {
+    background-color: white;
+    display: inline-block;
+    margin-top: 0rem;
+    margin-left: 0rem;
+}
+
+.af-div-second {
+    background-color: white;
+    display: inline-block;
+    margin-top: 0.5rem;
+    margin-left: 0rem;
+}
+
+.af-span-3 {
+    margin-top: 0.1rem;
+    margin-left: 0.5rem;
+    height: 2rem;
+    display: inline-block;
+}
+
+.af-span-3-top {
+    margin-top: 0rem;
+    margin-left: 0.5rem;
+    height: 2rem;
+    display: inline-block;
+}
+
+.af-span-3-2 {
+    margin-top: 0.1rem;
+    margin-left: 0.2rem;
+    height: 2rem;
+    display: inline-block;
+}
+
+.af-span-3-0 {
+    margin-top: 0.5rem;
+    margin-left: 0.5rem;
+    height: 2rem;
+    display: inline-block;
+}
+
+.af-span-3-1 {
+    margin-top: 0.5rem;
+    margin-left: 0.2rem;
+    height: 2rem;
+    display: inline-block;
+}
+
+.af-span-p {
+    height: 2rem;
+    display: inline-block;
+    vertical-align: text-top;
+}
+.af-span-p-top {
+    margin-left: 0rem;
+    height: 2rem;
+    display: inline-block;
+}
+
+.af-span-p-0 {
+    height: 2rem;
+    display: inline-block;
+    text-align: center;
+}
+
+.af-span-div {
+    margin-left: 0.5rem;
+    height: 2rem;
+    display: inline-block;
+}
+
+.af-span-div-top {
+    margin-left: 0rem;
+    height: 2rem;
+    display: inline-block;
+}
+
+.af-span-div-btn {
+    padding-top: 0.3rem;
+    margin-left: 0.5rem;
+    height: 2.2rem;
+    display: inline-block;
+}
+
+.af-span-n {
+    margin-left: 0.5rem;
+    display: inline-block;
+}
+
+.af-col {
+    flex-basis: auto;
+    height: 1.2rem;
+}
+
+.af-col-header {
+    height: 1.2rem;
+}
+
+.af-col-body {
+    height: 1.2rem;
+}
+
+.af-div-3 {
+    margin-top: 0rem;
+    margin-left: 0.5rem;
+    height: 3rem;
+}
+
+.af-div-n {
+    margin-top: 0rem;
+    margin-left: 0rem;
+}
+
+.af-span-checkbox {
+    display: inline-block;
+    width: 1.3rem;
+    height: 1.3rem;
+}
+.af-span-checkbox-box {
+    width: "1.3rem";
+    height: "1.3rem";
+}
+
+.p-button {
+    height: 1.6rem;
+    margin: 0rem 0rem 0rem 0rem;
+    padding-top: 0rem;
+    padding-bottom: 0rem;
+    border-radius: 0 !important;
+    border-color: #6366f1 !important;
+}
+
+.p-button .p-button-icon {
+    font-size: 5px;
+}
+
+.p-checkbox {
+    width: 2rem;
+    height: 1.1rem;
+}
+
+.p-checkbox .p-checkbox-box {
+    margin-left: 0rem;
+    width: 14px;
+    height: 14px;
+    border-radius: 2px !important;
+    vertical-align: middle;
+}
+.p-checkbox .p-checkbox-box .p-checkbox-icon {
+    font-size: 5px;
+}
+
+.p-radiobutton {
+    width: 2rem;
+    height: 1.1rem;
+}
+
+.p-radiobutton .p-radiobutton-box {
+    margin-left: 0.5rem;
+    width: 14px;
+    height: 14px;
+    border-radius: 0 !important;
+}
+.p-radiobutton .p-radiobutton-box .p-radiobutton-icon {
+    font-size: 5px;
+}
+
+.p-dropdown {
+    border-radius: 0 !important;
+    height: 20px !important;
+}
+
+.p-inputtext {
+    border-radius: 0 !important;
+}
+
+.p-dialog .p-dialog-header {
+    padding-left: 0rem;
+    padding-top: 0rem;
+    padding-right: 0rem;
+    padding-bottom: 0rem;
+}
+
+.p-dialog .p-dialog-content {
+    padding-left: 0rem;
+    padding-top: 0rem;
+    padding-right: 0rem;
+    padding-bottom: 0rem;
+}
+
+.s0302-top-column-highlight {
+    background-color: var(--highlight-bg, #cedbf0) !important;
+}
+
+.p-datatable .p-datatable-tbody > tr {
+    height: 1.2rem;
+}
+
+.p-datatable .p-datatable-tbody > tr {
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    overflow: hidden;
+}
+
+.p-multiselect {
+    background: #ffffff;
+    border: 1px solid #ced4da;
+    transition:
+        background-color 0.2s,
+        color 0.2s,
+        border-color 0.2s,
+        box-shadow 0.2s;
+    border-radius: 0 !important;
+    height: 20px !important;
+    vertical-align: middle;
+}
+
+.p-multiselect .p-multiselect-label {
+    padding: 2px;
+}
+
+.loginBackground {
+    background-image: url(../img/bg_login.png);
+    background-repeat: no-repeat;
+    background-size: cover;
+    background-position: center top;
+    background-attachment: fixed;
+}
+
+.loginDialog {
+    border: 0.5px solid rgba(0, 0, 0, 0.1);
+    border-radius: 10px;
+    padding-top: 35px;
+}
+
+.p-datatable .p-datatable-loading-icon {
+    color: #2563eb !important;
+    font-size: 13 rem !important;
+    width: 50px !important;
+    height: 50px !important;
+    line-height: 50px !important;
+}
+
+.p-datatable .p-datatable-loading-overlay {
+    position: relative;
+}
+
+.p-datatable .p-datatable-loading-overlay::after {
+    content: "";
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    width: 45px;
+    height: 45px;
+    transform: translate(-45%, -50%) rotate(0deg);
+    background-image: url("../images/shints_logo_transparent.png");
+    background-repeat: no-repeat;
+    background-position: center;
+    background-size: contain;
+    pointer-events: none;
+    z-index: 1000 !important;
+}
+
+.row-cancel td {
+    background-color: #ffe5e5 !important;
+}
+
+@keyframes matlCdBlink {
+    0% {
+        background-color: #fff3c4;
+        box-shadow: 0 0 0 0 rgba(245, 158, 11, 0.45);
+    }
+    50% {
+        background-color: #ffe17a;
+        box-shadow: 0 0 0 4px rgba(245, 158, 11, 0.2);
+    }
+    100% {
+        background-color: #ffffff;
+        box-shadow: 0 0 0 0 rgba(245, 158, 11, 0);
+    }
+}
+
+.af-matl-cd-blink {
+    animation: matlCdBlink 0.7s ease-out;
+}

@@ -1,0 +1,3248 @@
+import { Prisma } from "@prisma/client";
+import prisma from "../../db"; //PrismaClient 사용하기 위해 불러오기
+import AFLib from "../../commlib"; //PrismaClient 사용하기 위해 불러오기
+const fs = require('fs');
+import axios from 'axios'
+import { parse } from "path";
+import { log } from "console";
+const Excel = require('exceljs');
+const { generateUploadURL, deleteUploadObject, upload } = require('../../../routes/s3')
+const { MongoClient } = require('mongodb');
+const excelLib = require('../../excelLib.js');
+const path = require('path');
+const moment = require('moment');
+
+// export default로 Query 내용 내보내기
+function setBodyFont(sheet, rowIdx, fromCol, toCol) {
+    for (let c = fromCol; c <= toCol; c++) {
+        const cell = sheet.getCell(rowIdx, c);
+        cell.font = {
+            name: '돋움',
+            size: 10,
+            bold: false
+        };
+    }
+};
+
+function applyBorder(sheet, startRow, endRow, thinOrThick) {
+    const LAST_COL = 10;   // J 컬럼
+
+    for (let r = startRow; r <= endRow; r++) {
+        for (let c = 1; c <= LAST_COL; c++) {
+            const cell = sheet.getCell(r, c);
+            cell.border = {
+                top:    { style: thinOrThick },
+                left:   { style: thinOrThick },
+                bottom: { style: thinOrThick },
+                right:  { style: thinOrThick }
+            };
+        }
+    }
+}
+
+function safeMerge(sheet, range) {
+    try { sheet.unMergeCells(range); } catch (e) {}
+    sheet.mergeCells(range);
+}
+
+// 숫자 변환 유틸 (P탭 병합 판단용)
+function toNumber(v) {
+    if (v === null || v === undefined) return 0;
+    if (typeof v === 'number') return v;
+    const n = Number(String(v).replace(/,/g, '').trim());
+    return isNaN(n) ? 0 : n;
+}
+
+const moduleQuery_S043401_4_1 = {
+    Query: {
+        mgrQueryS043401_4_PL_PRINT: async (_, args, contextValue) => {
+
+            console.log(args);
+            
+
+            // ----------------------------------------------------------
+            // 기본 정보 생성
+            // ----------------------------------------------------------
+            console.log("[PL_PRINT] Resolver Start");
+
+            var tRetDate = AFLib.getCurrTime();
+
+            // 로그인 사용자 정보
+            var tUserInfo = AFLib.getUserInfo(contextValue);
+
+            // 입력 데이터 복사
+            var tInput = { ...args.data };
+
+            // 회사 코드
+            let company = tInput.COMPANY || 'shints';
+            company = company.toLowerCase();
+
+            console.log("[PL_PRINT] COMPANY :", company);
+            console.log("[PL_PRINT] SHIPMENT_CD :", tInput.SHIPMENT_CD);
+
+            // ----------------------------------------------------------
+            // 입력 Weight 문자열 -> 숫자 변환
+            // ----------------------------------------------------------
+            tInput.WEIGHT = parseFloat(tInput.WEIGHT.replace(/,/g, ''));
+
+            // ----------------------------------------------------------
+            // NSR 처리용 SQL 조건
+            // ----------------------------------------------------------
+            var nsrSql = '';
+            var nsrSql1 = '';
+
+            if (company === 'nsr') {
+                nsrSql = `AND A.STSOUT_CD = '999999' `;
+                nsrSql1 = `AND STSOUT_CD = '999999' `;
+            }
+
+            // ----------------------------------------------------------
+            // Shipment Master 조회
+            // ----------------------------------------------------------
+            console.log("[PL_PRINT] Query Shipment Master");
+
+            let sqlStr0 = `
+                    select a.*
+                    from  ksv_shipment_mst a
+                    where shipment_cd = '${tInput.SHIPMENT_CD}'
+            `;
+
+            console.log(sqlStr0);
+
+            var tRet0 = await prisma.$queryRaw(Prisma.raw(sqlStr0));
+
+            var tShipmentObj = {};
+
+            if (tRet0.length > 0) {
+                tShipmentObj = { ...tRet0[0] };
+            }
+
+            console.log("[PL_PRINT] Shipment Result Count :", tRet0.length);
+
+            // ----------------------------------------------------------
+            // Shipment에 연결된 STSOUT_CD 조회
+            // ----------------------------------------------------------
+            console.log("[PL_PRINT] Query STSOUT_CD");
+
+            sqlStr0 = `
+                    select distinct stsout_cd
+                    from  ksv_shipment_mem
+                    where shipment_cd = '${tInput.SHIPMENT_CD}'
+            `;
+
+            tRet0 = await prisma.$queryRaw(Prisma.raw(sqlStr0));
+
+            var sqlStsoutCd9 = '';
+
+            if (tRet0.length > 0) {
+                tRet0.forEach((col, i) => {
+
+                    if (col.stsout_cd) {
+
+                        if (sqlStsoutCd9 === '')
+                            sqlStsoutCd9 = `'${col.stsout_cd}'`;
+                        else
+                            sqlStsoutCd9 += `,'${col.stsout_cd}'`;
+                    }
+                });
+            }
+
+            console.log("[PL_PRINT] STSOUT Count :", tRet0.length);
+
+            // ----------------------------------------------------------
+            // PACK_CD / Ship Mode
+            // ----------------------------------------------------------
+            let tPackCd = tInput.PACK_CD;
+            let shipMode = tShipmentObj.SHIP_MODE;
+
+            console.log("[PL_PRINT] PACK_CD :", tPackCd);
+            console.log("[PL_PRINT] SHIP_MODE :", shipMode);
+
+            // ----------------------------------------------------------
+            // Step-1 : Offer Spec 미등록/필수 조건 검사
+            //  - 특정 조건(offer_spec='')이면 오류 반환
+            // ----------------------------------------------------------
+            console.log("[PL_PRINT][STEP-1] Offer Spec Check Start");
+
+            let sqlCheck = `
+                            select count(*)  as c_cnt
+                            from
+                                ksv_stock_out a,
+                                kcd_matl_mst b,
+                                kcd_offer_spec c,
+                                ksv_stock_out_temp_permit d,
+                                kcd_vendor e,
+                                kcd_buyer kcd_buyer,
+                                kcd_user kcd_user
+                            where a.matl_cd = b.matl_Cd
+                            and b.matl_name = c.matl_name
+                            and b.spec=c.spec
+                            and b.matl_type='m'
+                            and b.matl_cd = a.matl_cd
+                            and d.vendor_cd = b.vendor_cd
+                            and e.vendor_cd = b.vendor_cd
+                            and d.permit = 'Y'
+                            and a.pack_cd like '${tPackCd}%'
+                            and d.pack_cd like '${tPackCd}%'
+                            and e.vendor_type in ('1')
+                            and c.offer_spec=''
+                            --
+                            and left(a.order_cd,2) = kcd_buyer.buyer_cd
+                            and kcd_buyer.reg_user = kcd_user.user_id
+                            and kcd_user.company_code = '${company}'
+            `;
+
+            var tRetCheck = await prisma.$queryRaw(Prisma.raw(sqlCheck));
+
+            console.log("[PL_PRINT][STEP-1] Result:", tRetCheck);
+
+            if (tRetCheck.length > 0 && tRetCheck[0].c_cnt > 0) {
+
+                // Offer Spec 누락이면 즉시 종료
+                var tRetArray = [];
+                var tObj = {};
+                tObj.id = 1;
+                tObj.CODE = `ERROR:Insert Offer Spec`;
+
+                console.log("[PL_PRINT][STEP-1] FAIL:", tObj.CODE);
+
+                tRetArray.push(tObj);
+                return (tRetArray);
+            }
+
+            console.log("[PL_PRINT][STEP-1] OK");
+
+            // ----------------------------------------------------------
+            // Step-2 : ksv_stock_out_temp_permit 를 PACK 기준으로 초기화
+            //  - 매 실행 시 강제로 재생성
+            // ----------------------------------------------------------
+            console.log("[PL_PRINT][STEP-2] Temp Permit Reset Start");
+
+            const tDeleteSql = `
+                delete from ksv_stock_out_temp_permit
+                where  pack_cd = '${tPackCd}'
+            `;
+
+            console.log("[PL_PRINT][STEP-2] SQL:\n", tDeleteSql);
+
+            await prisma.$queryRaw(Prisma.raw(tDeleteSql));
+
+            console.log("[PL_PRINT][STEP-2] Temp Permit Reset Done");
+
+
+            // ----------------------------------------------------------
+            // Step-2-1 : Permit 대상 벤더 목록 조회 (Stock Out + Freight 합집합)
+            //  - permit='Y' 인 벤더만 temp_permit에 넣음
+            // ----------------------------------------------------------
+            console.log("[PL_PRINT][STEP-2-1] Permit Vendor Query Start");
+
+            var sql100 = `
+                SELECT
+                        distinct
+                        d.vendor_name,
+                        d.vendor_cd,
+                        d.permit
+                    FROM
+                            KSV_STOCK_OUT  a,
+                            kcd_matl_mst b,
+                            kcd_vendor d,
+                            kcd_buyer kcd_buyer,
+                            kcd_user kcd_user
+                    WHERE  a.STSOUT_CD in (
+                        select distinct stsout_cd from ksv_shipment_mem where shipment_cd = '${tInput.SHIPMENT_CD}'
+                        )
+                    and    a.matl_cd = b.matl_cd
+                    and    b.vendor_cd = d.vendor_cd
+                    and    d.permit = 'Y'
+                    and left(a.order_cd,2) = kcd_buyer.buyer_cd
+                    and kcd_buyer.reg_user = kcd_user.user_id
+                    and kcd_user.company_code = '${company}'
+
+                    union
+
+                SELECT
+                        distinct
+                        d.vendor_name,
+                        d.vendor_cd,
+                        d.permit
+                    FROM
+                            KZZ_FREIGHT  a,
+                            kcd_matl_mst b,
+                            kcd_vendor d,
+                            kcd_user kcd_user
+                    WHERE  a.STSOUT_CD in (
+                        select distinct stsout_cd from ksv_shipment_mem where shipment_cd = '${tInput.SHIPMENT_CD}'
+                        )
+                    and    a.matl_cd = b.matl_cd
+                    and    b.vendor_cd = d.vendor_cd
+                    and    d.permit = 'Y'
+            `;
+
+            console.log("[PL_PRINT][STEP-2-1] SQL:\n", sql100);
+
+            var ret100 = await prisma.$queryRaw(Prisma.raw(sql100));
+
+            console.log("[PL_PRINT][STEP-2-1] Vendor Count:", ret100.length);
+
+
+            // ----------------------------------------------------------
+            // Step-2-2 : temp_permit 테이블에 vendor별 permit insert
+            //  - 중복 방지 where not exists
+            // ----------------------------------------------------------
+            console.log("[PL_PRINT][STEP-2-2] Temp Permit Insert Start");
+
+            for (let i = 0; i < ret100.length; i++) {
+
+                const tOne100 = ret100[i];
+
+                const tInsertSql = `
+                    insert into ksv_stock_out_temp_permit (pack_cd, vendor_cd, permit)
+                    select '${tPackCd}', '${tOne100.vendor_cd}', '${tOne100.permit}'
+                    where not exists (
+                        select 1
+                        from ksv_stock_out_temp_permit
+                        where pack_cd = '${tPackCd}'
+                        and vendor_cd = '${tOne100.vendor_cd}'
+                    )
+                `;
+
+                console.log("[PL_PRINT][STEP-2-2] Insert SQL:\n", tInsertSql);
+
+                await prisma.$queryRaw(Prisma.raw(tInsertSql));
+            }
+
+            console.log("[PL_PRINT][STEP-2-2] Temp Permit Insert Done");
+
+
+            // ----------------------------------------------------------
+            // Step-3 : stock_in pack_confirm 관련(업체수 확인용) 체크
+            // ----------------------------------------------------------
+            console.log("[PL_PRINT][STEP-3] Stock Confirm Check Start");
+
+            var tCheckCnt2 = 0;
+
+            sqlCheck = `
+                select  count(distinct d.vendor_cd)  as c_cnt
+                from ksv_stock_out a, kcd_matl_mst d,
+                    kcd_buyer kcd_buyer,
+                    kcd_user kcd_user
+                where a.pack_cd like '${tPackCd}%'
+                and a.matl_cd=d.matl_cd
+                and a.out_from='po'
+                --
+                and left(a.order_cd,2) = kcd_buyer.buyer_cd
+                and kcd_buyer.reg_user = kcd_user.user_id
+                and kcd_user.company_code = '${company}'
+            `;
+
+            console.log("[PL_PRINT][STEP-3] SQL:\n", sqlCheck);
+
+            tRetCheck = await prisma.$queryRaw(Prisma.raw(sqlCheck));
+
+            console.log("[PL_PRINT][STEP-3] Result:", tRetCheck);
+
+            if (tRetCheck.length > 0) tCheckCnt2 = tRetCheck[0].c_cnt;
+
+            console.log("[PL_PRINT][STEP-3] Vendor Cnt(from stock_out/out_from=po):", tCheckCnt2);
+
+
+            // ----------------------------------------------------------
+            // Step-4 : Vendor / PO 배열 구성 시작
+            //  - Vendor: permit='Y' 대상 (Stock Out + Freight)
+            //  - PO: Stock Out에서 조회 + Freight에서 PO 보강
+            // ----------------------------------------------------------
+            console.log("[PL_PRINT][STEP-4] Build Vendor/PO Arrays Start");
+
+            // Vendor 배열
+            var arrVendorObj = [];
+            var arrVendor = [];
+            var arrVendorCd = [];
+
+            sqlCheck = `
+                SELECT
+                        distinct
+                        d.vendor_name,
+                        d.vendor_cd,
+                        d.permit
+                    FROM
+                            KSV_STOCK_OUT  a,
+                            kcd_matl_mst b,
+                            kcd_vendor d,
+                            kcd_buyer kcd_buyer,
+                            kcd_user kcd_user
+                    WHERE  a.STSOUT_CD in (
+                        select distinct stsout_cd from ksv_shipment_mem where shipment_cd = '${tInput.SHIPMENT_CD}'
+                        )
+                    and    a.matl_cd = b.matl_cd
+                    and    b.vendor_cd = d.vendor_cd
+                    and    d.permit = 'Y'
+                    and left(a.order_cd,2) = kcd_buyer.buyer_cd
+                    and kcd_buyer.reg_user = kcd_user.user_id
+                    and kcd_user.company_code = '${company}'
+
+                    union
+
+                SELECT
+                        distinct
+                        d.vendor_name,
+                        d.vendor_cd,
+                        d.permit
+                    FROM
+                            KZZ_FREIGHT  a,
+                            kcd_matl_mst b,
+                            kcd_vendor d,
+                            kcd_user kcd_user
+                    WHERE  a.STSOUT_CD in (
+                        select distinct stsout_cd from ksv_shipment_mem where shipment_cd = '${tInput.SHIPMENT_CD}'
+                        )
+                    and    a.matl_cd = b.matl_cd
+                    and    b.vendor_cd = d.vendor_cd
+                    and    d.permit = 'Y'
+            `;
+
+            console.log("[PL_PRINT][STEP-4] Vendor SQL:\n", sqlCheck);
+
+            tRetCheck = await prisma.$queryRaw(Prisma.raw(sqlCheck));
+
+            console.log("[PL_PRINT][STEP-4] Vendor Result Count:", tRetCheck.length);
+
+            tRetCheck.forEach((col, i) => {
+
+                var tObj = {};
+                tObj.vendor_cd = col.vendor_cd;
+                tObj.vendor_name = col.vendor_name;
+                tObj.permit = col.permit;
+
+                // 이후 계산/출력에 쓰는 누적 필드
+                tObj.ct_qty = 0;
+                tObj.weight = 0;
+
+                // inv / pac 데이터를 벤더별로 모아 담기
+                tObj.inv = [];
+                tObj.pac = [];
+
+                arrVendorObj.push(tObj);
+                arrVendor.push(col.vendor_name);
+                arrVendorCd.push(col.vendor_cd);
+            });
+
+            console.log("[PL_PRINT][STEP-4] arrVendor.length:", arrVendor.length);
+            console.log("[PL_PRINT][STEP-4] arrVendorCd:", arrVendorCd);
+
+
+            // PO 배열
+            var arrPoObj = [];
+            var arrPoNo = [];
+
+            sqlCheck = `
+                SELECT  distinct
+                        a.PO_CD , kcd_buyer.BUYER_CD, kcd_buyer.BUYER_NAME
+                FROM    KSV_STOCK_OUT a,
+                        kcd_buyer kcd_buyer,
+                        kcd_user kcd_user
+                WHERE   a.PACK_CD = '${tPackCd}'
+                --
+                and left(a.order_cd,2) = kcd_buyer.buyer_cd
+                and kcd_buyer.reg_user = kcd_user.user_id
+                and kcd_user.company_code = '${company}'
+            `;
+
+            console.log("[PL_PRINT][STEP-4] PO SQL:\n", sqlCheck);
+
+            tRetCheck = await prisma.$queryRaw(Prisma.raw(sqlCheck));
+
+            console.log("[PL_PRINT][STEP-4] PO Result Count:", tRetCheck.length);
+
+            tRetCheck.forEach((col, i) => {
+
+                var tObj = {};
+                tObj.po_cd = col.PO_CD;
+                tObj.buyer_cd = col.BUYER_CD;
+                tObj.buyer_name = col.BUYER_NAME;
+
+                // po별 inv / pac 데이터 담기
+                tObj.inv = [];
+                tObj.pac = [];
+
+                arrPoObj.push(tObj);
+                arrPoNo.push(col.PO_CD);
+            });
+
+            console.log("[PL_PRINT][STEP-4] arrPoNo.length(from stock_out):", arrPoNo.length);
+
+
+            // ----------------------------------------------------------
+            // Step-4-1 : Freight에만 있는 PO 보강 (SOTMP-)
+            // ----------------------------------------------------------
+            console.log("[PL_PRINT][STEP-4-1] Freight PO Append Start");
+
+            var sqlCheck6_2 = `
+                select distinct b.po_cd
+                from ksv_shipment_mem a, kzz_freight b
+                where a.shipment_cd  = (
+                    select shipment_cd from ksv_shipment_mst where remark = '${tPackCd}'
+                    )
+                and   left(a.stsout_cd, 6) = 'SOTMP-'
+                and   a.stsout_cd = b.stsout_cd
+                ${nsrSql}
+            `;
+
+            console.log("[PL_PRINT][STEP-4-1] SQL:\n", sqlCheck6_2);
+
+            var tRetCheck6_2 = await prisma.$queryRaw(Prisma.raw(sqlCheck6_2));
+
+            console.log("[PL_PRINT][STEP-4-1] Freight PO Count:", tRetCheck6_2.length);
+
+            tRetCheck6_2.forEach((col6, i6) => {
+
+                if (col6.po_cd) {
+
+                    var tObj = {};
+                    tObj.po_cd = col6.po_cd;
+
+                    // Freight로 들어온 PO는 buyer정보가 없을 수 있어 빈값 처리
+                    tObj.buyer_cd = '';
+                    tObj.buyer_name = '';
+
+                    tObj.inv = [];
+                    tObj.pac = [];
+
+                    arrPoObj.push(tObj);
+                    arrPoNo.push(col6.po_cd);
+                }
+            });
+
+            console.log("[PL_PRINT][STEP-4-1] arrPoNo.length(total):", arrPoNo.length);
+
+
+            // ----------------------------------------------------------
+            // 이후 단계에서 사용하는 데이터 컨테이너 초기화
+            // ----------------------------------------------------------
+            var arrSHINTS_INV = [];
+            var arrBVT_INV = [];
+            var arrP_PAC = [];
+
+            console.log("[PL_PRINT][STEP-4] Build Vendor/PO Arrays Done");
+
+
+            // ----------------------------------------------------------
+            // Step-5 : CT_QTY 계산
+            //  - 같은 vendor / remark / po_cd / ct_qty 조건이면 중복으로 보지 않음
+            // ----------------------------------------------------------
+            console.log("[PL_PRINT][STEP-5] CT_QTY Calculation Start");
+
+            var mCTCnt = 0;
+            var mCTCnt_N = 0;
+            var mCTCnt_Y = 0;
+
+            var vendorCtQty = [];
+
+            var sqlCheck9_1 = `
+                    select kk.* from
+                    (
+                    select  c.vendor_name, a.stsout_cd, a.remark, a.po_cd, a.ct_qty, b.matl_name, b.color, b.spec, b.unit, a.out_qty, a.ct_no, c.permit, c.vendor_cd
+                    from ksv_stock_out a , kcd_matl_mst b, kcd_vendor c , kcd_buyer d, kcd_user e
+                    where a.pack_cd = '${tPackCd}'
+                    and  left(a.order_cd, 2) = d.buyer_cd
+                    and  d.reg_user = e.user_id
+                    and  e.company_code = '${company}'
+                    and  a.matl_cd = b.matl_cd
+                    and  b.vendor_cd = c.vendor_cd
+                    and  left(a.stsout_cd, 6) <> 'SOTMP-'
+                    and  a.stsout_cd in (${sqlStsoutCd9})
+
+                    union
+
+                    SELECT  j.vendor_name, a.stsout_cd, '' as remark , a.po_cd, A0.ct_qty, c.matl_name, c.color, c.spec, c.unit, a.qty, '' as ct_no , 'N' as permit, j.vendor_cd
+                    FROM
+                            KZZ_FREIGHT A
+                            JOIN KSV_SHIPMENT_MEM A0 ON A.STSOUT_CD = A0.STSOUT_CD
+                            LEFT JOIN KCD_MATL_MST C ON A.MATL_CD = C.MATL_CD
+                            LEFT JOIN KCD_VENDOR j ON j.vendor_cd = C.vendor_cd
+                    WHERE    A.STSOUT_CD LIKE 'SOTMP-%'
+                    and     A.STSOUT_CD in (
+                            select distinct stsout_cd  from ksv_shipment_mem
+                                where shipment_cd in (
+                                    select distinct shipment_cd from ksv_shipment_mst where remark = '${tPackCd}'
+                                    )
+                            )
+                            ${nsrSql}
+                    ) kk
+                    order by kk.vendor_name, kk.stsout_cd, kk.remark, kk.po_cd, kk.ct_qty
+            `;
+
+            console.log("[PL_PRINT][STEP-5] SQL:\n", sqlCheck9_1);
+
+            var tRetCheck9_1 = await prisma.$queryRaw(Prisma.raw(sqlCheck9_1));
+
+            console.log("[PL_PRINT][STEP-5] Row Count:", tRetCheck9_1.length);
+
+            var saveObj9 = {};
+
+            tRetCheck9_1.forEach((col9, i9) => {
+
+                if (i9 === 0) {
+                    saveObj9 = { ...col9 };
+                }
+                else {
+
+                    if (
+                        col9.vendor_name === saveObj9.vendor_name &&
+                        col9.remark !== '' &&
+                        col9.remark === saveObj9.remark &&
+                        col9.ct_qty === saveObj9.ct_qty
+                    ) {
+                        ;
+                    }
+                    else if (
+                        col9.vendor_name === saveObj9.vendor_name &&
+                        col9.remark === '' &&
+                        col9.po_cd === saveObj9.po_cd &&
+                        col9.ct_qty === saveObj9.ct_qty
+                    ) {
+                        ;
+                    }
+                    else {
+
+                        mCTCnt += parseInt(saveObj9.ct_qty);
+
+                        if (saveObj9.permit === 'Y')
+                            mCTCnt_Y += parseInt(saveObj9.ct_qty);
+                        else
+                            mCTCnt_N += parseInt(saveObj9.ct_qty);
+
+                        console.log("[PL_PRINT][STEP-5] CT_ADD:",
+                            saveObj9.vendor_name,
+                            saveObj9.po_cd,
+                            saveObj9.ct_qty,
+                            "TOTAL:", mCTCnt
+                        );
+
+                        var chk1 = 0;
+
+                        vendorCtQty.forEach((col10, i10) => {
+
+                            if (col10.VENDOR_CD === saveObj9.vendor_cd) {
+
+                                var tObj10 = { ...col10 };
+
+                                tObj10.CT_QTY += parseInt(saveObj9.ct_qty);
+
+                                vendorCtQty[i10] = { ...tObj10 };
+
+                                chk1 = 1;
+                            }
+                        });
+
+                        if (chk1 === 0) {
+
+                            var tObj10 = {};
+
+                            tObj10.VENDOR_CD = saveObj9.vendor_cd;
+                            tObj10.CT_QTY = parseInt(saveObj9.ct_qty);
+
+                            vendorCtQty.push(tObj10);
+                        }
+                    }
+
+                    saveObj9 = { ...col9 };
+                }
+            });
+
+            mCTCnt += parseInt(saveObj9.ct_qty);
+
+            if (saveObj9.permit === 'Y')
+                mCTCnt_Y += parseInt(saveObj9.ct_qty);
+            else
+                mCTCnt_N += parseInt(saveObj9.ct_qty);
+
+            console.log("[PL_PRINT][STEP-5] FINAL_CT:",
+                mCTCnt,
+                "PermitY:", mCTCnt_Y,
+                "PermitN:", mCTCnt_N
+            );
+
+
+            // ----------------------------------------------------------
+            // Step-6 : Freight CT_QTY 및 Freight 금액 계산
+            // ----------------------------------------------------------
+            console.log("[PL_PRINT][STEP-6] Freight CT Calculation");
+
+            var sqlCheck6_1 = `
+                select * from ksv_shipment_mem
+                where shipment_cd  = (
+                    select shipment_cd from ksv_shipment_mst where remark = '${tPackCd}'
+                    )
+                and   left(stsout_cd, 6) = 'SOTMP-'
+                ${nsrSql1}
+            `;
+
+            console.log(sqlCheck6_1);
+
+            var tRetCheck6_1 = await prisma.$queryRaw(Prisma.raw(sqlCheck6_1));
+
+            var cntCtQty = 0;
+            var amtFreight = 0;
+
+            var kzzBuyerArray = [];
+
+            tRetCheck6_1.forEach((col6) => {
+
+                cntCtQty += parseFloat(col6.CT_QTY);
+
+                if (col6.PAYMENT === '2')
+                    amtFreight += 0;
+                else
+                    amtFreight += parseFloat(col6.AMOUNT);
+
+                if (col6.BUYER)
+                    kzzBuyerArray.push(col6.BUYER);
+            });
+
+            console.log("[PL_PRINT][STEP-6] Freight_CT:", cntCtQty);
+            console.log("[PL_PRINT][STEP-6] Freight_AMT:", amtFreight);
+
+
+            // ----------------------------------------------------------
+            // Step-7 : Packing List Total Amount 계산
+            // ----------------------------------------------------------
+            console.log("[PL_PRINT][STEP-7] Total PL Amount Calculation");
+
+            var strTotalPLAmt = 0;
+
+            sqlCheck = `
+                SELECT isnull(sum(d.pay_PRICE * d.pack_exch_rate * A.out_QTY),0)  as amt
+                FROM KSV_STOCK_OUT A,ksv_stock_in d,
+                    kcd_buyer kcd_buyer,
+                    kcd_user kcd_user
+                WHERE  d.po_cd = a.po_cd and d.po_seq = a.po_seq and d.order_cd = a.order_cd
+                and a.PACK_CD = '${tPackCd}'
+                and a.matl_cd = d.matl_cd and d.matl_seq=a.matl_seq
+                --
+                and left(a.order_cd,2) = kcd_buyer.buyer_cd
+                and kcd_buyer.reg_user = kcd_user.user_id
+                and kcd_user.company_code = '${company}'
+            `;
+
+            console.log(sqlCheck);
+
+            tRetCheck = await prisma.$queryRaw(Prisma.raw(sqlCheck));
+
+            if (tRetCheck.length > 0)
+                strTotalPLAmt = parseFloat(tRetCheck[0].amt);
+
+            strTotalPLAmt += amtFreight;
+
+            console.log("[PL_PRINT][STEP-7] Total PL Amount:", strTotalPLAmt);
+
+
+            // ----------------------------------------------------------
+            // Step-8 : Factory 정보 조회 (출발지)
+            // ----------------------------------------------------------
+            console.log("[PL_PRINT][STEP-8] Factory Info Query");
+
+            var tFactoryCd = '';
+
+            if (tPackCd.substring(0, 1) === 'S')
+                tFactoryCd = 'FC010';
+            else if (tPackCd.substring(0, 1) === 'B')
+                tFactoryCd = 'FC034';
+            else if (tPackCd.substring(0, 1) === 'E')
+                tFactoryCd = 'FC044';
+
+            sqlCheck = `
+                select c.pack_name,c.addr1,c.addr2,c.tel_no,c.fax_no
+                from kcd_factory c
+                where c.factory_cd = '${tFactoryCd}'
+            `;
+
+            console.log(sqlCheck);
+
+            tRetCheck = await prisma.$queryRaw(Prisma.raw(sqlCheck));
+
+            var strFacName = '';
+            var strAddr1 = '';
+            var strAddr2 = '';
+            var strTel = '';
+            var strFax = '';
+
+            if (tRetCheck.length > 0) {
+
+                strFacName = tRetCheck[0].pack_name;
+                strAddr1 = tRetCheck[0].addr1;
+                strAddr2 = tRetCheck[0].addr2;
+                strTel = tRetCheck[0].tel_no;
+                strFax = tRetCheck[0].fax_no;
+            }
+
+            console.log("[PL_PRINT][STEP-8] Factory:", strFacName);
+
+
+            // ----------------------------------------------------------
+            // Step-9 : Destination Factory 조회
+            // ----------------------------------------------------------
+            console.log("[PL_PRINT][STEP-9] Destination Factory Query");
+
+            tFactoryCd = '';
+
+            if (tPackCd.substring(2, 3) === 'S')
+                tFactoryCd = 'FC010';
+            else if (tPackCd.substring(2, 3) === 'B')
+                tFactoryCd = 'FC034';
+            else if (tPackCd.substring(2, 3) === 'E')
+                tFactoryCd = 'FC044';
+
+            sqlCheck = `
+                select c.pack_name,c.addr1,c.addr2,c.tel_no,c.fax_no
+                from kcd_factory c
+                where c.factory_cd = '${tFactoryCd}'
+            `;
+
+            console.log(sqlCheck);
+
+            tRetCheck = await prisma.$queryRaw(Prisma.raw(sqlCheck));
+
+            var strFacName2 = '';
+            var strAddr12 = '';
+            var strAddr22 = '';
+            var strTel2 = '';
+            var strFax2 = '';
+
+            if (tRetCheck.length > 0) {
+
+                strFacName2 = tRetCheck[0].pack_name;
+                strAddr12 = tRetCheck[0].addr1;
+                strAddr22 = tRetCheck[0].addr2;
+                strTel2 = tRetCheck[0].tel_no;
+                strFax2 = tRetCheck[0].fax_no;
+            }
+
+            console.log("[PL_PRINT][STEP-9] Destination Factory:", strFacName2);
+
+            // ----------------------------------------------------------
+            // Step-10 : Excel 파일 생성 준비 (파일명/템플릿/워크북 로드)
+            // ----------------------------------------------------------
+            console.log("[PL_PRINT][STEP-10] Excel Prepare");
+
+            var tTitle = `invoice제품list`;
+            var tWExcelFile = `(PL PRINT-${company})${tPackCd}-패킹리스트-${tUserInfo.USER_ID}-${tRetDate}`;
+            var tRetExcelFile = '';
+            var tInvoiceTotal = 0;
+
+            try {
+
+                // ----------------------------------------------------------
+                // Step-10-1 : 템플릿 경로 계산 (__dirname 기준)
+                //  - src 폴더를 기준으로 /upload/excel_template 로 치환
+                // ----------------------------------------------------------
+                console.log("[PL_PRINT][STEP-10-1] Template Path Build");
+
+                var tPath0 = '';
+                var tCols0 = __dirname.split('/');
+                var tFlag0 = 0;
+
+                tCols0.forEach((col, i) => {
+
+                    if (col !== '') {
+
+                        if (col === 'src') {
+                            tPath0 += '/upload/excel_template';
+                            tFlag0 = 1;
+                        }
+
+                        if (tFlag0 === 0) {
+                            tPath0 += '/' + col;
+                        }
+                    }
+                });
+
+                console.log("[PL_PRINT][STEP-10-1] Template Base Path:", tPath0);
+
+                // ----------------------------------------------------------
+                // Step-10-2 : 템플릿 엑셀 로드
+                // ----------------------------------------------------------
+                var tTemplateName = 'PL_PRINT';
+                var tTemplateExcel = `${tPath0}/${tTemplateName}.xlsx`;
+
+                console.log("[PL_PRINT][STEP-10-2] Template File:", tTemplateExcel);
+
+                const wb = new Excel.Workbook();
+                await wb.xlsx.readFile(tTemplateExcel);
+
+                console.log("[PL_PRINT][STEP-10-2] Template Loaded");
+
+
+                // ----------------------------------------------------------
+                // Step-11 : Invoice Query (Stock Out + Freight) 실행
+                //  - currency_max CTE로 최신 환율만 적용
+                //  - StockOut은 ksv_stock_in과 조인하여 pay_price 기반 USD 계산
+                //  - Freight는 KZZ_FREIGHT 기반으로 USD 계산
+                // ----------------------------------------------------------
+                console.log("[PL_PRINT][STEP-11] Invoice SQL Start");
+
+                let sql_INV = `
+                    WITH CURRENCY_MAX AS (
+                            SELECT
+                                curr_cd,
+                                MAX(start_date) AS max_start_date
+                            FROM KCD_CURRENCY
+                            GROUP BY curr_cd
+                    )
+                    select
+                            isnull(E.hs_cd, '') as hs_cd,
+                            b.matl_name,
+                            a.po_cd,
+                            b.vendor_cd,
+                            CONVERT(varchar, ROUND(CASE WHEN cm2.usd_rate * D.pay_PRICE < 0.01
+                                                        THEN 0.01
+                                                        ELSE cm2.usd_rate * D.pay_PRICE
+                                                END + 0.004, 2)) AS usd,
+                            SUM(A.OUT_QTY) AS out_qty,
+                            b.unit,
+                            h.nat_name,
+                            ISNULL(b.weight, 0) AS weight,
+                            CONVERT(varchar, ROUND(CASE WHEN cm2.usd_rate * D.pay_PRICE < 0.01
+                                                        THEN 0.01
+                                                        ELSE cm2.usd_rate * D.pay_PRICE
+                                                END + 0.004, 2)) * SUM(A.OUT_QTY) AS amt,
+                            b.width,
+                            CASE
+                                WHEN ISNULL(b.matl_type, '') <> 'M' THEN ''
+                                WHEN ISNULL(j.comp2, '') = '' THEN j.comp1 + ' ' + CONVERT(varchar, j.comp1_percent) + '%'
+                                WHEN ISNULL(j.comp3, '') = '' THEN j.comp1 + ' ' + CONVERT(varchar, j.comp1_percent) + '%/' +
+                                                            j.comp2 + ' ' + CONVERT(varchar, j.comp2_percent) + '%'
+                                WHEN ISNULL(j.comp4, '') = '' THEN j.comp1 + ' ' + CONVERT(varchar, j.comp1_percent) + '%/' +
+                                                            j.comp2 + ' ' + CONVERT(varchar, j.comp2_percent) + '%/' +
+                                                            j.comp3 + ' ' + CONVERT(varchar, j.comp3_percent) + '%'
+                                ELSE j.comp1 + ' ' + CONVERT(varchar, j.comp1_percent) + '%/' +
+                                    j.comp2 + ' ' + CONVERT(varchar, j.comp2_percent) + '%/' +
+                                    j.comp3 + ' ' + CONVERT(varchar, j.comp3_percent) + '%/' +
+                                    j.comp4 + ' ' + CONVERT(varchar, j.comp4_percent) + '%'
+                            END AS comp_str,
+                            b.matl_type,
+                            isnull(e.hs_name, '') as hs_name,
+                            isnull(p.offer_spec, '') as offer_spec,
+                            c.permit,
+                            isnull(sum(a.weight), 0)  as out_weight
+                    from ksv_stock_out a
+                        JOIN ksv_stock_in D
+                            ON  A.po_CD      = D.po_CD
+                            AND A.po_seq     = D.po_seq
+                            AND A.order_cd   = D.order_cd
+                            AND A.matl_cd    = D.matl_cd
+                            AND A.mrp_seq    = D.mrp_seq
+                            AND A.in_datetime= D.in_datetime,
+                        kcd_matl_mst b
+                        left join kcd_composition j on j.matl_name = b.matl_name
+                        left join kcd_hscode e on e.hs_no = b.hs_cd
+                        left join KCD_offer_spec p on b.matl_name = p.matl_name and b.spec = p.spec,
+                        kcd_vendor c
+                        left join KCD_nation h  ON c.nat_CD = h.nat_cd,
+                        kcd_buyer d1, kcd_user e1, currency_max cm, kcd_currency cm2
+                    where a.pack_cd = '${tPackCd}'
+                    and  left(a.order_cd, 2) = d1.buyer_cd
+                    and  d1.reg_user = e1.user_id
+                    and  e1.company_code = '${company}'
+                    and  a.matl_cd = b.matl_cd
+                    and  b.vendor_cd = c.vendor_cd
+                    and  d.pay_curr_cd = cm.curr_cd
+                    and  cm.curr_cd = d.pay_curr_cd
+                    and  cm2.curr_cd = cm.curr_cd
+                    and  cm2.start_date = cm.max_start_date
+                    and  left(a.stsout_cd, 6) <> 'SOTMP-'
+                    and  a.stsout_cd in (${sqlStsoutCd9})
+                        GROUP BY
+                            E.HS_CD,
+                            B.MATL_NAME,
+                            D.pay_PRICE,
+                            B.UNIT,
+                            B.WEIGHT,
+                            h.nat_name,
+                            cm2.usd_rate,
+                            j.comp1,
+                            j.comp1_percent,
+                            j.comp2,
+                            j.comp2_percent,
+                            j.comp3,
+                            j.comp3_percent,
+                            j.comp4,
+                            j.comp4_percent,
+                            B.width,
+                            B.matl_type,
+                            a.po_cd,
+                            b.vendor_cd,
+                            e.hs_name,
+                            p.offer_spec,
+                            c.permit
+
+                    union all
+
+                    SELECT
+                            isnull(E.hs_cd, '') as hs_cd,
+                            isnull(B.matl_name, '') as matl_name,
+                            A.po_cd,
+                            b.vendor_cd,
+                            CONVERT(varchar, ROUND(A.PRICE * E1.USD_RATE, 2)) AS usd,
+                            A.QTY AS out_qty,
+                            B.unit,
+                            '' AS nat_name,
+                            (ISNULL(A.weight, 0) / NULLIF(A.QTY, 0) * 1000.0) AS weight,
+                            CONVERT(varchar, ROUND((A.QTY * A.PRICE * E1.USD_RATE) + 0.004, 2)) AS amt,
+                            '0' AS width,
+                            CASE
+                                WHEN ISNULL(B.matl_type, '') <> 'M' THEN ''
+                                WHEN ISNULL(j.comp2, '') = '' THEN j.comp1 + ' ' + CONVERT(varchar, j.comp1_percent) + '%'
+                                WHEN ISNULL(j.comp3, '') = '' THEN j.comp1 + ' ' + CONVERT(varchar, j.comp1_percent) + '%/' +
+                                                            j.comp2 + ' ' + CONVERT(varchar, j.comp2_percent) + '%'
+                                WHEN ISNULL(j.comp4, '') = '' THEN j.comp1 + ' ' + CONVERT(varchar, j.comp1_percent) + '%/' +
+                                                            j.comp2 + ' ' + CONVERT(varchar, j.comp2_percent) + '%/' +
+                                                            j.comp3 + ' ' + CONVERT(varchar, j.comp3_percent) + '%'
+                                ELSE j.comp1 + ' ' + CONVERT(varchar, j.comp1_percent) + '%/' +
+                                    j.comp2 + ' ' + CONVERT(varchar, j.comp2_percent) + '%/' +
+                                    j.comp3 + ' ' + CONVERT(varchar, j.comp3_percent) + '%/' +
+                                    j.comp4 + ' ' + CONVERT(varchar, j.comp4_percent) + '%'
+                            END AS comp_str,
+                            B.matl_type,
+                            isnull(e.hs_name, '') as hs_name,
+                            '' as offer_spec,
+                            isnull(I.permit, 'N') as permit,
+                            '0' as out_weight
+                        FROM KZZ_FREIGHT A
+                        LEFT JOIN KCD_MATL_MST B  ON A.MATL_CD = B.MATL_CD
+                        LEFT JOIN kcd_composition j ON j.matl_name = B.matl_name
+                        LEFT JOIN KCD_HSCODE E ON B.HS_CD = E.HS_NO
+                        LEFT JOIN KCD_VENDOR I ON I.VENDOR_CD = B.VENDOR_CD
+                        JOIN CURRENCY_MAX CM ON A.CURR_CD = CM.curr_cd
+                        JOIN KCD_CURRENCY E1 ON E1.CURR_CD   = CM.curr_cd
+                        AND E1.start_date = CM.max_start_date
+                        and  a.stsout_cd in (${sqlStsoutCd9})
+                        WHERE
+                            A.STSOUT_CD LIKE 'SOTMP-%'
+                            ${nsrSql}
+                            AND EXISTS (
+                                SELECT 1
+                                FROM ksv_shipment_mem sm
+                                JOIN ksv_shipment_mst mst
+                                    ON sm.shipment_cd = mst.shipment_cd
+                                WHERE sm.stsout_cd = A.STSOUT_CD
+                                AND mst.remark   = '${tPackCd}'
+                            )
+                        ORDER BY
+                            comp_str desc, b.matl_name, a.po_cd, b.vendor_cd
+                `;
+
+                console.log("[PL_PRINT][STEP-11] SQL:\n", sql_INV);
+
+                var ret_INV = await prisma.$queryRaw(Prisma.raw(sql_INV));
+
+                console.log("[PL_PRINT][STEP-11] Invoice Row Count:", ret_INV.length);
+
+
+                // ----------------------------------------------------------
+                // Step-12 : Invoice 데이터 전체 수량 합계 계산
+                //  - WEIGHT 분배 계산을 위해 총 out_qty 를 먼저 구함
+                // ----------------------------------------------------------
+                console.log("[PL_PRINT][STEP-12] Invoice Total Qty Calc");
+
+                var tmpTotalQty = 0;
+
+                ret_INV.forEach((col) => {
+                    tmpTotalQty += parseFloat(col.out_qty);
+                });
+
+                console.log("[PL_PRINT][STEP-12] tmpTotalQty:", tmpTotalQty);
+
+
+                // ----------------------------------------------------------
+                // Step-13 : Invoice 데이터 가공
+                //  - usd 최소값 보정
+                //  - Weight를 입력 WEIGHT 기준으로 out_qty 비율대로 배분
+                //  - arrBVT_INV(전체), arrSHINTS_INV(permit='N') 생성
+                // ----------------------------------------------------------
+                console.log("[PL_PRINT][STEP-13] Invoice Row Transform Start");
+
+                var tRemainWeight = parseFloat(tInput.WEIGHT);
+
+                ret_INV.forEach((col, i) => {
+
+                    var tObj = { ...col };
+
+                    // Unit Price 보정 (0.01 미만 최소단가 처리)
+                    var tUnitPrice = parseFloat(col.usd);
+
+                    if (tUnitPrice <= 0.0009)
+                        tUnitPrice = 0.0;
+                    else if (tUnitPrice <= 0.009)
+                        tUnitPrice = 0.01;
+
+                    tObj.usd = parseFloat(tUnitPrice);
+
+                    // Weight 배분 : 전체 WEIGHT를 out_qty 비율로 나누어 각 Row에 배분
+                    var tWeight = parseFloat(tInput.WEIGHT) * (parseFloat(col.out_qty) / parseFloat(tmpTotalQty));
+                    tWeight = parseFloat(tWeight).toFixed(2);
+
+                    // 마지막 Row는 잔여 무게를 몰아주어 합계가 정확히 맞도록 처리
+                    if (i === ret_INV.length - 1) {
+                        tWeight = tRemainWeight;
+                        tRemainWeight = 0;
+                    }
+                    else {
+                        tRemainWeight -= parseFloat(tWeight);
+                    }
+
+                    tObj.weight = parseFloat(tWeight);
+
+                    // Amount 재계산 (usd * out_qty)
+                    tObj.amt = parseFloat(tObj.out_qty) * parseFloat(tObj.usd);
+
+                    arrBVT_INV.push(tObj);
+
+                    // permit='N'인 항목은 SHINTS에 출력되는 대상으로 분리
+                    if (col.permit === 'N')
+                        arrSHINTS_INV.push(tObj);
+                });
+
+                console.log("[PL_PRINT][STEP-13] arrBVT_INV:", arrBVT_INV.length);
+                console.log("[PL_PRINT][STEP-13] arrSHINTS_INV:", arrSHINTS_INV.length);
+
+
+                // ----------------------------------------------------------
+                // Step-14 : Vendor / PO 객체에 INV 데이터 매핑
+                //  - vendor_cd 기준으로 arrVendorObj[i].inv에 push
+                //  - po_cd 기준으로 arrPoObj[i].inv에 push
+                // ----------------------------------------------------------
+                console.log("[PL_PRINT][STEP-14] Map INV to Vendor/PO Start");
+
+                arrBVT_INV.forEach((col) => {
+
+                    var saveObj = { ...col };
+
+                    // Vendor 매핑
+                    var findIdx = -1;
+
+                    arrVendorObj.forEach((col1, i1) => {
+                        if (col1.vendor_cd === saveObj.vendor_cd) findIdx = i1;
+                    });
+
+                    if (findIdx >= 0) {
+                        var tObj1 = { ...arrVendorObj[findIdx] };
+                        tObj1.inv.push(saveObj);
+                        arrVendorObj[findIdx] = { ...tObj1 };
+                    }
+
+                    // PO 매핑
+                    findIdx = -1;
+
+                    arrPoObj.forEach((col1, i1) => {
+                        if (col1.po_cd === saveObj.po_cd) findIdx = i1;
+                    });
+
+                    if (findIdx >= 0) {
+                        var tObj1 = { ...arrPoObj[findIdx] };
+                        tObj1.inv.push(saveObj);
+                        arrPoObj[findIdx] = { ...tObj1 };
+                    }
+                });
+
+                console.log("[PL_PRINT][STEP-14] Map INV Done");
+
+
+                // ----------------------------------------------------------
+                // Step-15 : 동일 matl_name 기준으로 Invoice 집계
+                //  - 같은 matl_name이면 out_qty/amt/weight 합산
+                //  - 최종적으로 arrBVT_INV / arrSHINTS_INV 를 집계된 배열로 교체
+                // ----------------------------------------------------------
+                console.log("[PL_PRINT][STEP-15] Group INV By matl_name Start");
+
+                var tArrayTmp = [];
+                var tArrayTmp_Shints = [];
+                var saveObj = {};
+                var strTotalPLAmt1 = 0;
+                var totalInQty = 0;
+
+                arrBVT_INV.forEach((col, i) => {
+
+                    if (i === 0) {
+                        saveObj = { ...col };
+                    }
+                    else {
+
+                        if (col.matl_name.trim() === saveObj.matl_name.trim()) {
+
+                            // 같은 자재명이면 합산
+                            saveObj.amt = parseFloat(saveObj.amt) + parseFloat(col.amt);
+                            saveObj.out_qty = parseFloat(saveObj.out_qty) + parseFloat(col.out_qty);
+                            saveObj.weight = parseFloat(saveObj.weight) + parseFloat(col.weight);
+                        }
+                        else {
+
+                            // 그룹 종료시 usd/amt/out_qty/weight 정리
+                            saveObj.usd = parseFloat(saveObj.amt) / parseFloat(saveObj.out_qty);
+                            saveObj.amt = parseFloat(parseFloat(saveObj.amt).toFixed(2));
+                            saveObj.out_qty = parseFloat(parseFloat(saveObj.out_qty).toFixed(2));
+                            saveObj.weight = parseFloat(parseFloat(saveObj.weight).toFixed(4));
+                            saveObj.usd = parseFloat(parseFloat(saveObj.usd).toFixed(4));
+
+                            // Total 금액/수량 누적
+                            strTotalPLAmt1 += parseFloat(saveObj.usd) * parseFloat(saveObj.out_qty);
+                            totalInQty += parseFloat(saveObj.out_qty);
+
+                            tArrayTmp.push(saveObj);
+
+                            // permit='N'은 Shints용
+                            if (saveObj.permit === 'N')
+                                tArrayTmp_Shints.push(saveObj);
+
+                            // 다음 그룹 시작
+                            saveObj = { ...col };
+                        }
+                    }
+                });
+
+                // 마지막 그룹 처리
+                saveObj.usd = parseFloat(parseFloat(saveObj.usd).toFixed(4));
+
+                strTotalPLAmt1 += parseFloat(saveObj.usd) * parseFloat(saveObj.out_qty);
+                strTotalPLAmt1 = parseFloat(strTotalPLAmt1.toFixed(2));
+
+                totalInQty += parseFloat(saveObj.out_qty);
+
+                tArrayTmp.push(saveObj);
+
+                if (saveObj.permit === 'N')
+                    tArrayTmp_Shints.push(saveObj);
+
+                console.log("[PL_PRINT][STEP-15] Grouped INV Count:", tArrayTmp.length);
+                console.log("[PL_PRINT][STEP-15] Grouped SHINTS INV Count:", tArrayTmp_Shints.length);
+                console.log("[PL_PRINT][STEP-15] strTotalPLAmt1:", strTotalPLAmt1);
+                console.log("[PL_PRINT][STEP-15] totalInQty:", totalInQty);
+
+                // 집계된 배열로 교체
+                arrBVT_INV = [ ...tArrayTmp ];
+                arrSHINTS_INV = [ ...tArrayTmp_Shints ];
+
+
+                // ----------------------------------------------------------
+                // Step-16 : Vendor별 weight 합계 계산 (inv에 들어있는 weight 합산)
+                // ----------------------------------------------------------
+                console.log("[PL_PRINT][STEP-16] Vendor Weight Sum Start");
+
+                arrVendorObj.forEach((col0, i0) => {
+
+                    var tObj0 = { ...col0 };
+
+                    var sWeight = 0;
+
+                    tObj0.inv.forEach((col) => {
+                        sWeight += parseFloat(col.weight);
+                    });
+
+                    tObj0.weight = parseFloat(sWeight);
+
+                    arrVendorObj[i0] = { ...tObj0 };
+                });
+
+                console.log("[PL_PRINT][STEP-16] Vendor Weight Sum Done");
+                console.log("[PL_PRINT][STEP-16] (End) Invoice Query");
+
+                // ----------------------------------------------------------
+                // Step-17 : PAC Query 실행
+                //  - Packing List 상세 데이터 조회
+                // ----------------------------------------------------------
+                console.log("[PL_PRINT][STEP-17] PAC Query Start");
+
+                let sql_PAC = `
+                    select kk.* from
+                    (
+                    select  c.vendor_name, a.stsout_cd, a.remark, a.po_cd, a.ct_qty, a.matl_cd, b.matl_name, b.color, b.spec, b.unit, a.out_qty, a.ct_no,
+                            CASE
+                                WHEN ISNULL(B.matl_type, '') <> 'M' THEN ''
+                                WHEN ISNULL(j.comp2, '') = '' THEN j.comp1 + ' ' + CONVERT(varchar, j.comp1_percent) + '%'
+                                WHEN ISNULL(j.comp3, '') = '' THEN j.comp1 + ' ' + CONVERT(varchar, j.comp1_percent) + '%/' +
+                                                            j.comp2 + ' ' + CONVERT(varchar, j.comp2_percent) + '%'
+                                WHEN ISNULL(j.comp4, '') = '' THEN j.comp1 + ' ' + CONVERT(varchar, j.comp1_percent) + '%/' +
+                                                            j.comp2 + ' ' + CONVERT(varchar, j.comp2_percent) + '%/' +
+                                                            j.comp3 + ' ' + CONVERT(varchar, j.comp3_percent) + '%'
+                                ELSE j.comp1 + ' ' + CONVERT(varchar, j.comp1_percent) + '%/' +
+                                    j.comp2 + ' ' + CONVERT(varchar, j.comp2_percent) + '%/' +
+                                    j.comp3 + ' ' + CONVERT(varchar, j.comp3_percent) + '%/' +
+                                    j.comp4 + ' ' + CONVERT(varchar, j.comp4_percent) + '%'
+                            END AS comp_str,
+                            e1.hs_cd, e1.hs_name, p.offer_spec
+                    from ksv_stock_out a ,
+                        kcd_matl_mst b
+                        left join kcd_composition j on j.matl_name = b.matl_name
+                        left join kcd_hscode e1 on e1.hs_no = b.hs_cd
+                        left join KCD_offer_spec p on b.matl_name = p.matl_Name and b.spec = p.spec,
+                        kcd_vendor c , kcd_buyer d, kcd_user e
+                    where a.pack_cd = '${tPackCd}'
+                    and  left(a.order_cd, 2) = d.buyer_cd
+                    and  d.reg_user = e.user_id
+                    and  e.company_code = '${company}'
+                    and  a.matl_cd = b.matl_cd
+                    and  b.vendor_cd = c.vendor_cd
+                    and  left(a.stsout_cd, 6) <> 'SOTMP-'
+                    and  a.stsout_cd in (${sqlStsoutCd9})
+
+                    union all
+
+                    SELECT  j.vendor_name, a.stsout_cd, '' as remark , a.po_cd, A0.ct_qty, a.matl_cd, c.matl_name, c.color, c.spec, c.unit, a.qty, '' as ct_no,
+                            '' as comp_str, '' as hs_cd, '' as hs_name, '' as offer_spec
+                    FROM
+                            KZZ_FREIGHT A
+                            JOIN KSV_SHIPMENT_MEM A0 ON A.STSOUT_CD = A0.STSOUT_CD
+                            LEFT JOIN KCD_MATL_MST C ON A.MATL_CD = C.MATL_CD
+                            LEFT JOIN KCD_VENDOR j ON j.vendor_cd = C.vendor_cd
+                    WHERE    A.STSOUT_CD LIKE 'SOTMP-%'
+                    and     A.STSOUT_CD in (
+                            select distinct stsout_cd  from ksv_shipment_mem
+                                where shipment_cd in (
+                                    select distinct shipment_cd from ksv_shipment_mst where remark = '${tPackCd}'
+                                    )
+                            )
+                            ${nsrSql}
+                    ) kk
+                    order by kk.vendor_name, kk.stsout_cd, kk.remark, kk.po_cd, kk.ct_qty, kk.matl_name, kk.out_qty
+                `;
+
+                console.log(sql_PAC);
+
+                var ret_PAC = await prisma.$queryRaw(Prisma.raw(sql_PAC));
+
+                console.log("[PL_PRINT][STEP-17] PAC Row Count:", ret_PAC.length);
+
+                var saveObj9 = {};
+                var ptab_ctqty = 0;
+                var sum_p_pac = 0;
+                var vendor_ctqty = 0;
+
+                // ----------------------------------------------------------
+                // Step-18 : PAC 데이터 가공
+                // ----------------------------------------------------------
+                ret_PAC.forEach((col9, i9) => {
+
+                    var tObj0 = { ...col9 };
+
+                    var pCtQty = 0;
+
+                    if (i9 === 0) {
+                        saveObj9 = { ...col9 };
+                        pCtQty = parseFloat(saveObj9.ct_qty);
+                    }
+                    else {
+
+                        if (
+                            col9.vendor_name === saveObj9.vendor_name &&
+                            col9.remark !== '' &&
+                            col9.remark === saveObj9.remark &&
+                            col9.ct_qty === saveObj9.ct_qty
+                        ) {
+                            pCtQty = 0;
+                        }
+                        else if (
+                            col9.vendor_name === saveObj9.vendor_name &&
+                            col9.remark === '' &&
+                            col9.po_cd === saveObj9.po_cd &&
+                            col9.ct_qty === saveObj9.ct_qty
+                        ) {
+                            pCtQty = 0;
+                        }
+                        else {
+                            pCtQty = parseFloat(col9.ct_qty);
+                            ptab_ctqty += parseFloat(saveObj9.ct_qty);
+                        }
+
+                        saveObj9 = { ...col9 };
+                    }
+
+                    tObj0.ct_qty = parseFloat(pCtQty);
+
+                    sum_p_pac += parseFloat(tObj0.out_qty);
+
+                    arrP_PAC.push(tObj0);
+
+                    // ----------------------------------------------------------
+                    // PO별 PAC 데이터 매핑
+                    // ----------------------------------------------------------
+                    var findIdx = -1;
+
+                    arrPoObj.forEach((col1, i1) => {
+                        if (col1.po_cd === col9.po_cd) findIdx = i1;
+                    });
+
+                    if (findIdx >= 0) {
+                        var tObj1 = { ...arrPoObj[findIdx] };
+                        tObj1.pac.push(tObj0);
+                        arrPoObj[findIdx] = { ...tObj1 };
+                    }
+
+                    // ----------------------------------------------------------
+                    // Vendor별 PAC 데이터 매핑
+                    // ----------------------------------------------------------
+                    findIdx = -1;
+
+                    arrVendorObj.forEach((col1, i1) => {
+                        if (col1.vendor_name === col9.vendor_name) findIdx = i1;
+                    });
+
+                    if (findIdx >= 0) {
+
+                        var tObj1 = { ...arrVendorObj[findIdx] };
+
+                        vendor_ctqty += parseFloat(tObj0.ct_qty);
+
+                        tObj1.pac.push(tObj0);
+
+                        arrVendorObj[findIdx] = { ...tObj1 };
+                    }
+                });
+
+                ptab_ctqty += parseFloat(saveObj9.ct_qty);
+
+                console.log("[PL_PRINT][STEP-18] arrP_PAC Count:", arrP_PAC.length);
+                console.log("[PL_PRINT][STEP-18] sum_p_pac:", sum_p_pac);
+
+
+                // ----------------------------------------------------------
+                // Step-19 : STS.INVOICE 시트 생성
+                // ----------------------------------------------------------
+                console.log("[PL_PRINT][STEP-19] STS.INVOICE Sheet Write");
+
+                var tSheetName = `STS.INVOICE`;
+                var sheet = wb.getWorksheet(tSheetName);
+
+                sheet.properties.showGridLines = false;
+
+                var tRowIdx = 4;
+                var tIdx99 = 0;
+
+                var tTotAmt = 0;
+                var tSumOutQty = 0;
+                var tSumNetWeight = 0;
+
+                console.log("[PL_PRINT][STEP-19] SHINTS_INV Count:", arrSHINTS_INV.length);
+
+                for (tIdx99 = 0; tIdx99 < arrSHINTS_INV.length; tIdx99++) {
+
+                    var col = { ...arrSHINTS_INV[tIdx99] };
+
+                    if (tIdx99 > 0) {
+                        var tmpRow = [];
+                        sheet.insertRow(tRowIdx, tmpRow, 'i');
+                    }
+
+                    sheet.getCell(tRowIdx, 1).value = tIdx99 + 1;
+                    sheet.getCell(tRowIdx, 2).value = col.hs_cd;
+                    sheet.getCell(tRowIdx, 3).value = col.matl_name;
+                    sheet.getCell(tRowIdx, 4).value = Number(col.usd);
+                    sheet.getCell(tRowIdx, 5).value = parseFloat(col.out_qty);
+
+                    tSumOutQty += parseFloat(col.out_qty);
+
+                    sheet.getCell(tRowIdx, 6).value = col.unit;
+
+                    var tAmount = parseFloat(col.usd) * parseFloat(col.out_qty);
+
+                    col.amt = parseFloat(tAmount.toFixed(2));
+
+                    sheet.getCell(tRowIdx, 7).value = Number(col.amt);
+
+                    tTotAmt += parseFloat(col.amt);
+
+                    sheet.getCell(tRowIdx, 8).value = col.nat_name;
+                    sheet.getCell(tRowIdx, 9).value = Number(col.weight);
+
+                    tSumNetWeight += parseFloat(col.weight);
+
+                    sheet.getCell(tRowIdx, 10).value = 'kg';
+                    sheet.getCell(tRowIdx, 11).value = col.width;
+                    sheet.getCell(tRowIdx, 12).value = col.comp_str;
+
+                    tRowIdx++;
+                }
+
+                console.log("[PL_PRINT][STEP-19] STS.INVOICE Total Amt:", tTotAmt);
+
+                // 합계 행
+                sheet.getCell(tRowIdx, 5).value = { formula: `=SUM(E4:E${tRowIdx-1})` };
+                sheet.getCell(tRowIdx, 7).value = { formula: `=SUM(G4:G${tRowIdx-1})` };
+                sheet.getCell(tRowIdx, 9).value = { formula: `=SUM(I4:I${tRowIdx-1})` };
+
+                let stsInvoiceSumAmt = `'${sheet.name}'!G${tRowIdx}`;
+
+
+                // ----------------------------------------------------------
+                // Step-20 : SHINTS 시트 작성 (Shints Invoice Summary)
+                //  - 공장 정보/주소/ETD/금액/CT/Weight 등 셋팅
+                // ----------------------------------------------------------
+                console.log("[PL_PRINT][STEP-20] SHINTS Sheet Write Start");
+
+                tSheetName = `SHINTS`;
+                sheet = wb.getWorksheet(tSheetName);
+
+                // Shipment Mem + Stock Out MST 기준 CT/Weight 합계 조회
+                let sqlStr1_1 = `
+                select sum(f.ct_qty) as ct_qty,
+                        sum(f.weight) as weight,
+                        sum(isnull(f.gross_weight, f.weight)) as gross_weight
+                from
+                        ksv_shipment_mem a0, ksv_stock_out_mst f, kcd_user kcd_user
+                where  a0.shipment_cd = '${tInput.SHIPMENT_CD}'
+                and    a0.stsout_cd = f.stsout_cd
+                --
+                and    f.reg_user = kcd_user.user_id
+                and    kcd_user.company_code = '${company}'
+            `;
+
+                console.log("[PL_PRINT][STEP-20] SQL:\n", sqlStr1_1);
+
+                var tRet1_1 = await prisma.$queryRaw(Prisma.raw(sqlStr1_1));
+
+                console.log("[PL_PRINT][STEP-20] Result Count:", tRet1_1.length);
+
+                // Sender(출발지) 공장 정보
+                sheet.getCell(3, 1).value = strFacName;
+                sheet.getCell(4, 1).value = strAddr1;
+                sheet.getCell(5, 1).value = strAddr2;
+                sheet.getCell(6, 1).value = `TEL :${strTel} FAX :${strFax}`;
+
+                // Port of Loading (PACK 첫 글자 기준)
+                if (tPackCd.substring(0, 1) === 'S')
+                    sheet.getCell(18, 1).value = 'INCHEON, KOREA';
+                else if (tPackCd.substring(0, 1) === 'B') {
+                    sheet.getCell(18, 1).value = 'HAIPHONG, VIETNAM';
+                    if (shipMode !== '1' && shipMode !== '2') {
+                        // FCL/LCL이 아니면 HANOI로 처리
+                        sheet.getCell(18, 4).value = 'HANOI, VIETNAM';
+                    }
+                } else if (tPackCd.substring(0, 1) === 'E')
+                    sheet.getCell(18, 1).value = 'DJIBOUTI';
+                else {
+                    sheet.getCell(3, 1).value = '';
+                    sheet.getCell(4, 1).value = '';
+                    sheet.getCell(5, 1).value = '';
+                    sheet.getCell(6, 1).value = '';
+                    sheet.getCell(13, 1).value = '';
+                    sheet.getCell(14, 1).value = '';
+                    sheet.getCell(15, 1).value = '';
+                    sheet.getCell(18, 1).value = '';
+                }
+
+                // Receiver(도착지) 공장 정보
+                sheet.getCell(8, 1).value = strFacName2;
+                sheet.getCell(9, 1).value = strAddr12;
+                sheet.getCell(10, 1).value = strAddr22;
+                sheet.getCell(11, 1).value = `TEL :${strTel2} FAX :${strFax2}`;
+
+                // Port of Destination (PACK 3번째 글자 기준)
+                if (tPackCd.substring(2, 3) === 'S') {
+                    sheet.getCell(14, 1).value = 'THE SAME AS ABOVE';
+                    sheet.getCell(18, 4).value = 'INCHEON, KOREA';
+                } else if (tPackCd.substring(2, 3) === 'B') {
+                    sheet.getCell(14, 1).value = 'THE SAME AS ABOVE';
+                    sheet.getCell(18, 4).value = 'HAIPHONG, VIETNAM';
+                    if (shipMode !== '1' && shipMode !== '2') {
+                        sheet.getCell(18, 4).value = 'HANOI, VIETNAM';
+                    }
+                } else if (tPackCd.substring(2, 3) === 'E') {
+                    sheet.getCell(18, 4).value = 'BOLE LEMI BONDED WAREHOUSE, ETHIOPIA';
+                    if (shipMode !== '1' && shipMode !== '2') {
+                        sheet.getCell(18, 4).value = 'ADDIS ABABA, ETHIOPIA';
+                    }
+                } else {
+                    sheet.getCell(3, 1).value = '';
+                    sheet.getCell(4, 1).value = '';
+                    sheet.getCell(5, 1).value = '';
+                    sheet.getCell(6, 1).value = '';
+                    sheet.getCell(13, 1).value = '';
+                    sheet.getCell(14, 1).value = '';
+                    sheet.getCell(15, 1).value = '';
+                    sheet.getCell(18, 1).value = '';
+                }
+
+                // PACK NO
+                sheet.getCell(4, 7).value = tPackCd;
+
+                // ETD
+                let etd = moment(tShipmentObj.ETD, 'YYYYMMDD', true);
+                sheet.getCell(4, 11).value = etd.isValid() ? etd.toDate() : null;
+                sheet.getCell(4, 11).numFmt = 'DD-MMM-YY';
+
+                // STS.INVOICE 합계 금액을 SHINTS에 반영
+                sheet.getCell(29, 10).value = { formula: `${stsInvoiceSumAmt}` };
+
+                tInvoiceTotal += tTotAmt;
+
+                // CT / Net / Gross 입력
+                sheet.getCell(16, 9).value = parseFloat(ptab_ctqty) - parseFloat(vendor_ctqty);
+                sheet.getCell(17, 9).value = parseFloat(tSumNetWeight);
+
+                var tGross = parseFloat(tSumNetWeight) * 1.1;
+                sheet.getCell(18, 9).value = parseFloat(tGross);
+
+                // 기타 금액 계산식 입력 (수정하지 말것) : 1500달러 기준으로 비율 계산 + 보험료 0.026% 적용
+                sheet.getCell(13, 10).value = { formula: `=1500/${strTotalPLAmt1}*J29` };
+                sheet.getCell(14, 10).value = { formula: `=J29*1.1*0.026%` };
+
+                // ETP 특수 처리
+                sheet.getCell(24, 7).value = '';
+                if (tPackCd.substring(2, 3) === 'E') {
+                    sheet.getCell(12, 1).value = '';
+                    sheet.getCell(13, 1).value = '';
+                    sheet.getCell(14, 1).value = '';
+                    sheet.getCell(15, 1).value = '';
+                    sheet.getCell(16, 1).value = 'Port of loading :';
+                    sheet.getCell(17, 1).value = '';
+                    sheet.getCell(18, 1).value = '';
+                    sheet.getCell(19, 1).value = 'Carrier';
+                    sheet.getCell(20, 1).value = '';
+                    sheet.getCell(25, 8).value = '* CIF : DJIBOUTI';
+
+                    if (shipMode !== '1' && shipMode !== '2') {
+                        sheet.getCell(25, 8).value = '* CIF : ADDIS ABABA';
+                    }
+                }
+
+                console.log("[PL_PRINT][STEP-20] SHINTS Sheet Write Done");
+
+
+                // ----------------------------------------------------------
+                // Step-21 : 업체별(Vendor) 시트 생성
+                //  - base 시트(8번 index)를 첫 vendor 이름으로 변경
+                //  - 이후 vendor마다 cloneSheet
+                //  - inv 영역 + pac 영역을 채움
+                // ----------------------------------------------------------
+                console.log("[PL_PRINT][STEP-21] Vendor Sheets Start");
+
+                const baseVendorName = arrVendor[0];
+                const baseSheetIndex = 8;
+                const baseSheet = wb.worksheets[baseSheetIndex];
+
+                baseSheet.name = baseVendorName;
+
+                if (arrVendor.length === 0) {
+                    wb.removeWorksheet(baseSheet.id);
+                }
+
+                console.log("[PL_PRINT][STEP-21] Vendor Count:", arrVendor.length);
+
+                // 사인 이미지 ID는 한번만 생성
+                const imageId = wb.addImage({
+                    filename: `${tPath0}/sign.png`,
+                    extension: 'png',
+                });
+
+                // Vendor별 시트 채우기
+                for (let tIdx2 = 0; tIdx2 < arrVendorObj.length; tIdx2++) {
+
+                    const vendorObj = { ...arrVendorObj[tIdx2] };
+                    const vendorName = vendorObj.vendor_name;
+
+                    console.log("[PL_PRINT][STEP-21] Vendor Sheet:", vendorName);
+
+                    // 첫번째는 baseSheet 사용, 두번째부터 clone
+                    if (tIdx2 > 0) {
+                        excelLib.cloneSheet(baseSheet, wb, vendorName);
+                    }
+
+                    const sheet = wb.worksheets[tIdx2 + 8];
+
+                    // GridLine off
+                    if (sheet.views && sheet.views.length > 0) {
+                        sheet.views[0].showGridLines = false;
+                    } else {
+                        sheet.views = [{ showGridLines: false }];
+                    }
+
+                    // 공장 정보 채우기
+                    sheet.getCell(3, 1).value = strFacName;
+                    sheet.getCell(4, 1).value = strAddr1;
+                    sheet.getCell(5, 1).value = strAddr2;
+                    sheet.getCell(6, 1).value = `TEL :${strTel} FAX :${strFax}`;
+
+                    sheet.getCell(8, 1).value = strFacName2;
+                    sheet.getCell(9, 1).value = strAddr12;
+                    sheet.getCell(10, 1).value = strAddr22;
+                    sheet.getCell(11, 1).value = `TEL :${strTel2} FAX :${strFax2}`;
+
+                    // PACK NO / ETD
+                    sheet.getCell(4, 7).value = tPackCd;
+
+                    const etd = moment(tShipmentObj.ETD, 'YYYYMMDD', true);
+                    sheet.getCell(4, 11).value = etd.isValid() ? etd.toDate() : null;
+                    sheet.getCell(4, 11).numFmt = 'DD-MMM-YY';
+
+                    // ---------------- INV 영역 ----------------
+                    let tRowIdx = 27;
+                    let tTotAmt = 0;
+                    let tSumNetWeight = 0;
+                    let tSumGrossWeight = 0;
+
+                    for (let i = 0; i < vendorObj.inv.length; i++) {
+
+                        const col = { ...vendorObj.inv[i] };
+
+                        if (i > 0) {
+                            sheet.insertRow(tRowIdx, [], 'i');
+                        }
+
+                        sheet.getCell(tRowIdx, 4).value = col.matl_name;
+                        sheet.getCell(tRowIdx, 7).value = parseFloat(col.out_qty);
+                        sheet.getCell(tRowIdx, 8).value = col.unit;
+                        sheet.getCell(tRowIdx, 9).value = parseFloat(col.usd);
+
+                        // Amount = Qty * UnitPrice
+                        sheet.getCell(tRowIdx, 10).value = { formula: `=G${tRowIdx}*I${tRowIdx}` };
+
+                        const weight = parseFloat(col.weight);
+
+                        sheet.getCell(tRowIdx, 11).value = weight;
+
+                        tTotAmt += parseFloat(col.usd) * parseFloat(col.out_qty);
+                        tSumNetWeight += weight;
+                        tSumGrossWeight += weight * 1.1;
+
+                        tRowIdx++;
+                    }
+
+                    // inv가 없으면 한 줄 내려주기
+                    if (vendorObj.inv.length <= 0) {
+                        tRowIdx++;
+                    }
+
+                    // Net/Gross 셋팅
+                    sheet.getCell(17, 9).value = tSumNetWeight;
+                    sheet.getCell(18, 9).value = tSumGrossWeight;
+
+                    // 보험료 계산식 입력 (수정하지 말것) : 1500달러 기준으로 비율 계산 + 보험료 0.026% 적용
+                    sheet.getCell(13, 10).value = { formula: `=1500/${strTotalPLAmt1}*${tTotAmt}` };
+                    sheet.getCell(14, 10).value = { formula: `=${tTotAmt}*1.1*0.026%` };
+
+                    // INV 합계
+                    sheet.getCell(tRowIdx, 10).value = { formula: `=SUM(J27:J${tRowIdx - 1})` };
+                    sheet.getCell(tRowIdx, 11).value = { formula: `=SUM(K27:K${tRowIdx - 1})` };
+
+                    // ---------------- PAC 시작 위치 탐색 ----------------
+                    // 시트 내에서 'DESC/SPEC' 라벨을 찾아 그 다음 줄에 PAC 출력
+                    let pacStartRow = null;
+
+                    sheet.eachRow((row, rowNumber) => {
+                        const val = sheet.getCell(rowNumber, 1).value;
+                        if (val && val.toString().trim() === 'DESC/SPEC') {
+                            pacStartRow = rowNumber + 1;
+                        }
+                    });
+
+                    if (!pacStartRow) {
+                        pacStartRow = tRowIdx + 3;
+                    }
+
+                    tRowIdx = pacStartRow;
+
+                    const printedSet = new Set();
+
+                    // ---------------- PAC 영역 ----------------
+                    // spec/hs/offer_spec/matl_name 기준으로 중복행 제거 후 출력
+                    var s_vendor_ctqty = 0;
+
+                    for (let i = 0; i < vendorObj.pac.length; i++) {
+                        const col = { ...vendorObj.pac[i] };
+
+                        s_vendor_ctqty += parseFloat(col.ct_qty);
+
+                        const key = [
+                            col.spec || '',
+                            col.hs_cd || '',
+                            col.offer_spec || '',
+                            col.matl_name || ''
+                        ].join('||');
+
+                        if (printedSet.has(key)) {
+                            continue;
+                        }
+
+                        printedSet.add(key);
+
+                        if (printedSet.size > 1) {
+                            sheet.insertRow(tRowIdx, [], 'i');
+                        }
+
+                        // PAC 라인 채움
+                        sheet.getCell(tRowIdx, 1).value = col.spec;
+                        sheet.getCell(tRowIdx, 4).value = col.hs_cd;
+                        sheet.getCell(tRowIdx, 6).value = col.offer_spec;
+                        sheet.getCell(tRowIdx, 12).value = col.matl_name;
+
+                        // 병합 및 테두리
+                        safeMerge(sheet, `A${tRowIdx}:C${tRowIdx}`);
+                        safeMerge(sheet, `D${tRowIdx}:E${tRowIdx}`);
+                        safeMerge(sheet, `F${tRowIdx}:K${tRowIdx}`);
+
+                        applyBorder(sheet, tRowIdx, 1, 12, 'thin');
+
+                        tRowIdx++;
+                    }
+
+                    // Vendor별 CT 수량 출력
+                    sheet.getCell(16, 9).value = s_vendor_ctqty;
+
+                    console.log("[PL_PRINT][STEP-21] Vendor Sheet Done:", vendorName);
+                }
+
+                // ----------------------------------------------------------
+                // Step-22 : 모든 Vendor 시트에 사인 이미지 삽입
+                //  - rowCount 기준 아래쪽에 표시
+                // ----------------------------------------------------------
+                console.log("[PL_PRINT][STEP-22] Sign Image Insert Start");
+
+                for (let i = 0; i < arrVendorObj.length; i++) {
+
+                    const sheet = wb.worksheets[i + 8];
+
+                    // 기존 로직 유지: rowCount - 6 라인에 삽입
+                    const signRow = sheet.rowCount - 6;
+
+                    sheet.addImage(imageId, {
+                        tl: { col: 8, row: signRow },
+                        ext: { width: 210, height: 110 }
+                    });
+                }
+
+                console.log("[PL_PRINT][STEP-22] Sign Image Insert Done");
+
+
+                // ----------------------------------------------------------
+                // Step-23 : P 탭 작성 (PAC 전체를 리스트 형태로 기록)
+                //  - 이후 G/H/I 병합 로직 수행
+                // ----------------------------------------------------------
+                console.log("[PL_PRINT][STEP-23] P Tab Write Start");
+
+                tSheetName = `P`;
+                sheet = wb.getWorksheet(tSheetName);
+
+                var tRowIdx = 4;
+
+                arrP_PAC.forEach((col9, i9) => {
+
+                    if (i9 > 0) {
+                        sheet.insertRow(tRowIdx, [], 'i');
+                    }
+
+                    sheet.getCell(tRowIdx, 1).value = col9.vendor_name;
+                    sheet.getCell(tRowIdx, 2).value = col9.matl_name;
+                    sheet.getCell(tRowIdx, 3).value = col9.color;
+                    sheet.getCell(tRowIdx, 4).value = col9.spec;
+                    sheet.getCell(tRowIdx, 5).value = col9.unit;
+                    sheet.getCell(tRowIdx, 6).value = parseFloat(col9.out_qty);
+                    sheet.getCell(tRowIdx, 7).value = parseFloat(col9.ct_qty);
+                    sheet.getCell(tRowIdx, 8).value = col9.ct_no;
+                    sheet.getCell(tRowIdx, 9).value = col9.remark;
+
+                    tRowIdx++;
+                });
+
+                // ----------------------------------------------------------
+                // Step-23-1 : P 탭에서 G열 기준으로 그룹 병합
+                //  - G 값이 0이 아닌 곳(>0)을 그룹 시작으로 보고
+                //    다음 그룹 시작 전까지 G/H/I 병합
+                // ----------------------------------------------------------
+                console.log("[PL_PRINT][STEP-23-1] P Tab Merge Start");
+
+                const startRow = 4;
+                const endRow = tRowIdx - 1;
+
+                let groupStartRow = null;
+
+                for (let r = startRow; r <= endRow; r++) {
+                    const gVal = toNumber(sheet.getCell(r, 7).value); // G열(ct_qty)
+
+                    const isGroupStart = gVal > 0;
+
+                    if (isGroupStart) {
+
+                        // 이전 그룹 병합 마감
+                        if (groupStartRow !== null && groupStartRow < r - 1) {
+
+                            sheet.mergeCells(`G${groupStartRow}:G${r - 1}`);
+                            sheet.mergeCells(`H${groupStartRow}:H${r - 1}`);
+                            sheet.mergeCells(`I${groupStartRow}:I${r - 1}`);
+                        }
+
+                        groupStartRow = r;
+                    }
+
+                    // 마지막 행 처리
+                    if (r === endRow && groupStartRow !== null && groupStartRow < r) {
+
+                        sheet.mergeCells(`G${groupStartRow}:G${r}`);
+                        sheet.mergeCells(`H${groupStartRow}:H${r}`);
+                        sheet.mergeCells(`I${groupStartRow}:I${r}`);
+                    }
+                }
+
+                console.log("[PL_PRINT][STEP-23-1] P Tab Merge Done");
+
+                // P 탭 합계 라인
+                sheet.getCell(tRowIdx, 6).value = { formula: `=SUM(F4:F${tRowIdx-1})` };
+
+                // (수정하지 말것) CT 합계는 SUM으로 계산
+                sheet.getCell(tRowIdx, 7).value = { formula: `=SUM(G4:G${tRowIdx-1})` };
+
+                console.log("[PL_PRINT][STEP-23] P Tab Write Done");
+
+
+
+                // ----------------------------------------------------------
+                // Step-24 : BVT.INV Tab 작성
+                //  - arrBVT_INV 기준으로 전체 Invoice 리스트 출력
+                //  - 마지막 합계행(I열 합계 셀 주소를 bvtInvGrandTotalWeightCell로 저장 (PAC에서 사용)
+                // ----------------------------------------------------------
+                console.log("[PL_PRINT][STEP-24] BVT.INV Sheet Write Start");
+
+                tSheetName = `BVT.INV`;
+                sheet = wb.getWorksheet(tSheetName);
+
+                var tBvtInvLastRow = 0;
+
+                var tRowIdx = 4;
+                var tIdx99 = 0;
+
+                let bvtInvGrandTotalWeightCell;
+
+                for (tIdx99 = 0; tIdx99 < arrBVT_INV.length; tIdx99++) {
+
+                    var col = { ...arrBVT_INV[tIdx99] };
+
+                    if (tIdx99 > 0) {
+                        sheet.insertRow(tRowIdx, [], 'i');
+                    }
+
+                    console.log("[PL_PRINT][STEP-24] BVT.INV Row:", tIdx99, col.matl_name, col.out_qty);
+
+                    sheet.getCell(tRowIdx, 1).value = parseInt(tIdx99 + 1);
+                    sheet.getCell(tRowIdx, 2).value = col.hs_cd;
+                    sheet.getCell(tRowIdx, 3).value = col.matl_name;
+                    sheet.getCell(tRowIdx, 4).value = Number(col.usd);
+                    sheet.getCell(tRowIdx, 5).value = parseFloat(col.out_qty);
+                    sheet.getCell(tRowIdx, 6).value = col.unit;
+
+                    var tAmount = parseFloat(col.usd) * parseFloat(col.out_qty);
+
+                    sheet.getCell(tRowIdx, 7).value = Number(parseFloat(tAmount.toFixed(2)));
+                    sheet.getCell(tRowIdx, 8).value = col.nat_name;
+                    sheet.getCell(tRowIdx, 9).value = parseFloat(col.weight);
+
+                    sheet.getCell(tRowIdx, 10).value = 'kg';
+                    sheet.getCell(tRowIdx, 11).value = col.hs_name;
+                    sheet.getCell(tRowIdx, 12).value = col.width;
+
+                    // 기존 코드에 comp1을 넣고 있었는데, 실제 컬럼은 comp_str로 내려옴
+                    // 템플릿 구조에 따라 comp1이 실제로 존재하면 그대로 유지 가능
+                    sheet.getCell(tRowIdx, 13).value = col.comp1 || col.comp_str || '';
+
+                    tRowIdx++;
+                }
+
+                tBvtInvLastRow = tRowIdx;
+
+                // 합계 행 공식
+                sheet.getCell(tRowIdx, 5).value = { formula: `=SUM(E4:E${tRowIdx - 1})` };
+                sheet.getCell(tRowIdx, 7).value = { formula: `=SUM(G4:G${tRowIdx - 1})` };
+                sheet.getCell(tRowIdx, 9).value = { formula: `=SUM(I4:I${tRowIdx - 1})` };
+
+                // PAC 탭에서 참조할 BVT.INV 총 Weight 셀 주소 저장
+                bvtInvGrandTotalWeightCell = `'${sheet.name}'!I${tRowIdx}`;
+
+                console.log("[PL_PRINT][STEP-24] BVT.INV Sheet Write Done, GrandWeightCell:", bvtInvGrandTotalWeightCell);
+
+
+                // ----------------------------------------------------------
+                // Step-25 : C.INV Tab 작성
+                //  - 공장/주소/ETD/Total Amount 등 기본 셋팅
+                // ----------------------------------------------------------
+                console.log("[PL_PRINT][STEP-25] C.INV Sheet Write Start");
+
+                tSheetName = `C.INV`;
+                sheet = wb.getWorksheet(tSheetName);
+
+                sheet.getCell(3, 1).value = strFacName;
+                sheet.getCell(4, 1).value = strAddr1;
+                sheet.getCell(5, 1).value = strAddr2;
+                sheet.getCell(6, 1).value = `TEL :${strTel} FAX :${strFax}`;
+
+                if (tPackCd.substring(0, 1) === 'S')
+                    sheet.getCell(18, 1).value = 'INCHEON, KOREA';
+                else if (tPackCd.substring(0, 1) === 'B') {
+                    sheet.getCell(18, 1).value = 'HAIPHONG, VIETNAM';
+                    if (shipMode !== '1' && shipMode !== '2') {
+                        sheet.getCell(18, 4).value = 'HANOI, VIETNAM';
+                    }
+                } else if (tPackCd.substring(0, 1) === 'E')
+                    sheet.getCell(18, 1).value = 'DJIBOUTI';
+                else {
+                    sheet.getCell(3, 1).value = '';
+                    sheet.getCell(4, 1).value = '';
+                    sheet.getCell(5, 1).value = '';
+                    sheet.getCell(6, 1).value = '';
+                    sheet.getCell(13, 1).value = '';
+                    sheet.getCell(14, 1).value = '';
+                    sheet.getCell(15, 1).value = '';
+                    sheet.getCell(18, 1).value = '';
+                }
+
+                sheet.getCell(8, 1).value = strFacName2;
+                sheet.getCell(9, 1).value = strAddr12;
+                sheet.getCell(10, 1).value = strAddr22;
+                sheet.getCell(11, 1).value = `TEL :${strTel2} FAX :${strFax2}`;
+
+                if (tPackCd.substring(2, 3) === 'S') {
+                    sheet.getCell(14, 1).value = 'THE SAME AS ABOVE';
+                    sheet.getCell(18, 4).value = 'INCHEON, KOREA';
+                } else if (tPackCd.substring(2, 3) === 'B') {
+                    sheet.getCell(14, 1).value = 'THE SAME AS ABOVE';
+                    sheet.getCell(18, 4).value = 'HAIPHONG, VIETNAM';
+                    if (shipMode !== '1' && shipMode !== '2') {
+                        sheet.getCell(18, 4).value = 'HANOI, VIETNAM';
+                    }
+                } else if (tPackCd.substring(2, 3) === 'E') {
+                    sheet.getCell(24, 7).value = '';
+                    sheet.getCell(18, 4).value = 'BOLE LEMI BONDED WAREHOUSE, ETHIOPIA';
+                    if (shipMode !== '1' && shipMode !== '2') {
+                        sheet.getCell(18, 4).value = 'ADDIS ABABA, ETHIOPIA';
+                    }
+                } else {
+                    sheet.getCell(3, 1).value = '';
+                    sheet.getCell(4, 1).value = '';
+                    sheet.getCell(5, 1).value = '';
+                    sheet.getCell(6, 1).value = '';
+                    sheet.getCell(13, 1).value = '';
+                    sheet.getCell(14, 1).value = '';
+                    sheet.getCell(15, 1).value = '';
+                    sheet.getCell(18, 1).value = '';
+                }
+
+                sheet.getCell(4, 7).value = tPackCd;
+
+                etd = moment(tShipmentObj.ETD, 'YYYYMMDD', true);
+                sheet.getCell(4, 11).value = etd.isValid() ? etd.toDate() : null;
+                sheet.getCell(4, 11).numFmt = 'DD-MMM-YY';
+
+                if (tPackCd.substring(2, 3) === 'E') {
+
+                    sheet.getCell(12, 1).value = '';
+                    sheet.getCell(13, 1).value = '';
+                    sheet.getCell(14, 1).value = '';
+                    sheet.getCell(15, 1).value = '';
+                    sheet.getCell(16, 1).value = 'Port of loading :';
+                    sheet.getCell(17, 1).value = '';
+                    sheet.getCell(18, 1).value = '';
+                    sheet.getCell(19, 1).value = 'Carrier';
+                    sheet.getCell(20, 1).value = '';
+                    sheet.getCell(24, 8).value = '* CIF : DJIBOUTI';
+
+                    if (shipMode !== '1' && shipMode !== '2') {
+                        sheet.getCell(24, 8).value = '* CIF : ADDIS ABABA';
+                    }
+
+                    sheet.getCell(30, 1).value = 'SHINTS ETP';
+                    sheet.getCell(33, 1).value = 'P/O NO :';
+                    sheet.getCell(34, 1).value = 'ITEM :';
+                    sheet.getCell(35, 1).value = 'C/T NO : :';
+                    sheet.getCell(36, 1).value = 'C/O :';
+                }
+
+                sheet.getCell(31, 10).value = { formula: `=VLOOKUP("GRAND TOTAL :",BVT.INV!B:I,6,0)` };
+
+                setBodyFont(sheet, tRowIdx, 1, 13);
+
+                console.log("[PL_PRINT][STEP-25] C.INV Sheet Write Done");
+
+
+                // ----------------------------------------------------------
+                // Step-26 : PAC Tab 작성 (Packing Summary)
+                //  - P 탭에서 TOTAL CT 수량을 가져오고
+                //  - BVT.INV Total Weight 를 가져와서
+                //  - Gross/Vol 계산까지 셋팅
+                // ----------------------------------------------------------
+                console.log("[PL_PRINT][STEP-26] PAC Sheet Write Start");
+
+                tSheetName = `PAC`;
+                sheet = wb.getWorksheet(tSheetName);
+
+                sheet.getCell(3, 1).value = strFacName;
+                sheet.getCell(4, 1).value = strAddr1;
+                sheet.getCell(5, 1).value = strAddr2;
+                sheet.getCell(6, 1).value = `TEL :${strTel} FAX :${strFax}`;
+
+                if (tPackCd.substring(0, 1) === 'S')
+                    sheet.getCell(18, 1).value = 'INCHEON, KOREA';
+                else if (tPackCd.substring(0, 1) === 'B') {
+                    sheet.getCell(18, 1).value = 'HAIPHONG, VIETNAM';
+                    if (shipMode !== '1' && shipMode !== '2') {
+                        sheet.getCell(18, 4).value = 'HANOI, VIETNAM';
+                    }
+                } else if (tPackCd.substring(0, 1) === 'E') {
+                    sheet.getCell(18, 1).value = 'DJIBOUTI';
+                    sheet.getCell(24, 7).value = '';
+                } else {
+                    sheet.getCell(3, 1).value = '';
+                    sheet.getCell(4, 1).value = '';
+                    sheet.getCell(5, 1).value = '';
+                    sheet.getCell(6, 1).value = '';
+                    sheet.getCell(13, 1).value = '';
+                    sheet.getCell(14, 1).value = '';
+                    sheet.getCell(15, 1).value = '';
+                    sheet.getCell(18, 1).value = '';
+                }
+
+                sheet.getCell(8, 1).value = strFacName2;
+                sheet.getCell(9, 1).value = strAddr12;
+                sheet.getCell(10, 1).value = strAddr22;
+                sheet.getCell(11, 1).value = `TEL :${strTel2} FAX :${strFax2}`;
+
+                if (tPackCd.substring(2, 3) === 'S') {
+                    sheet.getCell(14, 1).value = 'THE SAME AS ABOVE';
+                    sheet.getCell(18, 4).value = 'INCHEON, KOREA';
+                } else if (tPackCd.substring(2, 3) === 'B') {
+                    sheet.getCell(14, 1).value = 'THE SAME AS ABOVE';
+                    sheet.getCell(18, 4).value = 'HAIPHONG, VIETNAM';
+                    if (shipMode !== '1' && shipMode !== '2') {
+                        sheet.getCell(18, 4).value = 'HANOI, VIETNAM';
+                    }
+                } else if (tPackCd.substring(2, 3) === 'E') {
+                    sheet.getCell(24, 7).value = '';
+                    sheet.getCell(18, 4).value = 'BOLE LEMI BONDED WAREHOUSE, ETHIOPIA';
+                    if (shipMode !== '1' && shipMode !== '2') {
+                        sheet.getCell(18, 4).value = 'ADDIS ABABA, ETHIOPIA';
+                    }
+                } else {
+                    sheet.getCell(3, 1).value = '';
+                    sheet.getCell(4, 1).value = '';
+                    sheet.getCell(5, 1).value = '';
+                    sheet.getCell(6, 1).value = '';
+                    sheet.getCell(13, 1).value = '';
+                    sheet.getCell(14, 1).value = '';
+                    sheet.getCell(15, 1).value = '';
+                    sheet.getCell(18, 1).value = '';
+                }
+
+                sheet.getCell(4, 7).value = tPackCd;
+
+                etd = moment(tShipmentObj.ETD, 'YYYYMMDD', true);
+                sheet.getCell(4, 11).value = etd.isValid() ? etd.toDate() : null;
+                sheet.getCell(4, 11).numFmt = 'DD-MMM-YY';
+
+                // CT Qty (P 탭에서 TOTAL을 VLOOKUP)
+                sheet.getCell(25, 7).value = { formula: `=VLOOKUP("TOTAL",P!A:I,7,0)` };
+
+                // Net Weight (BVT.INV 합계셀 참조)
+                sheet.getCell(25, 9).value = { formula: `=${bvtInvGrandTotalWeightCell}` };
+
+                // Gross Weight = Net * 1.1
+                sheet.getCell(25, 10).value = { formula: `=I25*1.1` };
+
+                // Vol Weight = Gross / 166
+                sheet.getCell(25, 11).value = { formula: `=J25/166` };
+
+                if (tPackCd.substring(2, 3) === 'E') {
+
+                    sheet.getCell(12, 1).value = '';
+                    sheet.getCell(13, 1).value = '';
+                    sheet.getCell(14, 1).value = '';
+                    sheet.getCell(15, 1).value = '';
+                    sheet.getCell(16, 1).value = 'Port of loading :';
+                    sheet.getCell(17, 1).value = '';
+                    sheet.getCell(18, 1).value = '';
+                    sheet.getCell(19, 1).value = 'Carrier';
+                    sheet.getCell(20, 1).value = '';
+                    sheet.getCell(24, 8).value = '* CIF : DJIBOUTI';
+
+                    if (shipMode !== '1' && shipMode !== '2') {
+                        sheet.getCell(24, 8).value = '* CIF : ADDIS ABABA';
+                    }
+
+                    sheet.getCell(30, 1).value = 'SHINTS ETP';
+                    sheet.getCell(33, 1).value = 'P/O NO :';
+                    sheet.getCell(34, 1).value = 'ITEM :';
+                    sheet.getCell(35, 1).value = 'C/T NO : :';
+                    sheet.getCell(36, 1).value = 'C/O :';
+                }
+
+                console.log("[PL_PRINT][STEP-26] PAC Sheet Write Done");
+
+
+                // ----------------------------------------------------------
+                // Step-27 : D.INV Tab 시작
+                //  - PO별 Proforma Invoice 생성
+                // ----------------------------------------------------------
+                console.log("[PL_PRINT][STEP-27] D.INV Start");
+                tSheetName = `D.INV`;
+                sheet = wb.getWorksheet(tSheetName);
+                var tIdx2 = 0;
+                var tRowIdx = 1;
+                var gTotal = 0;
+
+                let grandTotalCellRefs = []; 
+                for (tIdx2 = 0; tIdx2 < arrPoObj.length; tIdx2++) {
+
+                    var objPo = { ...arrPoObj[tIdx2] };
+
+                    let sqlStr1 = `
+                        SELECT     
+                            C.ORDER_CD 
+                            , D.STYLE_NAME 
+                            , C.TOT_CNT 
+                            , C.DUE_DATE 
+                        FROM KSV_PO_MEM AS A INNER JOIN 
+                            KSV_PO_MST AS B ON A.PO_CD = B.PO_CD INNER JOIN 
+                            KCD_STYLE AS D INNER JOIN KSV_ORDER_MST AS C ON D.STYLE_CD = C.STYLE_CD ON A.ORDER_CD = C.ORDER_CD,
+                            kcd_buyer kcd_buyer,
+                            kcd_user kcd_user
+                        WHERE 1=1
+                            and B.PO_CD = '${objPo.po_cd}'
+                            --
+                            and left(c.order_cd,2) = kcd_buyer.buyer_cd
+                            and kcd_buyer.reg_user = kcd_user.user_id
+                            and kcd_user.company_code = '${company}'
+                        GROUP BY C.ORDER_CD, D.STYLE_NAME, C.TOT_CNT, C.DUE_DATE 
+                    `;
+                    let tRet1 = await prisma.$queryRaw(Prisma.raw(sqlStr1));
+                    if (tRet1.length > 0) {
+                        sheet.getCell(tRowIdx, 1).value = `PROFORMA INVOICE FOR ${objPo.po_cd}${objPo.buyer_cd}`;
+                        if (tIdx2 === 0)
+                            sheet.getCell(tRowIdx, 9).value = tPackCd;
+                        else
+                            sheet.getCell(tRowIdx, 9).value = '';
+
+                        tRowIdx += 3;
+                    }
+
+                    // ============ Order 라인 ==============
+                    for (let tIdx91 = 0; tIdx91 < tRet1.length; tIdx91++) {
+                        const tOne = {
+                            ...tRet1[tIdx91]
+                        };
+
+                        if (tIdx91 > 0) {
+                            const tmpRow = [];
+                            let insertedRow = sheet.insertRow(tRowIdx, tmpRow, 'i');
+                            insertedRow.eachCell({
+                                includeEmpty: true
+                            }, (cell, colNumber) => {
+                                if (colNumber === 6) {
+                                    cell.border = {};
+                                }
+                            });
+                        }
+
+                        sheet.getCell(tRowIdx, 1).value = tIdx91 + 1;
+                        sheet.getCell(tRowIdx, 2).value = tOne.ORDER_CD;
+                        sheet.getCell(tRowIdx, 3).value = tOne.STYLE_NAME;
+                        sheet.getCell(tRowIdx, 3).alignment = {
+                            horizontal: 'left'
+                        };
+
+                        const qty = parseFloat(tOne.TOT_CNT);
+                        const cQty = sheet.getCell(tRowIdx, 4);
+                        cQty.value = qty;
+                        cQty.alignment = {
+                            horizontal: 'right'
+                        };
+                        cQty.numFmt = '#,##0'; // 세 자리 콤마
+
+                        let dueDate = moment(tOne.DUE_DATE, 'YYYYMMDD', true);
+                        sheet.getCell(tRowIdx, 6).value = etd.isValid() ? etd.toDate() : null;
+                        sheet.getCell(tRowIdx, 6).numFmt = 'DD-MMM-YY';
+                        setBodyFont(sheet, tRowIdx, 1, 13);
+
+                        tRowIdx += 1;
+                    }
+
+                    // ============ 품목(HS) 라인 ==============
+                    tRowIdx++;
+                    // 헤더 행
+                    const headerRow = tRowIdx;
+                    sheet.getCell(headerRow, 1).value = 'No.';
+                    sheet.getCell(headerRow, 2).value = 'HS No';
+                    sheet.getCell(headerRow, 3).value = 'Hs Name';
+                    sheet.getCell(headerRow, 4).value = 'Unit Price';
+                    sheet.getCell(headerRow, 5).value = "Q'ty";
+                    sheet.getCell(headerRow, 6).value = 'Unit';
+                    sheet.getCell(headerRow, 7).value = "Amount";
+                    sheet.getCell(headerRow, 8).value = "Country";
+                    sheet.getCell(headerRow, 9).value = 'Weight';
+
+                    for (let c = 1; c <= 9; c++) {
+                        const cell = sheet.getCell(headerRow, c);
+                        cell.font = {
+                            name: '돋움',
+                            size: 10,
+                            bold: true
+                        };
+                        cell.alignment = {
+                            horizontal: 'left',
+                            vertical: 'middle'
+                        };
+                        cell.border = {
+                            top: {
+                                style: 'thin'
+                            },
+                            bottom: {
+                                style: 'thin'
+                            },
+                        };
+                    }
+
+                    tRowIdx += 1;
+                    let tTotAmt = 0;
+                    let tStartIdx = tRowIdx;
+
+                    for (let tIdx91 = 0; tIdx91 < objPo.inv.length; tIdx91++) {
+                        const tOne = {
+                            ...objPo.inv[tIdx91]
+                        };
+
+                        if (tIdx91 > 0) {
+                            const tmpRow = [];
+                            sheet.insertRow(tRowIdx, tmpRow, 'i');
+                        }
+
+                        sheet.getCell(tRowIdx, 1).value = tIdx91 + 1;
+                        sheet.getCell(tRowIdx, 2).value = tOne.hs_cd;
+                        sheet.getCell(tRowIdx, 3).value = tOne.matl_name;
+                        sheet.getCell(tRowIdx, 3).alignment = {
+                            horizontal: 'left'
+                        };
+
+                        // Unit Price
+                        const cUnitPrice = sheet.getCell(tRowIdx, 4);
+                        cUnitPrice.value = parseFloat(tOne.usd);
+                        cUnitPrice.alignment = {
+                            horizontal: 'right'
+                        };
+                        // cUnitPrice.numFmt = '#,##0.00';
+
+                        // Q'ty
+                        const qty = parseFloat(tOne.out_qty);
+                        const cQty = sheet.getCell(tRowIdx, 5);
+                        cQty.value = qty;
+                        cQty.alignment = {
+                            horizontal: 'right'
+                        };
+                        // cQty.numFmt = '#,##0';
+
+                        sheet.getCell(tRowIdx, 6).value = tOne.unit;
+
+                        // Amount
+                        const tAmount = parseFloat(tOne.usd) * qty;
+                        const cAmt = sheet.getCell(tRowIdx, 7);
+                        cAmt.value = tAmount;
+                        cAmt.alignment = {
+                            horizontal: 'right'
+                        };
+                        // cAmt.numFmt = '#,##0.00';
+                        tTotAmt += tAmount;
+
+                        sheet.getCell(tRowIdx, 8).value = tOne.nat_name;
+
+                        // Weight (I열) + 단위 g(J열)
+                        // let tWeight = (parseFloat(tOne.weight) / 1000.0) * qty;
+                        // let tWeight = parseFloat(tOne.weight) * 1000.0;
+                        // let tWeightInt = Math.floor(tWeight + 0.0000001);
+                        let tWeight = parseFloat(tOne.weight);
+
+                        const cWeight = sheet.getCell(tRowIdx, 9);
+                        cWeight.value = tWeight;
+                        cWeight.alignment = {
+                            horizontal: 'right'
+                        };
+                        // cWeight.numFmt = '#,##0';
+
+                        const cWeightUnit = sheet.getCell(tRowIdx, 10); // J 열
+                        cWeightUnit.value = 'kg';
+
+                        sheet.getCell(tRowIdx, 11).value = tOne.hs_name;
+                        sheet.getCell(tRowIdx, 12).value = tOne.width;
+                        sheet.getCell(tRowIdx, 13).value = tOne.comp_str;
+
+                        setBodyFont(sheet, tRowIdx, 1, 13);
+
+                        tRowIdx += 1;
+                    }
+
+                    if (objPo.inv.length <= 0) tRowIdx += 1;
+
+                    // ========= GRAND TOTAL 행 =========
+                    const cTotQty = sheet.getCell(tRowIdx, 5);
+                    cTotQty.value = {
+                        formula: `=SUM(E${tStartIdx}:E${tRowIdx - 1})`
+                    };
+                    cTotQty.alignment = {
+                        horizontal: 'right'
+                    };
+                    // cTotQty.numFmt = '#,##0';
+
+                    const cTotAmt = sheet.getCell(tRowIdx, 7);
+                    cTotAmt.value = {
+                        formula: `=SUM(G${tStartIdx}:G${tRowIdx - 1})`
+                    };
+                    grandTotalCellRefs.push(`'${sheet.name}'!G${tRowIdx}`);
+                    cTotAmt.alignment = {
+                        horizontal: 'right'
+                    };
+                    // cTotAmt.numFmt = '#,##0.00';
+
+                    sheet.getCell(tRowIdx, 1).value = '';
+                    sheet.getCell(tRowIdx, 2).value = 'GRAND TOTAL :';
+                    sheet.getCell(tRowIdx, 3).value = '';
+                    sheet.getCell(tRowIdx, 4).value = '';
+                    sheet.getCell(tRowIdx, 6).value = '';
+                    sheet.getCell(tRowIdx, 8).value = '';
+                    sheet.getCell(tRowIdx, 9).value = '';
+                    sheet.getCell(tRowIdx, 10).value = '';
+                    sheet.getCell(tRowIdx, 11).value = '';
+                    sheet.getCell(tRowIdx, 12).value = '';
+                    sheet.getCell(tRowIdx, 13).value = '';
+
+                    setBodyFont(sheet, tRowIdx, 1, 13);
+
+                    for (let col = 1; col <= 9; col++) { // 1=A ... 9=I
+                        const cell = sheet.getCell(tRowIdx, col);
+                        const prev = cell.border || {};
+                        cell.border = {
+                            ...prev,
+                            bottom: {
+                                style: 'double'
+                            }
+                        };
+                    }
+
+                    tRowIdx += 2;
+
+                    if (tIdx2 < (arrPoObj.length - 1)) {
+                        excelLib.rowCopy(sheet, 1, 3, tRowIdx);
+                    }
+
+                    gTotal += tTotAmt;
+                }
+
+                // ----------------------------------------------------------
+                // Step-29 : Grand Total 계산
+                // ----------------------------------------------------------
+
+                tRowIdx += 2;
+                sheet.getCell(tRowIdx, 5).value = 'G.TOTAL';
+                sheet.getCell(tRowIdx, 7).value = { formula: `=VLOOKUP("GRAND TOTAL :",BVT.INV!B:I,6,0)` };
+                console.log("[PL_PRINT][STEP-29] G.TOTAL:", gTotal);
+
+                // ----------------------------------------------------------
+                // Step-30 : D.PAC Tab 작성
+                // ----------------------------------------------------------
+                tSheetName = `D.PAC`;
+                sheet = wb.getWorksheet(tSheetName);
+
+                let tRowIdx = 1;
+
+                for (let tIdx2 = 0; tIdx2 < arrPoObj.length; tIdx2++) {
+                    var objPo = { ...arrPoObj[tIdx2] };
+
+                    if (objPo.pac.length === 0) continue;
+
+                    // 제목 위 한 줄 비우기
+                    tRowIdx += 1;
+
+                    // 제목 행: DETAIL PACKING LIST FOR ...
+                    sheet.mergeCells(`A${tRowIdx}:J${tRowIdx}`);
+                    const titleCell = sheet.getCell(tRowIdx, 1);
+                    titleCell.value = `DETAIL PACKING LIST FOR ${objPo.po_cd}${objPo.buyer_cd}`;
+                    titleCell.font = {
+                        name: '돋움',
+                        size: 16,
+                        bold: true
+                    };
+                    titleCell.alignment = {
+                        horizontal: 'center',
+                        vertical: 'middle'
+                    };
+
+                    tRowIdx += 1;
+
+                    // 헤더 행
+                    const headerRow = tRowIdx;
+                    sheet.getCell(headerRow, 1).value = 'Supplier';
+                    sheet.getCell(headerRow, 2).value = 'MATL CODE';
+                    sheet.getCell(headerRow, 3).value = 'DESCRIPTION';
+                    sheet.getCell(headerRow, 4).value = 'COLOR';
+                    sheet.getCell(headerRow, 5).value = 'SPEC';
+                    sheet.getCell(headerRow, 6).value = 'UNIT';
+                    sheet.getCell(headerRow, 7).value = "IN-Q'TY";
+                    sheet.getCell(headerRow, 8).value = "C/T Q'ty";
+                    sheet.getCell(headerRow, 9).value = 'C/T No.';
+                    sheet.getCell(headerRow,10).value = 'Remark';
+
+                    for (let c = 1; c <= 10; c++) {
+                        const cell = sheet.getCell(headerRow, c);
+                        cell.font = { name: '돋움', size: 10, bold: true };
+                        cell.alignment = { horizontal: 'center', vertical: 'middle' };
+                        cell.border = {
+                            top:    { style: 'thin' },
+                            left:   { style: 'thin' },
+                            bottom: { style: 'thin' },
+                            right:  { style: 'thin' }
+                        };
+                    }
+
+                    tRowIdx += 1;
+
+                    const dataStartRow = tRowIdx;
+
+                    // Check CtQty
+                    var saveRowIdx = tRowIdx;
+
+                    for (let i = 0; i < objPo.pac.length; i++) {
+                        const tOne = { ...objPo.pac[i] };
+                        const row = tRowIdx;
+
+                        if (i > 0) {
+                            sheet.insertRow(row, []);
+                            const baseRow = sheet.getRow(row - 1);
+                            const newRow = sheet.getRow(row);
+                            newRow.height = baseRow.height;
+                            baseRow.eachCell({ includeEmpty: true }, (cell, colNumber) => {
+                                const target = newRow.getCell(colNumber);
+                                target.style = { ...cell.style };
+                            });
+                        }
+
+                        // 바디 폰트/정렬 기본 세팅
+                        for (let c = 1; c <= 10; c++) {
+                            const cell = sheet.getCell(row, c);
+                            cell.font = { name: '돋움', size: 10, bold: false };
+                            cell.alignment = { horizontal: 'left', vertical: 'middle' };
+                        }
+                        sheet.getCell(row, 1).value = tOne.vendor_name;
+                        sheet.getCell(row, 2).value = tOne.matl_cd;
+                        sheet.getCell(row, 3).value = tOne.matl_name;
+                        sheet.getCell(row, 4).value = tOne.color;
+                        sheet.getCell(row, 5).value = tOne.spec;
+                        sheet.getCell(row, 6).value = tOne.unit;
+
+                        const cInQty = sheet.getCell(row, 7);
+                        cInQty.value = tOne.out_qty == null ? null : parseFloat(tOne.out_qty);
+                         cInQty.numFmt = '#,##0';
+                        cInQty.alignment = { horizontal: 'right' };
+
+                        const cCtQty  = sheet.getCell(row, 8);
+                        cCtQty.value = tOne.ct_qty == null ? null : parseFloat(tOne.ct_qty);
+                        cInQty.numFmt = '#,##0';
+                        cCtQty.alignment = { horizontal: 'right' };
+
+
+                        sheet.getCell(row, 9).value = tOne.ct_no;
+                        sheet.getCell(row, 10).value = tOne.remark;
+
+                        sheet.getCell(row, 11).value = tOne.hs_cd;
+                        sheet.getCell(row, 12).value = tOne.hs_name;
+                        sheet.getCell(row, 13).value = tOne.width;
+                        sheet.getCell(row, 14).value = tOne.comp_str;
+
+                        tRowIdx += 1;
+                    }
+
+                    const totalRow = tRowIdx;
+
+                    sheet.insertRow(totalRow, []);
+                    const baseRowForTotal = sheet.getRow(totalRow - 1);
+                    const totalRowObj = sheet.getRow(totalRow);
+                    totalRowObj.height = baseRowForTotal.height;
+                    baseRowForTotal.eachCell({ includeEmpty: true }, (cell, colNumber) => {
+                        const target = totalRowObj.getCell(colNumber);
+                        target.style = { ...cell.style };
+                    });
+
+                    sheet.getCell(totalRow, 1).value = 'TOTAL';
+                    sheet.getCell(totalRow, 3).value = 'BALES';
+
+                    const cTotalIn = sheet.getCell(totalRow, 7);
+                    cTotalIn.value = { formula: `=SUM(G${dataStartRow}:G${totalRow - 1})` };
+                    cTotalIn.numFmt = '#,##0';
+                    cTotalIn.alignment = { horizontal: 'right' };
+
+                    // C/T Q'ty 합계 (H열, 8번 열)
+                    const cTotalCtQty = sheet.getCell(totalRow, 8);
+                    cTotalCtQty.value = { formula: `=SUM(H${dataStartRow}:H${totalRow - 1})` };
+                    cTotalCtQty.numFmt = '#,##0';
+                    cTotalCtQty.alignment = { horizontal: 'right' };
+                    cTotalCtQty.font = { bold: true };
+                    sheet.getCell(totalRow, 9).value = '';
+                    sheet.getCell(totalRow,10).value = '';
+
+                    // 블록 테두리: 데이터/헤더는 thin, TOTAL 은 thick
+                    applyBorder(sheet, headerRow, totalRow - 1, 'thin');
+                    applyBorder(sheet, totalRow, totalRow, 'thick');
+
+                    // ------------------------------
+                    // H, I, J 병합 처리
+                    // 0이 시작되는 행 + 바로 위 행 포함
+                    // ------------------------------
+                    let mergeStartRow = null;
+                    let inZeroBlock = false;
+
+                    for (let r = dataStartRow + 1; r <= totalRow - 1; r++) {
+                        const currCt = Number(sheet.getCell(r, 8).value);
+                        const prevCt = Number(sheet.getCell(r - 1, 8).value);
+
+                        const sameHIJ =
+                            sheet.getCell(r, 8).value === sheet.getCell(r - 1, 8).value &&
+                            sheet.getCell(r, 9).value === sheet.getCell(r - 1, 9).value &&
+                            sheet.getCell(r,10).value === sheet.getCell(r - 1,10).value;
+
+                        // 0이 처음 시작되는 순간
+                        if (!inZeroBlock && currCt === 0 && sameHIJ) {
+                            mergeStartRow = r - 1;   // 바로 위 행 포함
+                            inZeroBlock = true;
+                            continue;
+                        }
+
+                        // 0 구간 계속
+                        if (inZeroBlock && currCt === 0 && sameHIJ) {
+                            continue;
+                        }
+
+                        // 0 구간 종료
+                        if (inZeroBlock) {
+                            const mergeEndRow = r - 1;
+
+                            sheet.mergeCells(mergeStartRow, 8, mergeEndRow, 8); // H
+                            sheet.mergeCells(mergeStartRow, 9, mergeEndRow, 9); // I
+                            sheet.mergeCells(mergeStartRow,10, mergeEndRow,10); // J
+
+                            mergeStartRow = null;
+                            inZeroBlock = false;
+                        }
+                    }
+
+                    // 마지막 블록 처리
+                    if (inZeroBlock && mergeStartRow !== null) {
+                        sheet.mergeCells(mergeStartRow, 8, totalRow - 1, 8);
+                        sheet.mergeCells(mergeStartRow, 9, totalRow - 1, 9);
+                        sheet.mergeCells(mergeStartRow,10, totalRow - 1,10);
+                    }
+
+                    // 다음 블록 시작 위치: TOTAL 바로 아래에서 한 줄 띄우고 시작
+                    tRowIdx = totalRow + 1;
+                }
+
+                // ----------------------------------------------------------
+                // Step-31 : 모든 Sheet GridLine OFF
+                // ----------------------------------------------------------
+                console.log("[PL_PRINT][STEP-32] GridLine OFF");
+
+                wb.eachSheet((s) => {
+                    if (s.views && s.views.length > 0) {
+                        s.views[0].showGridLines = false;
+                    } else {
+                        s.views = [{ showGridLines: false }];
+                    }
+                });
+
+                // ----------------------------------------------------------
+                // Step-32 : Excel 파일 저장
+                // ----------------------------------------------------------
+                console.log("[PL_PRINT][STEP-33] Excel Save Start");
+
+                var tUploadPath = `${tPath0}/../excel_output`;
+
+                if (!fs.existsSync(tUploadPath)) {
+                    fs.mkdirSync(tUploadPath, { recursive: true });
+                }
+
+                tRetExcelFile = `${tUploadPath}/${tWExcelFile}.xlsx`;
+
+                await wb.xlsx.writeFile(tRetExcelFile);
+
+                console.log("[PL_PRINT][STEP-33] Excel Saved:", tRetExcelFile);
+
+
+                // ----------------------------------------------------------
+                // Step-33 : Return
+                // ----------------------------------------------------------
+                console.log("[PL_PRINT][STEP-34] Resolver End");
+
+                tWExcelFile = tWExcelFile.replace(/[\\\/:*?"<>|]/g, ' ');
+                const result = await upload(`${tWExcelFile}.xlsx`, wb);
+
+                if (!result) {
+                    return [{ id: 1, CODE: "ERROR:UPLOAD_RETURN_NULL" }];
+                }
+
+                return result;
+
+            } catch (error) {
+
+                // ----------------------------------------------------------
+                // ERROR 처리
+                // ----------------------------------------------------------
+                console.error("ERROR:Excel Print:", error);
+
+                return [{ id: 1, CODE: `ERROR:Excel Print:${error.message}` }];
+            }
+        },
+
+        // ================================================
+        // PL_PRINT_EXPRESS
+        // ================================================
+
+        mgrQueryS043401_4_PL_PRINT_EXPRESS: async (_, args, contextValue) => {
+
+            var tRetDate = AFLib.getCurrTime();
+            var tRetDate1 = tRetDate.substring(0, 8);
+            var tUserInfo = AFLib.getUserInfo(contextValue);
+            var tInput = {
+                ...args.data
+            };
+
+            let sqlStr0 = `
+           select * 
+           from  ksv_shipment_mst 
+           where shipment_cd = '${tInput.SHIPMENT_CD}' 
+       `;
+            var tRet0 = await prisma.$queryRaw(Prisma.raw(sqlStr0));
+            var tShipmentObj = {};
+            var tPackCd = '';
+            if (tRet0.length > 0) {
+                tShipmentObj = {
+                    ...tRet0[0]
+                };
+                //tPackCd = tShipmentObj.BL_NO;
+                tPackCd = tShipmentObj.REMARK;
+            }
+
+            var sqlStsoutCd = '';
+            var sqlStsout = `
+            select distinct stsout_cd from ksv_shipment_mem
+            where shipment_cd = '${tInput.SHIPMENT_CD}' 
+           `;
+            var retStsout = await prisma.$queryRaw(Prisma.raw(sqlStsout));
+            if (retStsout.length > 0) {
+                retStsout.forEach((col, i) => {
+                    if (sqlStsoutCd === '') sqlStsoutCd = `'${col.stsout_cd}'`;
+                    else sqlStsoutCd += `,'${col.stsout_cd}'`;
+                });
+                sqlStsoutCd = ` a.stsout_cd in (${sqlStsoutCd}) `;
+            }
+
+            var sql100 = '';
+            if (tPackCd) {
+                sql100 = `and (a.bl_no = '${tPackCd}' or ${sqlStsoutCd} ) `;
+            } else {
+                sql100 = `and (${sqlStsoutCd} ) `;
+            }
+
+            let sqlQry = `
+        			SELECT       
+        			      a.SENDER 
+        		     	, ISNULL(a.FRT_DATE, '') AS FRT_DATE 
+        		     	, ISNULL(a.PO_CD, '') AS PO_CD 
+        			    , ISNULL(a.ORDER_CD, '') AS ORDER_CD 
+        		     	, '' AS STYLE_NAME  
+        		     	, isnull(a.price , 0)  AS PRICE  
+        			    , ISNULL(d.MATL_NAME, '') AS  MATL_NAME
+        			    , ISNULL(b.DESCRIPTION, '') AS DESCRIPTION 
+        			    , ISNULL(d.COLOR, '') AS COLOR 
+        			    , ISNULL(d.SPEC, '') AS MATL_SPEC
+        			    , ISNULL(d.UNIT, '') AS UNIT
+        			    , ISNULL(a.QTY, '0') AS QTY 
+        			    , isnull(a.WEIGHT , 0) as WEIGHT
+        			    , isnull(a.WEIGHT_NET , 0) as WEIGHT_NET
+        			    , isnull(a.SPEC, '') as SPEC
+        			    , a.RECEIVER 
+        			    , a.REMARK 
+        			    , ISNULL(a.MATL_CD, '') AS MATL_CD 
+        			    , a.FRT_DATE 
+        			    , a.REG_USER 
+        			    , a.DESTINATION
+        			    , isnull(a.confirm_check,'')  as CONFIRM_CHECK
+        			    , isnull(e.cd_name, '')  as DELAY_REASON_N
+        			    , isnull(a.BL_NO, '') as BL_NO 
+                  , f.buyer_name as BUYER_NAME
+        			FROM 
+                  KZZ_FREIGHT a 
+                  left join KCD_CODE e ON a.DELAY_REASON = e.CD_CODE AND e.cd_group = 'DELAY_REASON'
+                  left join KCD_MATL_MST  d ON a.MATL_CD = d.MATL_CD 
+                  left join KSV_ORDER_MST AS c ON a.ORDER_CD = c.ORDER_CD 
+                  left join KCD_BUYER f on a.buyer_cd = f.buyer_cd
+                  left join KSV_SHIPMENT_MEM b on a.stsout_cd = b.stsout_cd
+              WHERE left(a.STSOUT_CD, 6) = 'SOTMP-'
+              ${sql100}
+        			order by 1 
+       `;
+
+            var retQry = await prisma.$queryRaw(Prisma.raw(sqlQry));
+
+            var retQry1 = [];
+            /*
+            if (retQry.length <= 0) {
+            */
+                let sqlQry1 = `
+             SELECT
+                    a.REG_USER as SENDER
+                  , left(a.OUT_DATETIME, 8) AS FRT_DATE
+                  , ISNULL(a.PO_CD, '') AS PO_CD
+                  , ISNULL(a.ORDER_CD, '') AS ORDER_CD
+                  , '' AS STYLE_NAME
+                  , (isnull(a3.pay_price, 0) * a.out_qty) AS PRICE
+                  , ISNULL(d.MATL_NAME, '') AS MATL_NAME
+                  , '' as DESCRIPTION
+                  , ISNULL(d.COLOR, '') AS COLOR
+                  , ISNULL(d.SPEC, '') AS MATL_SPEC
+                  , ISNULL(d.UNIT, '') AS UNIT
+                  , ISNULL(a.OUT_QTY, '0') AS QTY
+                  , isnull(a.WEIGHT , 0) as WEIGHT
+                  , 0 as WEIGHT_NET
+                  , '' as SPEC
+                  , '' as RECEIVER
+                  , a.REMARK
+                  , ISNULL(a.MATL_CD, '') AS MATL_CD
+                  , a.REG_USER
+                  , isnull(a2.DESTINATION, '') as DESTINATION
+                  , '' as CONFIRM_CHECK
+                  , ''  as DELAY_REASON_N
+                  , isnull(a2.BL_NO, '') as BL_NO
+                  , isnull(a.PACK_CD, '') as  PACK_CD
+                  , isnull(a.IN_DATETIME, '') as IN_DATETIME
+                  , isnull(a3.pay_price, -1) as PAY_PRICE
+                  , isnull(a4.buyer_name, '') as BUYER_NAME
+              FROM
+                  kSV_STOCK_OUT a
+                  left  join  KCD_MATL_MST  d ON a.MATL_CD = d.MATL_CD
+                  left  join  KSV_ORDER_MST  c ON a.ORDER_CD = c.ORDER_CD
+                  left  join  ksv_stock_in a3 on a.po_cd = a3.po_cd
+                                             and a.po_cd = a3.po_cd
+                                             and a.po_seq = a3.po_seq
+                                             and a.order_cd= a3.order_cd
+                                             and a.matl_cd= a3.matl_cd
+                                             and a.mrp_seq = a3.mrp_seq
+                                             and a.in_datetime = a3.in_datetime,
+                  KSV_SHIPMENT_MEM a1, 
+                  KSV_SHIPMENT_MST a2,
+                  KCD_BUYER a4
+              WHERE  a2.SHIPMENT_CD = '${tInput.SHIPMENT_CD}'
+              and    a2.SHIPMENT_CD = a1.SHIPMENT_CD
+              and    a.STSOUT_CD = a1.STSOUT_CD
+              and    left(a.STSOUT_CD ,6) <> 'SOTMP-'
+              and    left(a.order_cd, 2) = a4.buyer_cd
+              order by 1
+           `;
+               retQry1 = await prisma.$queryRaw(Prisma.raw(sqlQry1));
+                
+            /*
+            }
+            */
+
+            if (retQry.length <= 0 && retQry1.length <= 0) {
+                var tRetArray = [];
+                var tObj = {};
+                tObj.id = 1;
+                tObj.CODE = `ERROR:No Data.Check STS-OUT Data, KZZ_Freight. `;
+                console.log(tObj.CODE);
+                tRetArray.push(tObj);
+                return (tRetArray);
+            }
+
+            var retQry0 = [];
+            retQry.forEach((col, i) => {
+                var tObj = { ...col };
+                retQry0.push(tObj);
+            });
+            retQry1.forEach((col, i) => {
+                var tObj = { ...col };
+                retQry0.push(tObj);
+            });
+
+            var tIdx = 0;
+            var tDataArray = [];
+            for (tIdx = 0; tIdx < retQry0.length; tIdx++) {
+                var tOne = {
+                    ...retQry0[tIdx]
+                };
+
+                if (tShipmentObj.BL_NO) tOne.BL_NO = tShipmentObj.BL_NO;
+
+                var sqlStyle = `
+               select b.style_name 
+               from ksv_order_mst a, kcd_style b
+               where a.order_cd = '${tOne.ORDER_CD}' 
+               and   a.style_cd = b.style_cd 
+
+           `;
+                var retStyle = await prisma.$queryRaw(Prisma.raw(sqlStyle));
+                if (retStyle.length > 0) tOne.STYLE_NAME = retStyle[0].style_name;
+
+                if (tOne.PO_CD && tOne.MATL_CD) {
+                    var sqlPrice = `
+                    select (a.matl_price * b.usd_rate) as usd_price
+                     from  ksv_po_mrp a, kcd_currency b
+                    where  a.po_cd = '${tOne.PO_CD}'
+                     and   a.matl_cd = '${tOne.MATL_CD}'
+                     and   b.start_date = '${tRetDate1}'
+                     and   a.curr_cd = b.curr_cd 
+               `;
+                    var retPrice = await prisma.$queryRaw(Prisma.raw(sqlPrice));
+                    if (retPrice.length > 0) tOne.PRICE = parseFloat(retPrice[0].usd_price);
+                }
+                tDataArray.push(tOne);
+            }
+
+            // Excel
+            var tFrtDate = tDataArray[0].FRT_DATE;
+            var tTitle = `Express_LIST-${tFrtDate}-${tPackCd}`;
+            var tWExcelFile = `Express_LIST-${tFrtDate}-${tPackCd}`;
+            var tRetExcelFile = '';
+
+            try {
+                // Excel Read 
+                var tPath0 = '';
+                var tCols0 = __dirname.split('/');
+                var tFlag0 = 0;
+                tCols0.forEach((col, i) => {
+                    if (col !== '') {
+                        if (col === 'src') {
+                            tPath0 += '/upload/excel_template'
+                            tFlag0 = 1;
+                        }
+                        if (tFlag0 === 0) {
+                            tPath0 += '/' + col;
+                        }
+                    }
+                });
+
+                var tTemplateName = 'PL_PRINT_EXPRESS';
+                var tTemplateExcel = `${tPath0}/${tTemplateName}.xlsx`;
+
+                const wb = new Excel.Workbook();
+                await wb.xlsx.readFile(tTemplateExcel);
+
+                var tSheetName = `Express_LIST`;
+                var sheet = wb.getWorksheet(tSheetName);
+
+                sheet.getCell(2, 15).value = tShipmentObj.BL_NO;
+                
+                if (tShipmentObj.BL_NO.includes('(TN)')) {
+                    sheet.getCell(3, 1).value = 'SHINTS TN';
+                }
+
+                sheet.getCell(2, 19).value = tRetDate1;
+
+                var tRowIdx = 5;
+                var tIdx2 = 0;
+                for (tIdx2 = 0; tIdx2 < tDataArray.length; tIdx2++) {
+                    var col = {
+                        ...tDataArray[tIdx2]
+                    };
+                    if (tIdx2 > 0) {
+                        var tmpRow = [];
+                        sheet.insertRow(tRowIdx, tmpRow, 'i');
+                    }
+
+                    sheet.getCell(tRowIdx, 3).value = col.SENDER;
+                    //sheet.getCell(tRowIdx, 5 + 1).value = `${col.PO_CD}`;
+                    //sheet.getCell(tRowIdx, 6 + 1).value = col.STYLE_NAME;
+
+                    sheet.getCell(tRowIdx, 4).value = col.RECEIVER;
+                    sheet.getCell(tRowIdx, 5).value = col.BUYER_NAME;
+                    sheet.getCell(tRowIdx, 6).value = col.PO_CD;
+
+                    var tMatlName = '';
+                    if (col.MATL_NAME) tMatlName = col.MATL_NAME;
+                    else {
+                        if (col.DESCRIPTION)  tMatlName = col.DESCRIPTION;
+                    }
+
+                    /*
+                    var tMatlName = col.MATL_NAME;
+                    if (!col.SPEC);
+                    else tMatlName = col.SPEC;
+                    */
+
+                    sheet.getCell(tRowIdx, 7).value = tMatlName;
+                    sheet.getCell(tRowIdx, 8).value = col.COLOR;
+                    sheet.getCell(tRowIdx, 9).value = col.MATL_SPEC;
+                    sheet.getCell(tRowIdx, 10).value = col.UNIT;
+                    sheet.getCell(tRowIdx, 11).value = Number(col.QTY);
+                    sheet.getCell(tRowIdx, 12).value = Number(col.WEIGHT);
+                    sheet.getCell(tRowIdx, 13).value = Number(col.WEIGHT_NET);
+                    sheet.getCell(tRowIdx, 14).value = ''; // Purpose
+                    sheet.getCell(tRowIdx, 15).value = col.RECEIVER; // ATTN 
+                    sheet.getCell(tRowIdx, 16 + 3).value = col.DELAY_REASON_N;
+                    sheet.getCell(tRowIdx, 17 + 3).value = col.REMARK;
+
+                    const currentRow = sheet.getRow(tRowIdx);
+                    currentRow.eachCell({
+                        includeEmpty: true
+                    }, (cell) => {
+                        cell.font = {
+                            size: 16
+                        };
+                        cell.border = {
+                            top: {
+                                style: 'thin'
+                            },
+                            left: {
+                                style: 'thin'
+                            },
+                            bottom: {
+                                style: 'thin'
+                            },
+                            right: {
+                                style: 'thin'
+                            }
+                        };
+                    });
+                    tRowIdx += 1;
+                }
+
+
+                //  STS.INVOICE   
+                tSheetName = `INVOICE`;
+                sheet = wb.getWorksheet(tSheetName);
+
+                sheet.getCell(3, 8).value = tPackCd;
+                sheet.getCell(4, 8).value = tRetDate1;
+                sheet.getCell(20, 5).value = tRetDate1;
+
+                tRowIdx = 25;
+                tIdx2 = 0;
+                for (tIdx2 = 0; tIdx2 < tDataArray.length; tIdx2++) {
+                    var col = {
+                        ...tDataArray[tIdx2]
+                    };
+                    if (tIdx2 > 0) {
+                        var tmpRow = [];
+                        sheet.insertRow(tRowIdx, tmpRow, 'i');
+                    }
+
+                    sheet.getCell(tRowIdx, 2).value = col.SENDER;
+                    sheet.getCell(tRowIdx, 3).value = col.RECEIVER; // ATTN 
+                    sheet.getCell(tRowIdx, 4).value = `${col.PO_CD}`;
+
+                    var tMatlName = '';
+                    if (col.MATL_NAME) tMatlName = col.MATL_NAME;
+                    else {
+                        if (col.DESCRIPTION)  tMatlName = col.DESCRIPTION;
+                    }
+                    /*
+                    var tMatlName = col.MATL_NAME;
+                    if (!col.SPEC);
+                    else tMatlName = col.SPEC;
+                    */
+
+                    sheet.getCell(tRowIdx, 5).value = tMatlName;
+                    sheet.getCell(tRowIdx, 6 + 1).value = Number(col.QTY);
+                    sheet.getCell(tRowIdx, 7 + 1).value = col.UNIT;
+                    sheet.getCell(tRowIdx, 8 + 1).value = Number(col.PRICE);
+
+                    var tAmt = parseFloat(col.PRICE) * parseFloat(col.QTY);
+                    sheet.getCell(tRowIdx, 9 + 1).value = Number(tAmt);
+
+                    const row = sheet.getRow(tRowIdx);
+                    row.eachCell({
+                        includeEmpty: true
+                    }, (cell) => {
+                        cell.border = {
+                            top: {
+                                style: 'thin'
+                            },
+                            left: {
+                                style: 'thin'
+                            },
+                            bottom: {
+                                style: 'thin'
+                            },
+                            right: {
+                                style: 'thin'
+                            }
+                        };
+                    });
+
+                    tRowIdx += 1;
+                }
+                const imagePath = `${tPath0}/sign.png`;
+                const imageId = wb.addImage({
+                    filename: imagePath,
+                    extension: 'png',
+                });
+
+                sheet.addImage(imageId, {
+                    tl: {
+                        col: 8,
+                        row: tRowIdx
+                    },
+                    ext: {
+                        width: 250,
+                        height: 160
+                    }
+                });
+
+                tSheetName = `Express_LIST`;
+                sheet = wb.getWorksheet(tSheetName);
+
+                wb.worksheets.forEach((sheet, index) => {
+                    console.log(`Index: ${index}, Position: ${index + 1}, Name: ${sheet.name}`);
+                });
+
+                var tWExcelFile = tWExcelFile.replace(/[\\\/:*?"<>|]/g, ' ');
+
+                return await upload(`${tWExcelFile}.xlsx`, wb);
+            } catch (error) {
+                var tRetArray = [];
+                var tObj = {};
+                tObj.id = 1;
+                tObj.CODE = `ERROR:Excel Print:${error.message}`;
+                console.log(tObj.CODE);
+                tRetArray.push(tObj);
+                return (tRetArray);
+            }
+        },
+        mgrQueryS043401_4_1: async (_, args) => {
+            var tSQL = '';
+            if (args.data.STYLE_CD !== '') {
+                tSQL += `AND STYLE_NAME like '%${args.data.STYLE_CD}%' `;
+            }
+
+            var tSQL0 = '';
+            var tPoCds = args.data.PO_CD.split('/');
+            tPoCds.forEach((col, i) => {
+                if (i === 0) tSQL0 += `'${col}'`;
+                else tSQL0 += `,'${col}'`;
+            });
+
+            let sqlStr = `
+
+SELECT A1.PO_CD,
+       A1.PO_SEQ,
+       A1.ORDER_CD,
+       A1.MATL_CD,
+       A1.MRP_SEQ,
+       A1.MATL_SEQ,
+       A3.MATL_NAME,
+       A3.COLOR,
+       A3.SPEC,
+       A3.UNIT,
+       A1.PO_QTY AS MRP_QTY,
+       A1.STOCK_QTY,
+       A1.MOQ AS MOQ_QTY,
+       (A1.PO_QTY - A1.STOCK_QTY + isnull(A1.MOQ, 0)) AS PO_QTY,
+       (A1.PO_QTY - A1.STOCK_QTY + isnull(A1.MOQ, 0) - A1.IN_QTY) AS BAL_QTY,
+       (A1.PO_QTY - A1.STOCK_QTY + isnull(A1.MOQ, 0) - A1.IN_QTY) AS STSIN_QTY,
+       A4.CURR_CD ,
+       A4.MATL_PRICE AS MASTER_PRICE,
+       0 AS MOQ_PRICE,
+       0 AS FREIGHT_PRICE,
+       0 AS OTHER_PRICE,
+       0 AS SURCHAGE_REMARK ,
+       0 AS PO_PRICE 
+-- FROM KSV_STOCK_MEM A1, KSV_PO_MRP A2, KCD_MATL_MST A3, KCD_MATL_MEM A4 
+FROM KSV_STOCK_MEM A1, KCD_MATL_MST A3, KCD_MATL_MEM A4 
+WHERE A1.PO_CD IN (${tSQL0})
+AND   LEFT(A1.ORDER_CD, 2) =  '${args.data.BUYER_CD}'
+AND   A1.MATL_CD = A3.MATL_CD 
+-- AND   A1.MATL_SEQ = A3.SEQ
+AND   A3.VENDOR_CD = '${args.data.VENDOR_CD}'
+AND   A3.MATL_TYPE = '${args.data.MATL_TYPE}'
+AND   A1.MATL_CD = A4.MATL_CD
+AND   A1.MATL_SEQ = A4.MATL_SEQ
+AND   A1.PO_SEQ < 97
+-- AND   A1.STOCK_STATUS = '0' 
+-- AND   A1.PO_CD = A2.PO_CD
+-- AND   A1.PO_SEQ = A2.PO_SEQ
+-- AND   A1.ORDER_CD = A2.ORDER_CD
+-- AND   A1.MATL_CD = A2.MATL_CD
+-- AND   A1.MRP_SEQ= A2.MRP_SEQ
+-- AND   A1.MATL_SEQ= A2.MATL_SEQ
+AND   (A1.PO_QTY - A1.STOCK_QTY + isnull(A1.MOQ, 0) - A1.IN_QTY) > 0
+           
+         `;
+            var tRet = await prisma.$queryRaw(Prisma.raw(sqlStr));
+            var tRetData = {
+
+                PO_CD: '',
+                PO_SEQ: 0,
+                ORDER_CD: '',
+                MATL_CD: '',
+                MRP_SEQ: 0,
+                MATL_SEQ: 0,
+                MATL_NAME: '',
+                COLOR: '',
+                SPEC: '',
+                UNIT: '',
+                MRP_QTY: 0,
+                MRP_QTY1: 0,
+                STOCK_QTY: 0,
+                MOQ_QTY: 0,
+                PO_QTY: 0,
+                CURR_CD: '',
+                MASTER_PRICE: 0,
+                MOQ_PRICE: 0,
+                FREIGHT_PRICE: 0,
+                OTHER_PRICE: 0,
+                SURCHAGE_PRICE: 0,
+                PO_PRICE: 0,
+                ETC99: ''
+
+            };
+            var tRetArray = [];
+            var tIdx = 0;
+            return (tRet);
+        },
+
+        mgrQueryS043401_4_2: async (_, args) => {
+            var tSQL = '';
+
+            let sqlStr = `
+SELECT A1.PO_CD,
+       A1.PO_SEQ,
+       A1.ORDER_CD,
+       A1.MATL_CD,
+       A1.MRP_SEQ,
+       A1.MATL_SEQ,
+       A3.MATL_NAME,
+       A3.COLOR,
+       A3.SPEC,
+       A3.UNIT,
+       (A1.PO_QTY - A1.STOCK_QTY + A1.MOQ + isnull(A1.LEFTOVER_QTY, 0)) as PO_QTY,
+       A6.IN_QTY as STSIN_QTY,
+       A6.IN_DATETIME,
+       (A1.IN_QTY - A1.OUT_QTY) as BAL_QTY,
+       (A1.IN_QTY - A1.OUT_QTY) as OUT_QTY
+FROM KSV_STOCK_MEM A1, KSV_STOCK_IN A6, KSV_PU_MST A5, KSV_PO_MRP A2, KCD_MATL_MST A3, KCD_MATL_MEM A4 
+WHERE A1.PU_CD = '${args.data.PU_CD}'
+AND   A1.PU_CD = A6.PU_CD
+AND   A1.PO_CD = A6.PO_CD
+AND   A1.PO_SEQ = A6.PO_SEQ
+AND   A1.ORDER_CD = A6.ORDER_CD
+AND   A1.MATL_CD = A6.MATL_CD
+AND   A1.MRP_SEQ = A6.MRP_SEQ
+AND   A6.IN_QTY > 0 
+AND   A6.IN_QTY > A6.OUT_QTY
+AND   A1.PU_CD = A5.PU_CD
+AND   A1.MATL_CD = A3.MATL_CD 
+AND   A1.MATL_CD = A4.MATL_CD
+AND   A1.MATL_SEQ = A4.MATL_SEQ
+AND   A1.PO_CD = A2.PO_CD
+AND   A1.PO_SEQ = A2.PO_SEQ
+AND   A1.ORDER_CD = A2.ORDER_CD
+AND   A1.MATL_CD = A2.MATL_CD
+AND   A1.MRP_SEQ= A2.MRP_SEQ
+AND   A1.MATL_SEQ= A2.MATL_SEQ
+AND   A1.IN_QTY > 0 
+AND   A1.IN_QTY > A1.OUT_QTY
+order by  A1.PO_CD, A1.PO_SEQ
+         `;
+            var tRet = await prisma.$queryRaw(Prisma.raw(sqlStr));
+            return (tRet);
+        },
+    }
+};
+
+export default moduleQuery_S043401_4_1;

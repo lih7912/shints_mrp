@@ -1,0 +1,46 @@
+[
+    {
+        "Message": "Success",
+        "Status": "Discharged",
+        "StatusId": 50,
+        "ReferenceNo": "",
+        "BLReferenceNo": "CHN2181918",
+        "ShippingLine": "CMA CGM",
+        "ContainerNumber": "CAAU6046121",
+        "ContainerTEU": "40",
+        "FromCountry": "CHINA",
+        "Pol": "SHANGHAI",
+        "LoadingDate": {
+            "Date": "2025-04-13",
+            "IsActual": true
+        },
+        "DepartureDate": {
+            "Date": "2025-04-14",
+            "IsActual": true
+        },
+        "TSPorts": [],
+        "ToCountry": "DJIBOUTI",
+        "Pod": "DJIBOUTI",
+        "ArrivalDate": {
+            "Date": "2025-05-09",
+            "IsActual": true
+        },
+        "DischargeDate": {
+            "Date": "2025-05-09",
+            "IsActual": true
+        },
+        "Vessel": "CMA CGM TOSCA",
+        "VesselIMO": "9299783",
+        "VesselLatitude": 11.6,
+        "VesselLongitude": 43.13333,
+        "GateOutDate": "2025-05-12",
+        "EmptyReturnDate": "",
+        "FormatedTransitTime": "26 days",
+        "ETA": "04 days Delay Occured.",
+        "FirstETA": "2025-05-05",
+        "BLContainerCount": 1,
+        "BLContainers": [],
+        "LiveMapUrl": "https://shipsgo.com/live-map-container-tracking?query=CAAU6046121",
+        "Tags": []
+    }
+]

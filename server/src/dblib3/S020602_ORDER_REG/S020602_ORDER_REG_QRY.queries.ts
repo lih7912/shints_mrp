@@ -1,0 +1,1451 @@
+// MGR_@@TNAME@@.queries.js
+
+import { Prisma } from '@prisma/client';
+import prisma from '../../db'; //PrismaClient 사용하기 위해 불러오기
+import AFLib from '../../commlib'; //PrismaClient 사용하기 위해 불러오기
+const fs = require('fs');
+const Excel = require('exceljs');
+const {
+    generateUploadURL,
+    deleteUploadObject,
+    upload,
+} = require('../../../routes/s3');
+
+// 
+class S020602_COMM {
+    async excel_end_report (argData, contextValue) {
+      var sql1 = `
+                  select kk.* from 
+                  (
+                        select
+                            b.matl_cd, 
+                            b.matl_name, 
+                            b.color,
+                            b.spec,
+                            b.unit,
+                            b1.matl_price, 
+                            b1.curr_cd,
+                            0 as po_qty,
+                            a.in_qty,
+                            a.pay_price,
+                            (a.in_qty * a.pay_price) as matl_amt,
+                            a.pay_date,
+                            0 as usd_amt,
+                            c.vendor_name,
+                            '' as remark,
+                            a.pay_curr_cd,
+                            a.po_cd, 
+                            a.po_seq, 
+                            a.order_cd, 
+                            a.mrp_seq 
+                        from
+                            ksv_stock_in a,
+                            kcd_matl_mst b
+                            left join kcd_matl_mem b1 on  b1.matl_cd = b.matl_cd
+                                                      and b1.matl_seq = (select max(matl_seq) from kcd_matl_mem where matl_cd = b.matl_cd),
+                            kcd_vendor c
+                        where
+                            a.po_cd = '${argData.PO_CD}'
+                            and a.order_cd = '${argData.ORDER_CD}'
+                            and a.matl_cd = b.matl_cd
+                            and c.vendor_cd = b.vendor_cd
+                        union all
+                        select
+                            d.matl_cd,
+                            d.matl_name,
+                            d.color,
+                            d.spec,
+                            d.unit,
+                            d1.matl_price, 
+                            d1.curr_cd,
+                            b.po_qty as po_qty,
+                            a.in_qty,
+                            a.pay_price,
+                            (a.in_qty * a.pay_price) as matl_amt,
+                            a.pay_date,
+                            0 as usd_amt,
+                            c.vendor_name,
+                            (
+                                case
+                                    when a.po_seq = '97' then 'FocOver'
+                                    when a.po_seq = '98' then 'OverIn'
+                                    when a.po_seq = '99' then 'Minimum'
+                                end
+                            ) as remark,
+                            a.pay_curr_cd,
+                            a.po_cd, 
+                            a.po_seq, 
+                            a.order_cd, 
+                            a.mrp_seq 
+                        from
+                            ksv_stock_in a,
+                            ksv_stock_mem b,
+                            kcd_matl_mst d
+                            left join kcd_matl_mem d1 on  d1.matl_cd = d.matl_cd
+                                                      and d1.matl_seq = (select max(matl_seq) from kcd_matl_mem where matl_cd = d.matl_cd),
+                            kcd_vendor c
+                        where
+                            a.po_cd = '${argData.PO_CD}'
+                            and b.min_order = '${argData.ORDER_CD}'
+                            and b.po_seq in ('98', '99', '97')
+                            and a.po_cd = b.po_cd
+                            and a.po_seq = b.po_seq
+                            and a.order_cd = b.order_cd
+                            and a.matl_cd = b.matl_cd
+                            and a.mrp_seq = b.mrp_seq
+                            and a.matl_seq = b.matl_seq
+                            and a.matl_cd = d.matl_cd
+                            and c.vendor_cd = d.vendor_cd
+                   ) kk
+                   order by kk.matl_cd, kk.pay_date
+      `   ;
+      var tRet1  =  await prisma.$queryRaw(Prisma.raw(sql1));
+      var tIdx1 = 0; 
+      var tSumMatlAmt = 0; 
+      var tRetArray = [];
+      for (tIdx1 = 0; tIdx1 < tRet1.length; tIdx1++) {
+          var tOne2 = { ...tRet1[tIdx1] };
+
+          var tCurrDate = '';
+          if (parseFloat(tOne2.pay_date) <= parseFloat('20260707'))  tCurrDate = tOne2.pay_date;
+          else tCurrDate = '20260707';
+
+          if (parseFloat(tOne2.matl_amt) <= 0) {
+              tMatlAmt += 0;
+              continue;
+          }
+
+          var tMatlAmt = 0;
+          var tRet2 = [];
+          var tSql2 = `
+                        select
+                            won_amt2, usd_rate
+                        from
+                            kcd_currency
+                        where
+                            start_date =  '${tCurrDate}'
+                            and   curr_cd = '${tOne2.pay_curr_cd}'
+          `;
+          tRet2 = await prisma.$queryRaw(Prisma.raw(tSql2));
+          if (tRet2.length <= 0) {
+                      var tSql2 = `
+                            select
+                                won_amt2, usd_rate
+                           from
+                               kcd_currency
+                           where
+                               start_date = (
+                                   select
+                                       max(start_date)
+                                   from
+                                       kcd_currency
+                                   where
+                                       curr_cd = '${tOne2.pay_curr_cd}'
+                               )
+                               and curr_cd = '${tOne2.pay_curr_cd}'
+                        `;
+                        tRet2 = await prisma.$queryRaw(Prisma.raw(tSql2));
+          }
+          var tUsdRate = 0;
+          if (tRet2.length > 0) tUsdRate = tRet2[0].usd_rate;
+          tMatlAmt = tOne2.matl_amt * tUsdRate;
+
+          if (
+              tOne2.vendor_name.includes('free') ||
+              tOne2.vendor_name.includes('FREE') ||
+              tOne2.vendor_name.includes('Free')
+          )
+              tMatlAmt = 0;
+
+          if (parseFloat(tOne2.po_qty) <= 0) {
+              var tSql2 = `
+                  select
+                       * 
+                  from
+                       ksv_stock_mem 
+                  where
+                       po_cd = '${tOne2.po_cd}'
+                  and po_seq = '${tOne2.po_seq}'
+                  and order_cd = '${tOne2.order_cd}'
+                  and matl_cd = '${tOne2.matl_cd}'
+                  and mrp_seq = '${tOne2.mrp_seq}'
+              `;
+              tRet2 = await prisma.$queryRaw(Prisma.raw(tSql2));
+              if (tRet2.length > 0) tOne2.po_qty = parseFloat(tRet2[0].PO_QTY);
+          }
+
+          if (!tOne2.remark) {
+              var tSql2 = `
+                  select
+                       isnull(remark, '') as remark 
+                  from
+                       ksv_po_mrp
+                  where
+                       po_cd = '${tOne2.po_cd}'
+                  and po_seq = '${tOne2.po_seq}'
+                  and order_cd = '${tOne2.order_cd}'
+                  and matl_cd = '${tOne2.matl_cd}'
+                  and mrp_seq = '${tOne2.mrp_seq}'
+                  and use_po_type = '1'
+                  and po_qty > 0
+              `;
+              tRet2 = await prisma.$queryRaw(Prisma.raw(tSql2));
+              if (tRet2.length > 0) tOne2.remark = tRet2[0].REMARK;
+          }
+
+          tOne2.usd_amt = tMatlAmt;
+          tSumMatlAmt += tMatlAmt;
+          tRetArray.push(tOne2);
+      }
+
+      var retObj = {};
+      retObj.total = tSumMatlAmt;
+      retObj.datas = [ ...tRetArray ];
+
+      return (retObj);
+    }
+}
+
+
+// export default로 Query 내용 내보내기
+const moduleQuery_S020602_ORDER_REG_QRY = {
+    Query: {
+        mgrQuery_S020602_ORDER_REG_QRY: async (_, args, contextValue) => {
+            var tRetDate = AFLib.getCurrTime();
+            var tRetDate1 = tRetDate.substring(0, 8);
+            var tUserInfo = AFLib.getUserInfoSync(contextValue);
+            tUserInfo.company_code = 'shints';
+
+            var tStrStyleName = args.data.STYLE_NAME;
+            var tStrBuyerName = args.data.BUYER_NAME;
+
+            interface test {
+                CODE_STYLE_CD: Array<any>;
+                STYLED_CD: string;
+                STYLED_NAME: string;
+            }
+            var tWRet: test = {
+                CODE_STYLE_CD: [],
+                STYLED_CD: '',
+                STYLED_NAME: '',
+            };
+            const tDefaultSizeInfo = {
+                SIZE_GROUP: '',
+                SIZE_MEMBER: ' ',
+                SIZE_NAME: ' ',
+            };
+            tWRet.CODE_SIZE_INFO = [tDefaultSizeInfo];
+
+            var tSQL = '';
+            if (args.data.STYLE_NAME !== '') {
+                tSQL = `AND (a.style_name like '${args.data.STYLE_NAME.replaceAll("'", "''")}%' or a.style_cd like '${args.data.STYLE_NAME.replaceAll("'", "''")}%') `;
+            } else if (args.data.BUYER_NAME !== '') {
+                /*
+                tSQL = `AND (b.buyer_name like '%${args.data.BUYER_NAME}%' or b.buyer_cd like '%${args.data.BUYER_NAME}%') `;
+                */
+                tSQL = `AND (b.buyer_cd like '%${args.data.BUYER_NAME}%') `;
+            }
+            if (tSQL === '') {
+                tWRet.CODE_STYLE_CD = [];
+                var tObj = {};
+                tObj.STYLE_CD = '';
+                tObj.STYLE_NAME = ' ';
+                tWRet.CODE_STYLE_CD.unshift(tObj);
+
+                tWRet.CODE_SIZE_INFO = [tDefaultSizeInfo];
+            } else {
+                let sqlStr = `
+                    SELECT
+                        top 2000 a.*
+                    FROM
+                        KCD_STYLE a,
+                        KCD_BUYER b
+                    WHERE
+                        a.status_cd = '0'
+                        AND a.buyer_cd = b.buyer_cd
+                        AND len(a.style_cd) <= 9
+                        -- and b.REG_USER in (select distinct user_id from kcd_user where company_code = '${tUserInfo.COMPANY_CODE}')
+                        -- and a.REG_USER in (select distinct user_id from kcd_user where company_code = '${tUserInfo.COMPANY_CODE}')
+                        ${tSQL}
+                    ORDER BY
+                        a.reg_datetime desc
+                        -- offset 0 rows fetch next 200 rows only
+                `;
+                var tRet = await prisma.$queryRaw(Prisma.raw(sqlStr));
+                tWRet.CODE_STYLE_CD = [...tRet];
+                let tStyleCd = {};
+                tStyleCd.STYLE_CD = '';
+                tStyleCd.STYLE_NAME = ' ';
+                tWRet.CODE_STYLE_CD.unshift(tStyleCd);
+
+                if (tRet.length > 0) {
+                    let sqlStr1 = `
+                        select
+                            *
+                        from
+                            kcd_size_mst
+                        where
+                            buyer_cd = '${tRet[0].BUYER_CD}'
+                            -- and REG_USER in (select distinct user_id from kcd_user where company_code = '${tUserInfo.COMPANY_CODE}')
+                    `;
+                    var tRet1_0 = await prisma.$queryRaw(Prisma.raw(sqlStr1));
+                    var tRet1 = [];
+                    tRet1_0.forEach((col, i) => {
+                        var tObj = {
+                            ...col,
+                        };
+                        tObj.SIZE_NAME = `${col.SIZE_GROUP_NAME}]${col.SIZE_MEMBER}`;
+                        tRet1.push(tObj);
+                    });
+                    tWRet.CODE_SIZE_INFO = [...tRet1];
+                    var tObj1 = {};
+                    tObj1.SIZE_GROUP = '';
+                    tObj1.SIZE_MEMBER = '';
+                    tObj1.SIZE_NAME = ' ';
+                    tWRet.CODE_SIZE_INFO.unshift(tObj1);
+                }
+            }
+
+            let sqlStr = `
+                SELECT
+                    *
+                FROM
+                    KCD_FACTORY
+                WHERE
+                    STATUS_CD = '0'
+                    and factory_cd in ('FC010', 'FC034', 'FC044', 'FC045')
+            `;
+            var tRet = await prisma.$queryRaw(Prisma.raw(sqlStr));
+            tWRet.CODE_FACTORY_CD = tRet;
+            let tFactoryCd = {};
+            tFactoryCd.FACTORY_CD = ' ';
+            tFactoryCd.FACTORY_NAME = ' ';
+            tWRet.CODE_FACTORY_CD.unshift(tFactoryCd);
+
+            let sqlStr = `
+                SELECT
+                    *
+                FROM
+                    KCD_BUYER
+                    -- where REG_USER in (select distinct user_id from kcd_user where company_code = '${tUserInfo.COMPANY_CODE}')
+            `;
+            var tRet = await prisma.$queryRaw(Prisma.raw(sqlStr));
+            var tArray = [];
+            tRet.forEach((col, i) => {
+                var tObj = {
+                    ...col,
+                };
+                tObj.BUYER_NAME = `(${col.BUYER_CD})${col.BUYER_NAME}`;
+                tArray.push(tObj);
+            });
+            tWRet.CODE_BUYER_CD = [...tArray];
+            let tBuyerCd = {};
+            tBuyerCd.BUYER_CD = ' ';
+            tBuyerCd.BUYER_NAME = ' ';
+            tWRet.CODE_BUYER_CD.unshift(tBuyerCd);
+
+            var tSQL = '';
+            let sqlStr = `
+                SELECT
+                    *
+                FROM
+                    KCD_NATION
+            `;
+            var tRet = await prisma.$queryRaw(Prisma.raw(sqlStr));
+            tWRet.CODE_NAT_CD = tRet;
+            let tNatCd = {};
+            tNatCd.NAT_CD = '';
+            tNatCd.NAT_NAME = ' ';
+            tWRet.CODE_NAT_CD.unshift(tNatCd);
+
+            var tSQL = '';
+            let sqlStr = `
+                SELECT
+                    SIZE_GROUP,
+                    SIZE_MEMBER,
+                    SIZE_GROUP_NAME
+                FROM
+                    KCD_SIZE_MST
+                    -- where REG_USER in (select distinct user_id from kcd_user where company_code = '${tUserInfo.COMPANY_CODE}')
+            `;
+            var tRet0 = await prisma.$queryRaw(Prisma.raw(sqlStr));
+
+            var tRet = [];
+            tRet0.forEach((col, i) => {
+                var tObj = {
+                    ...col,
+                };
+                tObj.SIZE_NAME = `${tObj.SIZE_GROUP_NAME}] ${tObj.SIZE_MEMBER}`;
+                tRet.push(tObj);
+            });
+
+            tWRet.CODE_SIZE_MST = tRet;
+            let tSizeMst = {};
+            tSizeMst.SIZE_GROUP = ' ';
+            tSizeMst.SIZE_MEMBER = ' ';
+            tSizeMst.SIZE_NAME = ' ';
+            tWRet.CODE_SIZE_MST.unshift(tSizeMst);
+
+            let tCode = {};
+            tCode.CD_CODE = ' ';
+            tCode.CD_NAME = ' ';
+
+            tSQL = '';
+            let sqlStr = `
+                SELECT
+                    *
+                FROM
+                    KCD_CODE
+                WHERE
+                    CD_GROUP = 'CURR_CD'
+                order by
+                    cd_flag asc
+            `;
+            tRet = await prisma.$queryRaw(Prisma.raw(sqlStr));
+            tWRet.CODE_CURR_CD = tRet;
+            tWRet.CODE_CURR_CD.unshift(tCode);
+
+            tSQL = '';
+            let sqlStr = `
+                SELECT
+                    *
+                FROM
+                    KCD_CODE
+                WHERE
+                    CD_GROUP = 'SAMPLE_STEP'
+            `;
+            tRet = await prisma.$queryRaw(Prisma.raw(sqlStr));
+            tWRet.CODE_SAMPLE_STEP = tRet;
+            tWRet.CODE_SAMPLE_STEP.unshift(tCode);
+
+            tSQL = '';
+            let sqlStr = `
+                SELECT
+                    *
+                FROM
+                    KCD_CODE
+                WHERE
+                    CD_GROUP = 'SAMPLE_ROUND'
+            `;
+            tRet = await prisma.$queryRaw(Prisma.raw(sqlStr));
+            tWRet.CODE_SAMPLE_ROUND = tRet;
+            tWRet.CODE_SAMPLE_ROUND.unshift(tCode);
+
+            tSQL = '';
+            let sqlStr = `
+                SELECT
+                    *
+                FROM
+                    KCD_CODE
+                WHERE
+                    CD_GROUP = 'SAMPLE_REASON'
+            `;
+            tRet = await prisma.$queryRaw(Prisma.raw(sqlStr));
+            tWRet.CODE_SAMPLE_REASON = tRet;
+            tWRet.CODE_SAMPLE_REASON.unshift(tCode);
+
+            tSQL = '';
+            let sqlStr = `
+                SELECT
+                    *
+                FROM
+                    KCD_CODE
+                WHERE
+                    CD_GROUP = 'PRICE_TERM'
+            `;
+            tRet = await prisma.$queryRaw(Prisma.raw(sqlStr));
+            tWRet.CODE_PRICE_TERM = tRet;
+            tWRet.CODE_PRICE_TERM.unshift(tCode);
+
+            tSQL = '';
+            let sqlStr = `
+                SELECT
+                    *
+                FROM
+                    KCD_CODE
+                WHERE
+                    CD_GROUP = 'CAPA_USER'
+            `;
+            tRet = await prisma.$queryRaw(Prisma.raw(sqlStr));
+            tWRet.CODE_CAPA_USER = tRet;
+            tWRet.CODE_CAPA_USER.unshift(tCode);
+
+            if (args.data.STYLE_NAME !== '') {
+                let sql0 = `
+                    select
+                        b.buyer_team
+                    from
+                        kcd_style a,
+                        kcd_buyer b
+                    where
+                        (
+                            a.style_name like '${args.data.STYLE_NAME.replaceAll("'", "''")}%'
+                            or a.style_cd like '${args.data.STYLE_NAME.replaceAll("'", "''")}%'
+                        )
+                        and a.buyer_cd = b.buyer_cd
+                `;
+                var tRet0 = await prisma.$queryRaw(Prisma.raw(sql0));
+                if (tRet0.length > 0) {
+                    tSQL = '';
+                    let sqlStr = `
+                        SELECT
+                            *
+                        FROM
+                            KCD_CODE
+                        WHERE
+                            CD_GROUP = 'BUYER_TEAM'
+                            -- and   CD_CODE like '${tRet0[0].buyer_team}'  
+                            and CD_CODE = '${tRet0[0].buyer_team}'
+                    `;
+                    tRet = await prisma.$queryRaw(Prisma.raw(sqlStr));
+                    tWRet.CODE_BUYER_TEAM = tRet;
+                    tWRet.CODE_BUYER_TEAM.unshift(tCode);
+                } else {
+                    tWRet.CODE_BUYER_TEAM = [];
+                    tWRet.CODE_BUYER_TEAM.unshift(tCode);
+                }
+            } else {
+                tSQL = '';
+                let sqlStr = `
+                    SELECT
+                        *
+                    FROM
+                        KCD_CODE
+                    WHERE
+                        CD_GROUP = 'BUYER_TEAM'
+                `;
+                tRet = await prisma.$queryRaw(Prisma.raw(sqlStr));
+                tWRet.CODE_BUYER_TEAM = tRet;
+                tWRet.CODE_BUYER_TEAM.unshift(tCode);
+            }
+
+            tSQL = '';
+            let sqlStr = `
+                SELECT
+                    *
+                FROM
+                    KCD_CODE
+                WHERE
+                    CD_GROUP = 'DL_KIND'
+            `;
+            tRet = await prisma.$queryRaw(Prisma.raw(sqlStr));
+            tWRet.CODE_DL_KIND = tRet;
+            tWRet.CODE_DL_KIND.unshift(tCode);
+
+            tSQL = '';
+            let sqlStr = `
+                SELECT
+                    *
+                FROM
+                    KCD_CURRENCY
+                WHERE
+                    start_date = (
+                        select
+                            max(start_date)
+                        from
+                            kcd_currency
+                        where
+                            curr_cd = 'KRW'
+                    )
+            `;
+            tRet = await prisma.$queryRaw(Prisma.raw(sqlStr));
+            tWRet.CODE_CURRENCY = tRet;
+
+            return tWRet;
+        },
+
+        mgrQuery_S020602_ORDER_REG_QRY_KCD_STYLE: async (
+            _,
+            args,
+            contextValue,
+        ) => {
+            var tRetDate = AFLib.getCurrTime();
+            var tRetDate1 = tRetDate.substring(0, 8);
+            var tUserInfo = AFLib.getUserInfoSync(contextValue);
+            tUserInfo.company_code = 'shints';
+
+            var tSQL = '';
+            if (args.data.STYLE_NAME !== '') {
+                tSQL = `AND (a.style_name like '%${args.data.STYLE_NAME}%' or a.style_cd like '%${args.data.STYLE_NAME}%')`;
+            }
+            if (args.data.BUYER_NAME !== '') {
+                /*
+                tSQL = `AND (b.buyer_name like '%${args.data.BUYER_NAME}%' or b.buyer_cd like '%${args.data.BUYER_NAME}%')`;
+                */
+                tSQL = `AND (b.buyer_cd like '%${args.data.BUYER_NAME}%')`;
+            }
+            if (tSQL === '') {
+                return [];
+            }
+
+            let sqlStr = `
+                SELECT
+                    a.*
+                FROM
+                    KCD_STYLE a,
+                    KCD_BUYER b
+                WHERE
+                    a.status_cd = '0'
+                    AND a.buyer_cd = b.buyer_cd
+                    AND len(a.style_cd) <= 9
+                    -- and a.REG_USER in (select distinct user_id from kcd_user where company_code = '${tUserInfo.COMPANY_CODE}')
+                    -- and b.REG_USER in (select distinct user_id from kcd_user where company_code = '${tUserInfo.COMPANY_CODE}')
+                    ${tSQL}
+            `;
+            var tRet = await prisma.$queryRaw(Prisma.raw(sqlStr));
+            return tRet;
+        },
+
+        mgrQuery_S020602_ORDER_REG_GET_CHANGE_INFO: async (
+            _,
+            args,
+            contextValue,
+        ) => {
+            var tRetDate = AFLib.getCurrTime();
+            var tRetDate1 = tRetDate.substring(0, 8);
+            var tUserInfo = AFLib.getUserInfoSync(contextValue);
+            tUserInfo.company_code = 'shints';
+
+            var tRetObj = {};
+            tRetObj.ORDER_MST = {};
+            tRetObj.ORDER_MST_ARRAY = [];
+
+            var tPathArray = [];
+            var tPath0 = `${__dirname}`;
+            var tPath0_1 = '';
+            var tPathCols = tPath0.split(/\//);
+            var tFlag = 0;
+            tPathCols.forEach((col, i) => {
+                if (col === 'dblib3') {
+                    tPathArray.forEach((col2, i2) => {
+                        if (col2 === 'src') {
+                        } else {
+                            tPath0_1 += `${col2}/`;
+                        }
+                    });
+                    tFlag = 1;
+                } else {
+                    if (tFlag === 0) tPathArray.push(col);
+                }
+            });
+
+            var tPath = `${tPath0_1}info/order_1_${args.data.ORDER_CD}.json`;
+            if (fs.existsSync(tPath)) {
+                var tObj = JSON.parse(fs.readFileSync(tPath).toString());
+
+                var tOrderMst1 = {
+                    ...tObj.ORDER_MST1,
+                };
+                let sqlStr = `
+                    select
+                        *
+                    from
+                        kcd_size_mst
+                    where
+                        size_group = '${tOrderMst1.SIZE_GROUP}'
+                        -- and REG_USER in (select distinct user_id from kcd_user where company_code = '${tUserInfo.COMPANY_CODE}')
+                `;
+                var tRet = await prisma.$queryRaw(Prisma.raw(sqlStr));
+                if (tRet.length > 0) {
+                    tOrderMst1.SIZE_MEMBER = tRet[0].SIZE_MEMBER;
+                }
+                tRetObj.ORDER_MST = {
+                    ...tOrderMst1,
+                };
+            }
+
+            var tPath1 = `${tPath0_1}info/order_2_${args.data.ORDER_CD}.json`;
+            var tNewObj = {};
+            if (fs.existsSync(tPath1)) {
+                var tObj = JSON.parse(fs.readFileSync(tPath1).toString());
+                var tNewObj = JSON.parse(fs.readFileSync(tPath1).toString());
+                var tArray = [];
+                tObj.forEach((col, i) => {
+                    var tObj = {
+                        ...col,
+                    };
+                    tObj.id = i + 1;
+                    tArray.push(tObj);
+                });
+                tRetObj.ORDER_MST_ARRAY = [...tArray];
+            }
+
+            var tArray1 = [];
+            var tIdx = 0;
+            for (tIdx = 0; tIdx < tNewObj.length; tIdx++) {
+                var tOne = {
+                    ...tNewObj[tIdx],
+                };
+                let sql = `
+                    select
+                        *
+                    from
+                        ksv_order_mst
+                    where
+                        order_cd = '${tOne.ORDER_CD}'
+                `;
+                var tRet = await prisma.$queryRaw(Prisma.raw(sql));
+                if (tRet.length > 0) {
+                    tOne.ORDER_QTY = String(parseFloat(tRet[0].TOT_CNT));
+                    tOne.ADD_QTY = String(parseFloat(tRet[0].ADD_CNT));
+                    tOne.ORDER_QTY_ONLY = String(
+                        parseFloat(tOne.ORDER_QTY) - parseFloat(tOne.ADD_QTY),
+                    );
+                    tOne.MID_SIZE1 = tRet[0].MID_SIZE1;
+                }
+
+                var orderMems = [...tOne.ORDER_MEM];
+                var tIdx1 = 0;
+                var tArray2 = [];
+                for (tIdx1 = 0; tIdx1 < orderMems.length; tIdx1++) {
+                    var tOne1 = {
+                        ...orderMems[tIdx1],
+                    };
+                    let sql1 = `
+                        select
+                            *
+                        from
+                            ksv_order_mem
+                        where
+                            order_cd = '${tOne.ORDER_CD}'
+                            and prod_cd = '${tOne1.PROD_CD}'
+                            and add_flag = '${tOne1.ADD_FLAG}'
+                    `;
+                    var tRet1 = await prisma.$queryRaw(Prisma.raw(sql1));
+                    if (tRet1.length > 0) {
+                        tOne1.SIZE_CNT = tRet1[0].SIZE_CNT;
+                        tOne1.TOT_CNT = tRet1[0].TOT_CNT;
+                    }
+                    tArray2.push(tOne1);
+                }
+
+                let sql2 = `
+                    select a.PROD_CD, 
+                           isnull(a.ADD_FLAG, '0') as ADD_FLAG,
+                           b.COLOR ,
+                           a.TOT_CNT,
+                           a.PRICE,
+                           a.SIZE_CNT,
+                           a.MID_SIZE,
+                           a.MID_SIZE_QTY
+                     from ksv_order_mem a, ksv_prod_mst b
+                    where a.order_cd = '${tOne.ORDER_CD}'
+                     and  a.prod_cd = b.prod_cd
+                    `;
+                var tRet2 = await prisma.$queryRaw(Prisma.raw(sql2));
+                tRet2.forEach((col1, i1) => {
+                    var tObj = { ...col1 };
+                    if (tObj.ADD_FLAG === '') tObj.ADD_FLAG = '0'; 
+                    var check = 0;
+                    tArray2.forEach((col2, i2) => {
+                         if (tObj.ORDER_CD === col2.ORDER_CD &&
+                             tObj.PROD_CD === col2.PROD_CD && 
+                             tObj.ADD_FLAG === col2.ADD_FLAG) check = 1;
+                    });
+                    if (check === 0) {
+                         tArray2.push(tObj);
+                    }
+                });
+
+                tOne.ORDER_MEM = [...tArray2];
+                tArray1.push(tOne);
+            }
+            tRetObj.ORDER_MST_ARRAY_OLD = [...tArray1];
+
+            return tRetObj;
+        },
+
+        mgrQuery_S020602_ORDER_REG_GET_CURR_DATA: async (_, args) => {
+            let sqlStr = `
+                SELECT
+                    USD_RATE,
+                    WON_AMT
+                FROM
+                    kcd_currency
+                WHERE
+                    START_DATE = (
+                        select
+                            max(start_date)
+                        from
+                            kcd_currency
+                    )
+                    and curr_cd = '${args.data.CURR_CD}'
+            `;
+            var tRet = await prisma.$queryRaw(Prisma.raw(sqlStr));
+            return tRet;
+        },
+
+        mgrQuery_S020602_ORDER_REG_QRY_KCD_STYLE_LIST: async (
+            _,
+            args,
+            contextValue,
+        ) => {
+            var tRetDate = AFLib.getCurrTime();
+            var tRetDate1 = tRetDate.substring(0, 8);
+            var tUserInfo = AFLib.getUserInfoSync(contextValue);
+            tUserInfo.company_code = 'shints';
+
+            var tSQL = '';
+            if (args.data.STYLE_NAME !== '') {
+                tSQL = `AND (a.style_name like '%${args.data.STYLE_NAME}%' or a.style_cd like '%${args.data.STYLE_NAME}%')`;
+            }
+            if (args.data.BUYER_NAME !== '') {
+                /*
+                tSQL = `AND (b.buyer_name like '%${args.data.BUYER_NAME}%' or b.buyer_cd like '%${args.data.BUYER_NAME}%')`;
+                */
+                tSQL = `AND (b.buyer_cd like '%${args.data.BUYER_NAME}%')`;
+            }
+            if (tSQL === '') {
+                return [];
+            }
+
+            let sqlStr = `
+                SELECT
+                    a.*,
+                    b.BUYER_TEAM
+                FROM
+                    KCD_STYLE a,
+                    KCD_BUYER b
+                WHERE
+                    a.status_cd = '0'
+                    AND a.buyer_cd = b.buyer_cd
+                    AND len(a.style_cd) <= 9
+                    -- and a.REG_USER in (select distinct user_id from kcd_user where company_code = '${tUserInfo.COMPANY_CODE}')
+                    -- and b.REG_USER in (select distinct user_id from kcd_user where company_code = '${tUserInfo.COMPANY_CODE}')
+                    ${tSQL}
+            `;
+            var tRet = await prisma.$queryRaw(Prisma.raw(sqlStr));
+            var tObj = {};
+            tObj.STYLE_CD = ' ';
+            tObj.STYLE_NAME = ' ';
+            tRet.unshift(tObj);
+            return tRet;
+        },
+
+        mgrQuery_S020602_ORDER_REG_QRY_KCD_STYLE_INFO: async (
+            _,
+            args,
+            contextValue,
+        ) => {
+            var tRetDate = AFLib.getCurrTime();
+            var tRetDate1 = tRetDate.substring(0, 8);
+            var tUserInfo = AFLib.getUserInfoSync(contextValue);
+            tUserInfo.company_code = 'shints';
+
+            var tWRet = {};
+
+            let sqlStr = `
+                SELECT
+                    *
+                FROM
+                    KCD_STYLE
+                WHERE
+                    status_cd = '0'
+                    AND style_cd = '${args.data.STYLE_CD}'
+                    -- and REG_USER in (select distinct user_id from kcd_user where company_code = '${tUserInfo.COMPANY_CODE}')
+            `;
+            var tRet = await prisma.$queryRaw(Prisma.raw(sqlStr));
+            tWRet.STYLE_CD = tRet;
+
+            let sqlStr = `
+                SELECT
+                    a.*
+                FROM
+                    kcd_buyer a,
+                    kcd_style b
+                where
+                    a.buyer_cd = b.buyer_cd
+                    AND b.style_cd = '${args.data.STYLE_CD}'
+                    -- and a.REG_USER in (select distinct user_id from kcd_user where company_code = '${tUserInfo.COMPANY_CODE}')
+                    -- and b.REG_USER in (select distinct user_id from kcd_user where company_code = '${tUserInfo.COMPANY_CODE}')
+            `;
+            var tRet = await prisma.$queryRaw(Prisma.raw(sqlStr));
+            tWRet.BUYER_CD = tRet;
+
+            let sqlStr = `
+                SELECT
+                    SIZE_GROUP,
+                    SIZE_MEMBER,
+                    SIZE_CNT,
+                    SIZE_GROUP_NAME
+                FROM
+                    kcd_size_mst
+                where
+                    buyer_cd like '%${tRet[0].BUYER_CD}%'
+                    -- and  REG_USER in (select distinct user_id from kcd_user where company_code = '${tUserInfo.COMPANY_CODE}')
+            `;
+            var tRet0 = await prisma.$queryRaw(Prisma.raw(sqlStr));
+
+            var tRet = [];
+            tRet0.forEach((col, i) => {
+                var tObj = {
+                    ...col,
+                };
+                tObj.SIZE_NAME = `${tObj.SIZE_GROUP_NAME}] ${tObj.SIZE_MEMBER}`;
+                tRet.push(tObj);
+            });
+
+            tWRet.SIZE_MST = tRet;
+            let tSizeMst = {};
+            tSizeMst.SIZE_NAME = ' ';
+            tSizeMst.SIZE_GROUP = ' ';
+            tSizeMst.SIZE_MEMBER = ' ';
+            tWRet.SIZE_MST.unshift(tSizeMst);
+
+            let sqlStr = `
+                SELECT
+                    *
+                FROM
+                    ksv_prod_mst
+                WHERE
+                    style_cd = '${args.data.STYLE_CD}'
+            `;
+            var tRet = await prisma.$queryRaw(Prisma.raw(sqlStr));
+            tWRet.PROD_MST = tRet;
+
+            let sqlStr = `
+                SELECT
+                    *
+                FROM
+                    kcd_fileinfo
+                WHERE
+                    file_key = '${args.data.STYLE_CD}'
+            `;
+            var tRet = await prisma.$queryRaw(Prisma.raw(sqlStr));
+            tWRet.FILE_INFO = tRet;
+
+            return tWRet;
+        },
+
+        mgrQuery_S020602_FILE_INFO: async (_, args) => {
+            let sqlStr = `
+                SELECT
+                    *
+                FROM
+                    KCD_FILEINFO
+                WHERE
+                    kind = 'ORDER'
+                    AND file_key = '${args.data.ORDER_CD}'
+            `;
+            var tRet = await prisma.$queryRaw(Prisma.raw(sqlStr));
+
+            return tRet;
+        },
+
+        mgrQuery_S020602_EXCEL_END_REPORT: async (_, args, contextValue) => {
+            var tRetDate = AFLib.getCurrTime();
+            var tRetDate1 = tRetDate.substring(0, 8);
+            var tUserInfo = AFLib.getUserInfo(contextValue);
+            tUserInfo.company_code = 'shints';
+
+            try {
+                var tPath0 = '';
+                var tCols0 = __dirname.split('/');
+                var tFlag0 = 0;
+                tCols0.forEach((col, i) => {
+                    if (col !== '') {
+                        if (col === 'src') {
+                            tPath0 += '/upload/excel_template';
+                            tFlag0 = 1;
+                        }
+                        if (tFlag0 === 0) {
+                            tPath0 += '/' + col;
+                        }
+                    }
+                });
+
+                var tTemplateExcel = `${tPath0}/완료보고서.xlsx`;
+
+                const wb = new Excel.Workbook();
+                await wb.xlsx.readFile(tTemplateExcel);
+
+                var tSheetName = `Sheet1 (2)`;
+                const sheet = wb.getWorksheet(tSheetName);
+
+                // sheet.getCell(9, 6).value = args.data.ORDER_CD;
+
+                let sqlStr0 = `
+                    select
+                        isnull(sum(ship_cnt), 0) as act_ship_qty,
+                        isnull(min(ship_date), 0) as ship_date
+                    from
+                        ksv_order_ship
+                    where
+                        order_cd = '${args.data.ORDER_CD}'
+                        and ship_ptype in ('0', '5')
+                `;
+                var tRet0 = await prisma.$queryRaw(Prisma.raw(sqlStr0));
+                var tActShipQty = parseFloat(tRet0[0].act_ship_qty);
+                var tShipDate = tRet0[0].ship_date;
+
+                let sqlStr1 = `
+                    select
+                        a.po_cd,
+                        b.tot_cnt,
+                        c.status_cd,
+                        b.order_status,
+                        b.avr_price
+                    from
+                        ksv_po_mem a,
+                        ksv_order_mst b,
+                        ksv_po_mst c
+                    where
+                        a.order_cd = '${args.data.ORDER_CD}'
+                        and a.po_seq = 1
+                        and b.order_cd = a.order_cd
+                        and c.po_cd = a.po_cd
+                        and c.po_seq = a.po_seq
+                `;
+                var tRet1 = await prisma.$queryRaw(Prisma.raw(sqlStr1));
+                var tPoCd = tRet1[0].po_cd;
+                var tOrderCnt = tRet1[0].tot_cnt;
+                var tStatus = tRet1[0].status_cd;
+                var tOrderStatus = tRet1[0].order_status;
+                var tAvrPrice = tRet1[0].avr_price;
+
+                sheet.getCell(1, 2).value = tPoCd;
+                sheet.getCell(1, 4).value = args.data.ORDER_CD;
+                sheet.getCell(1, 7).value = AFLib.numToFixed(
+                    Number(tActShipQty),
+                    0,
+                );
+
+                var tShipQty = 0;
+                if (
+                    parseFloat(tActShipQty) === 0 &&
+                    parseInt(tOrderStatus) >= 4
+                )
+                    tShipQty = parseInt(tOrderCnt);
+                else tShipQty = parseInt(tActShipQty);
+
+                var tStrRemark = '';
+                var tTotalUsd = 0;
+
+                if (tStatus === '0') {
+                    // 
+                    var tFunc = new S020602_COMM();
+                    var argData = {};
+                    argData.PO_CD = tPoCd;
+                    argData.ORDER_CD = args.data.ORDER_CD;
+                    var tReturnObj = await tFunc.excel_end_report(argData, contextValue);
+
+                    console.log(`===================== ${tPoCd}/${args.data.ORDER_CD} : ${tReturnObj.datas.length}`);
+
+                    var tIdx2 = 0;
+                    var tRowCnt = 0;
+                    for (tIdx2 = 0; tIdx2 < tReturnObj.datas.length; tIdx2++) {
+                        var tOne = {
+                            ...tReturnObj.datas[tIdx2],
+                        };
+
+                        var tExcel = [];
+                        var tIdx3 = 0;
+                        for (tIdx3 = 0; tIdx3 < 15; tIdx3++) {
+                            tExcel.push('');
+                        }
+
+                        tExcel[0] = tOne.matl_cd;
+                        var tMatlCd = tOne.matl_cd;
+
+                        tExcel[1] = tOne.matl_name;
+                        tExcel[2] = tOne.color;
+                        tExcel[3] = tOne.spec;
+                        tExcel[4] = tOne.unit;
+                        tExcel[5] = AFLib.numToFixed(
+                            Number(tOne.matl_price),
+                            2,
+                        );
+                        tExcel[6] = tOne.curr_cd;
+                        tExcel[7] = AFLib.numToFixed(Number(tOne.po_qty), 2);
+                        tExcel[13] = tOne.vendor_name;
+
+                        var tPoSeq = tOne.po_seq;
+                        var tMrpSeq = tOne.mrp_seq;
+                        tExcel[14] = tOne.remark;
+
+                        var tRet3 = [];
+
+                        tExcel[8] = tOne.in_qty;
+                        tExcel[9] = tOne.pay_price;
+                        tExcel[10] = tOne.matl_amt;
+                        tExcel[11] = tOne.pay_date;
+                        tExcel[6] = tOne.pay_curr_cd;
+                        tExcel[12] = tOne.usd_amt;
+                        tTotalUsd += parseFloat(tOne.usd_amt);
+
+                        tExcel.forEach((col, i) => {
+                                sheet.getCell(4 + tRowCnt, i + 1).value =
+                                    tExcel[i];
+                        });
+                        tRowCnt += 1;
+
+                        var tExcel1 = [...tExcel];
+                        tExcel1.forEach((col, i) => {
+                                if (i <= 7 || i === 13) tExcel[i] = '';
+                        });
+                    }
+                }
+
+                sheet.getCell(2, 10).value = '추가발주자재';
+                sheet.getCell(2, 11).value = '입고만 있는 자재';
+                sheet.getCell(1, 10).value = AFLib.numToFixed(
+                    Number(tTotalUsd),
+                    2,
+                );
+                sheet.getCell(1, 13).value = AFLib.numToFixed(
+                    Number(parseFloat(tTotalUsd) / parseFloat(tActShipQty)),
+                    2,
+                );
+
+                tRowCnt += 2;
+                sheet.getCell(4 + tRowCnt, 2).value = '재고사용한자재';
+                tRowCnt += 1;
+                let sqlStr4 = `
+                    select
+                        a.matl_cd,
+                        b.matl_name,
+                        b.color,
+                        b.spec,
+                        b.unit,
+                        c.matl_price,
+                        c.curr_cd,
+                        a.po_qty,
+                        d.vendor_name
+                    from
+                        ksv_po_mrp a,
+                        kcd_matl_mst b,
+                        kcd_matl_mem c,
+                        kcd_vendor d
+                    where
+                        a.po_cd = '${tPoCd}'
+                        and a.order_cd = '${args.data.ORDER_CD}'
+                        and a.use_po_type = '2'
+                        and b.matl_cd = a.matl_cd
+                        and c.matl_cd = a.matl_cd
+                        and c.matl_seq = a.matl_seq
+                        and d.vendor_cd = b.vendor_cd
+                    order by
+                        a.matl_cd
+                `;
+                var tRet4 = await prisma.$queryRaw(Prisma.raw(sqlStr4));
+                var tIdx4 = 0;
+                for (tIdx4 = 0; tIdx4 < tRet4.length; tIdx4++) {
+                    var tOne4 = {
+                        ...tRet4[tIdx4],
+                    };
+                    var tExcel = [];
+                    var tIdx4_1 = 0;
+                    for (tIdx4_1 = 0; tIdx4_1 < 15; tIdx4_1++) {
+                        tExcel.push('');
+                    }
+
+                    tExcel[0] = tOne4.matl_cd;
+                    tExcel[1] = tOne4.matl_name;
+                    tExcel[2] = tOne4.color;
+                    tExcel[3] = tOne4.spec;
+                    tExcel[4] = tOne4.unit;
+                    tExcel[5] = AFLib.numToFixed(Number(tOne4.matl_price), 2);
+                    tExcel[6] = tOne4.curr_cd;
+                    tExcel[7] = AFLib.numToFixed(Number(tOne4.po_qty), 2);
+                    tExcel[13] = tOne4.vendor_name;
+                    tExcel.forEach((col, i) => {
+                        sheet.getCell(4 + tRowCnt, i + 1).value = tExcel[i];
+                    });
+                    tRowCnt += 1;
+                }
+
+                tRowCnt += 2;
+                sheet.getCell(4 + tRowCnt, 2).value = '재고로 남은자재';
+                tRowCnt += 1;
+                let sqlStr5 = `
+                    select
+                        a.matl_cd,
+                        b.matl_name,
+                        b.color,
+                        b.spec,
+                        b.unit,
+                        c.matl_price,
+                        c.curr_cd,
+                        sum(a.diff_qty) as po_qty,
+                        d.vendor_name
+                    from
+                        ksv_po_mrp a,
+                        kcd_matl_mst b,
+                        kcd_matl_mem c,
+                        kcd_vendor d
+                    where
+                        a.po_cd = '${tPoCd}'
+                        and a.order_cd = '${args.data.ORDER_CD}'
+                        and b.matl_cd = a.matl_cd
+                        and c.matl_cd = a.matl_cd
+                        and c.matl_seq = a.matl_seq
+                        and d.vendor_cd = b.vendor_cd
+                        and a.diff_po_type = '1'
+                    group by
+                        a.matl_cd,
+                        b.matl_name,
+                        b.color,
+                        b.spec,
+                        b.unit,
+                        c.matl_price,
+                        c.curr_cd,
+                        d.vendor_name
+                `;
+                var tRet5 = await prisma.$queryRaw(Prisma.raw(sqlStr5));
+                var tIdx5 = 0;
+                for (tIdx5 = 0; tIdx5 < tRet5.length; tIdx5++) {
+                    var tOne5 = {
+                        ...tRet5[tIdx5],
+                    };
+                    var tExcel = [];
+                    var tIdx5_1 = 0;
+                    for (tIdx5_1 = 0; tIdx5_1 < 15; tIdx5_1++) {
+                        tExcel.push('');
+                    }
+
+                    tExcel[0] = tOne5.matl_cd;
+                    tExcel[1] = tOne5.matl_name;
+                    tExcel[2] = tOne5.color;
+                    tExcel[3] = tOne5.spec;
+                    tExcel[4] = tOne5.unit;
+                    tExcel[5] = AFLib.numToFixed(Number(tOne5.matl_price), 2);
+                    tExcel[6] = tOne5.curr_cd;
+                    tExcel[7] = AFLib.numToFixed(Number(tOne5.po_qty), 2);
+                    tExcel[13] = tOne5.vendor_name;
+                    tExcel.forEach((col, i) => {
+                        sheet.getCell(4 + tRowCnt, i + 1).value = tExcel[i];
+                    });
+                    tRowCnt += 1;
+                }
+
+                // Sheet 변경
+                tSheetName = `Sheet1`;
+                sheet = wb.getWorksheet(tSheetName);
+
+                sheet.getCell(2, 10).value = tRetDate1;
+                sheet.getCell(4, 2).value = args.data.ORDER_CD;
+
+                let sqlStr6 = `
+                    select
+                        b.style_name,
+                        a.tot_cnt,
+                        a.usd_price,
+                        a.curr_cd,
+                        a.matl_amt,
+                        a.etc_amt,
+                        a.commission,
+                        a.fc_price,
+                        a.size_group,
+                        c.po_cd,
+                        a.fc_bef,
+                        a.remark,
+                        a.over_amt,
+                        a.line_charge_price,
+                        a.factory_cd,
+                        a.sample_cost_flag
+                    from
+                        ksv_order_mst a
+                        left join ksv_po_mem c on c.order_cd = a.order_cd
+                        and c.po_seq = 1,
+                        kcd_style b
+                    where
+                        a.order_cd = '${args.data.ORDER_CD}'
+                        and b.style_cd = a.style_cd
+                `;
+                var tRet6 = await prisma.$queryRaw(Prisma.raw(sqlStr6));
+                var tOne6 = {};
+                var tUsdPrice0 = 0;
+                if (tRet6.length > 0) {
+                    tOne6 = {
+                        ...tRet6[0],
+                    };
+                    tUsdPrice0 = tOne6.usd_price;
+                    sheet.getCell(4, 3).value = tOne6.style_name;
+                    sheet.getCell(4, 5).value = AFLib.numToFixed(
+                        Number(tOne6.tot_cnt),
+                        0,
+                    );
+                    sheet.getCell(4, 7).value = AFLib.numToFixed(
+                        Number(tOne6.usd_price),
+                        2,
+                    );
+                    sheet.getCell(4, 8).value = Number('0'); // Commition
+                    sheet.getCell(8, 4).value = Number('0'); // Commition
+                    sheet.getCell(7, 4).value = Number('0'); // Commition
+                    var tFcPrice = tOne6.fc_price;
+                    if (tOne6.sample_cost_flag === '1') {
+                        let sqlStr7 = `
+           					select 
+                           (
+                           (isnull((right(f.cd_name,2)*10000),0)+isnull((right(g.cd_name,2)*a.order_qty*10000),0) 
+           					      +isnull(a.welding_cost*a.order_qty),0)+a.sub_patt_cost+a.sub_sew_cost+a.sub_welding_cost 
+           				      	+isnull((right(c.cd_name,3)*a.repair_qty*10000),0)+a.etc_amount)* b.usd_rate ) as fc_price
+           					from kzz_sample_cost a
+                          left join kcd_code f on a.patt_cost = f.cd_code f.cd_group = 'PATT_COST' 
+                          left join kcd_code g on a.sew_cost = g.cd_code and g.cd_group = 'SEW_COST' 
+                          kcd_code c,
+                          kcd_currency b 
+           					where order_cd = '${args.data.ORDER_CD}' 
+           					and c.cd_group = 'WORK_TYPE' 
+           					and a.work_type = c.cd_code 
+           					and b.start_date = a.sample_end_date 
+           					and b.curr_cd='KRW' 
+                  `;
+                        var tRet7 = await prisma.$queryRaw(Prisma.raw(sqlStr7));
+                        if (tRet7.length > 0) tFcPrice = tRet7[0].fc_price;
+                    }
+                    sheet.getCell(8, 3).value = AFLib.numToFixed(
+                        Number(tFcPrice),
+                        2,
+                    );
+                }
+                sheet.getCell(4, 6).value = AFLib.numToFixed(
+                    Number(tActShipQty),
+                    2,
+                );
+                sheet.getCell(4, 10).value = tShipDate;
+
+                var tShipAmt = parseFloat(tUsdPrice0) * parseFloat(tShipQty);
+                sheet.getCell(4, 9).value = AFLib.numToFixed(
+                    Number(tShipAmt),
+                    2,
+                );
+
+                var tMatlPrice1 = 0;
+                var tEtcPrice1 = 0;
+                if (parseFloat(tShipQty) > 0) {
+                    tMatlPrice1 = parseFloat(tTotalUsd) / parseFloat(tShipQty);
+                    tEtcPrice1 =
+                        parseFloat(tOne6.etc_amt) / parseFloat(tShipQty) +
+                        parseFloat(tOne6.line_charge_price);
+                }
+                sheet.getCell(8, 2).value = AFLib.numToFixed(
+                    Number(tMatlPrice1),
+                    2,
+                );
+                sheet.getCell(8, 5).value = AFLib.numToFixed(
+                    Number(tEtcPrice1),
+                    2,
+                );
+
+                var tSumPrice = 0;
+                tSumPrice += parseFloat(sheet.getCell(8, 2).value);
+                tSumPrice += parseFloat(sheet.getCell(8, 3).value);
+                tSumPrice += parseFloat(sheet.getCell(8, 4).value);
+                tSumPrice += parseFloat(sheet.getCell(8, 5).value);
+                //sheet.getCell(8, 6).value = AFLib.numToFixed(Number(tSumPrice),2,);
+                var tProfit = (parseFloat(tUsdPrice0) - parseFloat(tSumPrice)) /parseFloat(tUsdPrice0);
+                //sheet.getCell(8, 7).value = AFLib.numToFixed(Number(tProfit),3,);
+
+                sheet.getCell(7, 4).value = Number('0');
+                sheet.getCell(7, 3).value = AFLib.numToFixed(
+                    Number(tOne6.fc_bef),
+                    2,
+                );
+                sheet.getCell(7, 5).value = Number('0');
+
+                // before 원가
+                var dwBefCost = 0;
+                let sqlStr7 = `
+                    select
+                        isnull(sum(a.use_qty * c.matl_price * d.usd_rate), 0) as bef_cost
+                    from
+                        ksv_po_mrpnet a,
+                        ksv_order_mst b,
+                        kcd_matl_mem c,
+                        kcd_curr_com d,
+                        kcd_matl_mst e,
+                        kcd_vendor f
+                    where
+                        a.po_cd = '${tPoCd}'
+                        and a.order_cd = '${args.data.ORDER_CD}'
+                        and b.order_cd = '${args.data.ORDER_CD}'
+                        and c.matl_cd = a.matl_cd
+                        and c.matl_seq = a.matl_seq
+                        and d.curr_cd = c.curr_cd
+                        and d.start_date = (
+                            select
+                                max(start_date)
+                            from
+                                kcd_curr_com
+                            where
+                                start_date <= b.order_date
+                        )
+                        and e.matl_cd = a.matl_cd
+                        and f.vendor_cd = e.vendor_cd
+                        and f.vendor_type <> '4'
+                `;
+                var tRet7 = await prisma.$queryRaw(Prisma.raw(sqlStr7));
+                tRet7.forEach((col, i) => {
+                    dwBefCost += parseFloat(col.bef_cost);
+                });
+
+                var tCostAmt = 0;
+                if (parseFloat(tShipQty) > 0)
+                    tCostAmt = dwBefCost / parseFloat(tOrderCnt);
+                sheet.getCell(7, 2).value = AFLib.numToFixed(
+                    Number(tCostAmt),
+                    2,
+                );
+                sheet.getCell(12, 1).value = tOne6.remark;
+
+                // Excel Write
+                var tPath = '';
+                var tCols = __dirname.split('/');
+                var tFlag = 0;
+                tCols.forEach((col, i) => {
+                    if (col === 'src') {
+                        tPath += '/upload/excel';
+                        tFlag = 1;
+                    }
+                    if (tFlag === 0) {
+                        tPath += '/' + col;
+                    }
+                });
+
+                var tExcelFileName0 = `${args.data.ORDER_CD}-완료보고서-${tUserInfo.USER_ID}-${tRetDate}.xlsx`;
+                let tTitle = tExcelFileName0;
+                let tFileKey = tExcelFileName0;
+                /*          
+                var tExcelFileName = `${tPath}/${tExcelFileName0}`;
+                const fileData = await wb.xlsx.writeBuffer();
+                fs.createWriteStream(tExcelFileName).write(fileData);
+                */
+                await prisma.$queryRaw(
+                    Prisma.raw(
+                        `
+                            delete from kcd_fileinfo
+                            where
+                                title = '${tTitle}'
+                                and file_key = '${tFileKey}'
+                                and kind = 'S020602'
+                        `,
+                    ),
+                );
+                const uploadInfo = await generateUploadURL();
+                const uploadURL = uploadInfo.uploadURL;
+                const fileURL = uploadURL.split('?')[0];
+
+                var tInObj = {};
+                tInObj.NAME = tExcelFileName0;
+                tInObj.URL = fileURL;
+                tInObj.TITLE = tTitle;
+                tInObj.FILE_KEY = tFileKey;
+                tInObj.KIND = 'S020602';
+                var tSql11 = AFLib.createTableSql('KCD_FILEINFO', tInObj);
+                await prisma.$queryRaw(Prisma.raw(tSql11));
+
+                return await upload(tExcelFileName0, wb, uploadURL);
+            } catch (e) {
+                var tRetArray = [];
+                var tObj = {};
+                tObj.id = 0;
+                tObj.CODE = 'ERROR:End Report (Excel):' + e.message;
+                tRetArray.push(tObj);
+                return tRetArray;
+            }
+        },
+    },
+};
+
+export default moduleQuery_S020602_ORDER_REG_QRY;

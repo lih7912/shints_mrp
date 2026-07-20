@@ -1,0 +1,70 @@
+[
+    {
+        "Message": "Success",
+        "Status": "Sailing",
+        "StatusId": 40,
+        "ReferenceNo": "",
+        "BLReferenceNo": "ONEYTYOF32065700",
+        "ShippingLine": "ONE LINE",
+        "ContainerNumber": "TRHU4175578",
+        "ContainerTEU": "40",
+        "FromCountry": "JAPAN",
+        "Pol": "KOBE",
+        "LoadingDate": {
+            "Date": "2025-04-05",
+            "IsActual": true
+        },
+        "DepartureDate": {
+            "Date": "2025-04-06",
+            "IsActual": true
+        },
+        "TSPorts": [
+            {
+                "Port": "BUSAN (PUSAN)",
+                "ArrivalDate": {
+                    "Date": "2025-04-08",
+                    "IsActual": true
+                },
+                "DepartureDate": {
+                    "Date": "2025-04-12",
+                    "IsActual": true
+                },
+                "Vessel": "TO BE ANNOUNCED",
+                "VesselIMO": "",
+                "VesselLatitude": "Not Supported",
+                "VesselLongitude": "Not Supported"
+            }
+        ],
+        "ToCountry": "VIETNAM",
+        "Pod": "HAI PHONG (HAIPHONG)",
+        "ArrivalDate": {
+            "Date": "2025-04-17",
+            "IsActual": false
+        },
+        "DischargeDate": {
+            "Date": "2025-04-17",
+            "IsActual": false
+        },
+        "Vessel": "MARGARET RIVER BRIDGE",
+        "VesselIMO": "9550383",
+        "VesselLatitude": "Not Supported",
+        "VesselLongitude": "Not Supported",
+        "GateOutDate": "",
+        "EmptyReturnDate": "",
+        "FormatedTransitTime": "12 days",
+        "ETA": "-",
+        "FirstETA": "2025-04-17",
+        "BLContainerCount": 2,
+        "BLContainers": [
+            {
+                "ContainerCode": "NYKU0843658",
+                "ContainerTEU": "40",
+                "LiveMapUrl": "https://shipsgo.com/live-map-container-tracking?query=NYKU0843658",
+                "BLGateOutDate": "",
+                "BLEmptyReturnDate": ""
+            }
+        ],
+        "LiveMapUrl": "https://shipsgo.com/live-map-container-tracking?query=TRHU4175578",
+        "Tags": []
+    }
+]

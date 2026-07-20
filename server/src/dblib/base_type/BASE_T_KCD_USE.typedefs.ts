@@ -1,0 +1,41 @@
+// 데이터 형식(typeDefs) 지정하기 위한 gql 불러오기
+import { gql } from 'apollo-server';
+
+// export default 활용해 gql typeDefs 내보내기
+const moduleTypedefs_BASE_KCD_USE = gql`
+    type BASE_QRY_KCD_USE {
+        USER_ID: String
+        PASSWD: String
+        USER_NAME: String
+        FACTORY_CD: String
+        PART: String
+        RANK: String
+        EMAIL: String
+        USER_LEVEL: String
+        STATUS_CD: String
+        AUTH_KEY: String
+        ID_RSA: String
+        TEL_NO: String
+        EXCEL: String
+        id: Int
+    }
+
+    input BASE_INPUT_KCD_USE {
+        USER_ID: String
+        PASSWD: String
+        USER_NAME: String
+        FACTORY_CD: String
+        PART: String
+        RANK: String
+        EMAIL: String
+        USER_LEVEL: String
+        STATUS_CD: String
+        AUTH_KEY: String
+        ID_RSA: String
+        TEL_NO: String
+        EXCEL: String
+        id: Int
+    }
+`;
+
+export default moduleTypedefs_BASE_KCD_USE;

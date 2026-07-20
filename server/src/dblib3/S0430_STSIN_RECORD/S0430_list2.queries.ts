@@ -1,0 +1,323 @@
+import { Prisma } from '@prisma/client';
+import prisma from '../../db'; //PrismaClient 사용하기 위해 불러오기
+import AFLib from '../../commlib'; //PrismaClient 사용하기 위해 불러오기
+const fs = require('fs');
+
+//
+class S0430_COMM {
+    async queryS0430_LIST_2(argData, contextValue) {
+        var tSQL = '';
+
+        let sqlPoPrice = `
+            select po_cd, matl_cd, 
+                   isnull(max(po_price), 0) as po_price, 
+                   isnull(max(surcharge_amt), 0) as surcharge_amt, 
+                   isnull(max(surcharge_price), 0) as surcharge_price,
+                   isnull(max(surcharge_remark), '') as surcharge_remark
+            from ksv_stock_mem2
+            where  pu_cd = '${argData.PU_CD}'
+            group by po_cd, matl_cd
+        `;
+        var retPoPrice = await prisma.$queryRaw(Prisma.raw(sqlPoPrice));
+
+        let sqlOrderQty = `
+            select
+                   a.po_cd,
+                   a.matl_cd,
+                   a.use_po_type,
+                   b.matl_name,
+                   b.color,
+                   b.spec,
+                   b.unit,
+                   c.matl_price,
+                   c.curr_cd,
+                   c.matl_seq,
+                   isnull(sum(a.po_qty), 0) as s_po_qty, 
+                   isnull(sum(a.use_qty), 0)  as s_use_qty
+            from ksv_po_mrp a,  kcd_matl_mst b,  kcd_matl_mem c
+            where a.po_cd in (select distinct po_cd from ksv_stock_mem2 where pu_cd = '${argData.PU_CD}')
+            and   a.matl_cd in (
+                      select distinct kk.matl_cd
+                      from 
+                      (
+                          select a.pu_cd, a.po_cd, a.matl_cd, a.po_qty2, b.vendor_cd, c.vendor_cd as vendor_cd2
+                          from ksv_stock_mem2 a, ksv_pu_mst2 b, kcd_matl_mst c
+                          where a.pu_cd = '${argData.PU_CD}'
+                          and   a.pu_cd = b.pu_cd
+                          and   a.matl_cd = c.matl_cd
+                          and   b.vendor_cd = c.vendor_cd
+                      ) kk
+                  )
+            and   a.use_po_type = '1'
+            and   (a.po_seq < 97  or a.po_seq > 99)
+            and   a.matl_cd = b.matl_cd
+            and   b.matl_cd = c.matl_cd
+            and   c.matl_seq = (select max(matl_seq) from kcd_matl_mem where matl_cd = b.matl_cd)
+            group by
+                   a.po_cd,
+                   a.matl_cd,
+                   a.use_po_type,
+                   b.matl_name,
+                   b.color,
+                   b.spec,
+                   b.unit,
+                   c.matl_price,
+                   c.curr_cd,
+                   c.matl_seq
+        `;
+        var retOrderQty = await prisma.$queryRaw(Prisma.raw(sqlOrderQty));
+
+        let sqlStockQty = `
+            select
+                   a.po_cd,
+                   a.po_matl_cd,
+                   a.use_po_type,
+                   b.matl_name,
+                   b.color,
+                   b.spec,
+                   c.matl_price,
+                   isnull(sum(a.po_qty), 0) as s_po_qty, 
+                   isnull(sum(a.use_qty), 0)  as s_use_qty
+            from ksv_po_mrp a,  kcd_matl_mst b,  kcd_matl_mem c
+            where a.po_cd in (select distinct po_cd from ksv_stock_mem2 where pu_cd = '${argData.PU_CD}')
+            and   a.po_matl_cd in (select distinct matl_cd from ksv_stock_mem2 where pu_cd = '${argData.PU_CD}')
+            and   a.use_po_type = '2'
+            and   a.matl_cd = b.matl_cd
+            and   b.matl_cd = c.matl_cd
+            and   c.matl_seq = (select max(matl_seq) from kcd_matl_mem where matl_cd = b.matl_cd)
+            group by
+                   a.po_cd,
+                   a.po_matl_cd,
+                   a.use_po_type,
+                   b.matl_name,
+                   b.color,
+                   b.spec,
+                   c.matl_price
+        `;
+        var retStockQty = await prisma.$queryRaw(Prisma.raw(sqlStockQty));
+
+        let sqlStockMemOrderQty = `
+            select
+                   a.po_cd,
+                   a.matl_cd,
+                   b.matl_name,
+                   b.color,
+                   b.spec,
+                   c.matl_price,
+                   isnull(sum(a.po_qty), 0) as s_po_qty, 
+                   isnull(sum(a.in_qty), 0) as s_in_qty
+            from ksv_stock_mem a,  kcd_matl_mst b, kcd_matl_mem c
+            where a.po_cd in (select distinct po_cd from ksv_stock_mem2 where pu_cd = '${argData.PU_CD}')
+            and   a.matl_cd in (select distinct matl_cd from ksv_stock_mem2 where pu_cd = '${argData.PU_CD}')
+            and   a.matl_cd = b.matl_cd
+            and   b.matl_cd = c.matl_cd
+            and   c.matl_seq = (select max(matl_seq) from kcd_matl_mem where matl_cd = b.matl_cd)
+            and   (a.po_seq <  97 or  a.po_seq >  99)
+            group by
+                   a.po_cd,
+                   a.matl_cd,
+                   b.matl_name,
+                   b.color,
+                   b.spec,
+                   c.matl_price
+        `;
+        var retStockMemOrderQty = await prisma.$queryRaw(Prisma.raw(sqlStockMemOrderQty));
+
+        let sqlStockMemMoqQty = `
+            select
+                   a.po_cd,
+                   a.po_seq,
+                   a.matl_cd,
+                   b.matl_name,
+                   b.color,
+                   b.spec,
+                   c.matl_price,
+                   isnull(sum(a.po_qty), 0) as s_po_qty, 
+                   isnull(sum(a.in_qty), 0)  as s_in_qty
+            from ksv_stock_mem a,  kcd_matl_mst b, kcd_matl_mem c
+            where a.po_cd in (select distinct po_cd from ksv_stock_mem2 where pu_cd = '${argData.PU_CD}')
+            and   a.matl_cd in (select distinct matl_cd from ksv_stock_mem2 where pu_cd = '${argData.PU_CD}')
+            and   a.matl_cd = b.matl_cd
+            and   b.matl_cd = c.matl_cd
+            and   c.matl_seq = (select max(matl_seq) from kcd_matl_mem where matl_cd = b.matl_cd)
+            and   (a.po_seq >=  97 and   a.po_seq <=  99)
+            group by
+                   a.po_cd,
+                   a.po_seq,
+                   a.matl_cd,
+                   b.matl_name,
+                   b.color,
+                   b.spec,
+                   c.matl_price
+        `;
+        var retStockMemMoqQty = await prisma.$queryRaw(Prisma.raw(sqlStockMemMoqQty));
+ 
+        var tDataArray4 = [];
+        var tIdx = 0;
+        for (tIdx = 0; tIdx < retOrderQty.length; tIdx++) {
+            var tOrderQty = { ...retOrderQty[tIdx] };
+            var tResult = {};
+            tResult.PU_CD = argData.PU_CD;
+            tResult.PO_CD = tOrderQty.po_cd;
+            tResult.PO_SEQ = '';
+            tResult.MATL_CD = tOrderQty.matl_cd;
+            tResult.MATL_SEQ = tOrderQty.matl_seq;
+            tResult.MATL_NAME = tOrderQty.matl_name;
+            tResult.COLOR = tOrderQty.color;
+            tResult.SPEC = tOrderQty.spec;
+            tResult.UNIT = tOrderQty.unit;
+            tResult.CURR_CD = tOrderQty.curr_cd;
+            tResult.MASTER_PRICE = parseFloat(tOrderQty.matl_price).toFixed(4);
+            tResult.CONF_FLAG = '1';
+            tResult.PO_PRICE = tResult.MASTER_PRICE;
+            tResult.SURCHARGE_PRICE = '0';
+            tResult.SURCHARGE_AMT = '0';
+            tResult.SURCHARGE_REMARK = '';
+
+            retPoPrice.forEach((col, i) => {
+                if (tOrderQty.po_cd === col.po_cd && tOrderQty.matl_cd === col.matl_cd) {
+                    tResult.PO_PRICE = parseFloat(col.po_price).toFixed(4);
+                    tResult.SURCHARGE_PRICE = parseFloat(col.surcharge_price).toFixed(4);
+                    tResult.SURCHARGE_AMT = parseFloat(col.surcharge_amt).toFixed(4);
+                    tResult.SURCHARGE_REMARK = col.surcharge_remark;
+                }
+            });
+
+
+            var tMrpQty = 0;
+            var tStockQty = 0;
+            var tPoQty = 0;
+            tMrpQty = parseFloat(tOrderQty.s_use_qty);
+            tStockQty = parseFloat(tOrderQty.s_use_qty) - parseFloat(tOrderQty.s_po_qty);
+            tPoQty = parseFloat(tOrderQty.s_po_qty);
+
+            var tStockQty2 = 0;
+            retStockQty.forEach((col, i) => {
+                if (tOrderQty.po_cd === col.po_cd && tOrderQty.matl_cd === col.po_matl_cd) {
+                    tStockQty2 += parseFloat(col.s_use_qty);
+                }
+            });
+
+            var tPartInQty = 0;
+            var tStsInQty = 0;
+            var tPoQty2  = 0;
+
+            retStockMemOrderQty.forEach((col, i) => {
+                if (tOrderQty.po_cd === col.po_cd && tOrderQty.matl_cd === col.matl_cd) {
+                    tPartInQty += parseFloat(col.s_in_qty);
+                    tPoQty2 += parseFloat(col.s_po_qty);
+                    var tmpQty = parseFloat(col.s_po_qty) - parseFloat(col.s_in_qty);
+                    if (tmpQty > 0) tStsInQty += tmpQty;
+                }
+            });
+
+            var tMoqQty  = 0;
+            var tOverQty  = 0;
+            var tFocQty  = 0;
+            retStockMemMoqQty.forEach((col, i) => {
+                if (tOrderQty.po_cd === col.po_cd && tOrderQty.matl_cd === col.matl_cd) {
+                    tPartInQty += parseFloat(col.s_in_qty);
+                    tPoQty2 += parseFloat(col.s_po_qty);
+                    var tmpQty = parseFloat(col.s_po_qty) - parseFloat(col.s_in_qty);
+                    if (tmpQty > 0 && parseFloat(col.po_seq) === 99) tMoqQty += tmpQty;
+                    if (tmpQty > 0 && parseFloat(col.po_seq) === 97) tFocQty += tmpQty;
+                    if (tmpQty > 0 && parseFloat(col.po_seq) === 98) tOverQty += tmpQty;
+                }
+            });
+
+            tResult.MRP_QTY = parseFloat(tMrpQty).toFixed(2);
+            tResult.STOCK_QTY = parseFloat(tStockQty).toFixed(2);
+            tResult.PO_QTY = parseFloat(tPoQty2).toFixed(2);
+            tResult.MOQ_QTY = parseFloat(tMoqQty).toFixed(2);
+            tResult.LEFTOVER_QTY = '0';
+            tResult.PART_IN_QTY = parseFloat(tPartInQty).toFixed(2);
+            tResult.FOC_QTY = '0';
+            tResult.OVER_SHORT_QTY = '0';
+            tResult.STOCK_MEM_PO_QTY = parseFloat(tPoQty2).toFixed(2);
+
+            var tBalInQty = parseFloat(tResult.STOCK_MEM_PO_QTY) - parseFloat(tResult.PART_IN_QTY); 
+            if (tBalInQty < 0) tBalInQty = 0;
+            tResult.BAL_IN_QTY = parseFloat(tBalInQty).toFixed(2);
+      
+            var tShipQty = parseFloat(tResult.BAL_IN_QTY) + parseFloat(tResult.FOC_QTY);
+            tResult.SHIP_QTY = parseFloat(tShipQty).toFixed(2);
+
+            tResult.OVER_SHORT_RATE = '0';
+
+            var tDiffPrice = parseFloat(tResult.PO_PRICE) - parseFloat(tResult.MASTER_PRICE);
+            var tShipAmt = parseFloat(tResult.SHIP_QTY) * parseFloat(tResult.PO_PRICE);
+
+            tResult.SAVE_MOQ_QTY = parseFloat(tResult.MOQ_QTY).toFixed(2);
+            tResult.SAVE_PO_QTY = parseFloat(tResult.PO_QTY).toFixed(2);
+            tResult.SAVE_BAL_IN_QTY = parseFloat(tResult.BAL_IN_QTY).toFixed(2);
+
+            var tSubObj = { ...tResult } ;
+            tSubObj.DATAS = [];
+            tSubObj.DATAS.push(tResult); 
+
+            tDataArray4.push(tSubObj);
+        }
+
+        return tDataArray4;
+    }
+}
+
+const moduleQuery_S0430_LIST_2_0 = {
+    Query: {
+        mgrQueryS0430_LIST_2: async (_, args, contextValue) => {
+            var tSQL = '';
+
+            var inSql = '';
+            args.data.forEach((col, i) => {
+                if (i === 0) inSql = `'${col.PU_CD}'`;
+                else inSql += `,'${col.PU_CD}'`;
+            });
+
+            var tArray = [];
+
+            var tIdx99 = 0;
+            for (tIdx99 = 0; tIdx99 < args.data.length; tIdx99++) {
+                var argData = { ...args.data[tIdx99] };
+
+                let sqlPuMst = `
+                    select
+                        *
+                    from
+                        ksv_pu_mst2
+                    where
+                        pu_cd = '${argData.PU_CD}'
+                `;
+                var retPuMst = await prisma.$queryRaw(Prisma.raw(sqlPuMst));
+                if (retPuMst.length <= 0) {
+                    continue;
+                }
+                var objPuMst = { ...retPuMst[0] };
+
+                var tArgObj = {};
+                tArgObj.PU_CD = argData.PU_CD;
+                tArgObj.IN_PO_CD = objPuMst.PO_CD2;
+                tArgObj.IN_PO_SEQ = '';
+                tArgObj.BUYER_CD = objPuMst.BUYER_CD;
+                tArgObj.VENDOR_CD = objPuMst.VENDOR_CD;
+                tArgObj.CURR_CD = objPuMst.CURR_CD;
+                tArgObj.LAST = '1';
+
+                var tFunc = new S0430_COMM();
+                var tRetObj = await tFunc.queryS0430_LIST_2(
+                    tArgObj,
+                    contextValue,
+                );
+                tRetObj.forEach((col, i) => {
+                    var tObj1 = { ...col };
+                    tObj1.key  = `${tObj1.MATL_NAME}${tObj1.SPEC}${tObj1.COLOR}`;
+                    tArray.push(tObj1);
+                });
+            }
+
+            const sortArray = tArray.sort((a, b) => a.key.toLowerCase() < b.key.toLowerCase() ? -1: 1);
+            return sortArray;
+        },
+    },
+};
+
+export default moduleQuery_S0430_LIST_2_0;

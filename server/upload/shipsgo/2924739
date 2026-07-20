@@ -1,0 +1,54 @@
+[
+    {
+        "Message": "Success",
+        "Status": "Sailing",
+        "StatusId": 40,
+        "ReferenceNo": "",
+        "BLReferenceNo": "HBG1762175",
+        "ShippingLine": "CMA CGM",
+        "ContainerNumber": "TCLU3208038",
+        "ContainerTEU": "20",
+        "FromCountry": "BELGIUM",
+        "Pol": "ANTWERP",
+        "LoadingDate": {
+            "Date": "2023-07-01",
+            "IsActual": true
+        },
+        "DepartureDate": {
+            "Date": "2023-07-02",
+            "IsActual": true
+        },
+        "TSPorts": [],
+        "ToCountry": "DJIBOUTI",
+        "Pod": "DJIBOUTI",
+        "ArrivalDate": {
+            "Date": "2023-07-21",
+            "IsActual": false
+        },
+        "DischargeDate": {
+            "Date": "2023-07-21",
+            "IsActual": false
+        },
+        "Vessel": "APL SALALAH",
+        "VesselIMO": "9462029",
+        "VesselLatitude": 17.183503,
+        "VesselLongitude": 40.806617,
+        "GateOutDate": "",
+        "EmptyReturnDate": "",
+        "FormatedTransitTime": "20 days",
+        "ETA": "-",
+        "FirstETA": "2023-07-21",
+        "BLContainerCount": 2,
+        "BLContainers": [
+            {
+                "ContainerCode": "TGHU5043609",
+                "ContainerTEU": "40",
+                "LiveMapUrl": "https://shipsgo.com/live-map-container-tracking?query=TGHU5043609",
+                "BLGateOutDate": "",
+                "BLEmptyReturnDate": ""
+            }
+        ],
+        "LiveMapUrl": "https://shipsgo.com/live-map-container-tracking?query=TCLU3208038",
+        "Tags": []
+    }
+]

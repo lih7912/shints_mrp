@@ -1,0 +1,46 @@
+[
+    {
+        "Message": "Success",
+        "Status": "Discharged",
+        "StatusId": 50,
+        "ReferenceNo": "",
+        "BLReferenceNo": "SHZ6829859",
+        "ShippingLine": "CMA CGM",
+        "ContainerNumber": "TLLU2093020",
+        "ContainerTEU": "20",
+        "FromCountry": "CHINA",
+        "Pol": "SHEKOU (SHENZHEN)",
+        "LoadingDate": {
+            "Date": "2024-11-22",
+            "IsActual": true
+        },
+        "DepartureDate": {
+            "Date": "2024-11-22",
+            "IsActual": true
+        },
+        "TSPorts": [],
+        "ToCountry": "DJIBOUTI",
+        "Pod": "DJIBOUTI",
+        "ArrivalDate": {
+            "Date": "2024-12-07",
+            "IsActual": true
+        },
+        "DischargeDate": {
+            "Date": "2024-12-08",
+            "IsActual": true
+        },
+        "Vessel": "CMA CGM LOME",
+        "VesselIMO": "9539494",
+        "VesselLatitude": 11.6,
+        "VesselLongitude": 43.13333,
+        "GateOutDate": "2024-12-11",
+        "EmptyReturnDate": "",
+        "FormatedTransitTime": "16 days",
+        "ETA": "-",
+        "FirstETA": "2024-12-08",
+        "BLContainerCount": 1,
+        "BLContainers": [],
+        "LiveMapUrl": "https://shipsgo.com/live-map-container-tracking?query=TLLU2093020",
+        "Tags": []
+    }
+]

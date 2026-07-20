@@ -1,0 +1,84 @@
+/* eslint-disable */
+import axios from "axios";
+import {
+    ApolloClient,
+    InMemoryCache,
+    ApolloProvider,
+    gql,
+} from "@apollo/client";
+import apolloOption from "../../assets/env_graphql";
+
+export class ServiceKCD_CODE {
+    async getDatasKCD_CODE_STATUS_CD() {
+        apolloOption.cache = new InMemoryCache();
+        const client = new ApolloClient(apolloOption);
+
+        const qry_code = "STATUS_CD";
+
+        try {
+            const { loading, error, data } = await client.query({
+                query: gql`
+                    query QryGroupKCD_CODE($cdGroup: String!) {
+                        qryGroupKCD_CODE(CD_GROUP: $cdGroup) {
+                            id
+                            CD_GROUP
+                            CD_CODE
+                            CD_NAME
+                            CD_FLAG
+                        }
+                    }
+                `,
+                variables: { cdGroup: qry_code },
+            });
+            console.log("KCD_CODE_STATUS_CD:", error);
+            console.log(
+                "KCD_CODE_STATUS_CD:",
+                JSON.stringify(data.qryGroupKCD_CODE.length),
+            );
+            return data.qryGroupKCD_CODE;
+        } catch (e) {
+            return e;
+        }
+    }
+
+    async getDatasKCD_CODE_PART() {
+        apolloOption.cache = new InMemoryCache();
+        const client = new ApolloClient(apolloOption);
+
+        const qry_code = "part";
+
+        try {
+            const { loading, error, data } = await client.query({
+                query: gql`
+                    query QryGroupKCD_CODE($cdGroup: String!) {
+                        qryGroupKCD_CODE(CD_GROUP: $cdGroup) {
+                            id
+                            CD_GROUP
+                            CD_CODE
+                            CD_NAME
+                            CD_FLAG
+                        }
+                    }
+                `,
+                variables: { cdGroup: qry_code },
+            });
+            console.log(
+                "KCD_CODE_PART:",
+                JSON.stringify(data.qryGroupKCD_CODE.length),
+            );
+            return data.qryGroupKCD_CODE;
+        } catch (e) {
+            return e;
+        }
+    }
+
+    /*
+    getProducts() {
+        return axios.get('assets/demo/data/products.json').then(res => res.data.data);
+    }
+
+    getProductsWithOrdersSmall() {
+        return axios.get('assets/demo/data/products-orders-small.json').then(res => res.data.data);
+    }
+*/
+}

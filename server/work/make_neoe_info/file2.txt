@@ -1,0 +1,222 @@
+[
+    {
+        "curr_sour": "001",
+        "rate_base": "1380.1000000000001"
+    },
+    {
+        "curr_sour": "002",
+        "rate_base": "913.5500000000001"
+    },
+    {
+        "curr_sour": "003",
+        "rate_base": "1490.3000000000002"
+    },
+    {
+        "curr_sour": "004",
+        "rate_base": "193.46"
+    },
+    {
+        "curr_sour": "AED",
+        "rate_base": "375.74"
+    },
+    {
+        "curr_sour": "AUD",
+        "rate_base": "922.25"
+    },
+    {
+        "curr_sour": "BDT",
+        "rate_base": "11.55"
+    },
+    {
+        "curr_sour": "BHD",
+        "rate_base": "3660.4500000000003"
+    },
+    {
+        "curr_sour": "BND",
+        "rate_base": "1048.47"
+    },
+    {
+        "curr_sour": "BRL",
+        "rate_base": "242.52"
+    },
+    {
+        "curr_sour": "CAD",
+        "rate_base": "998.73"
+    },
+    {
+        "curr_sour": "CHF",
+        "rate_base": "1595.03"
+    },
+    {
+        "curr_sour": "CLP",
+        "rate_base": "1.46"
+    },
+    {
+        "curr_sour": "COP",
+        "rate_base": "0.32"
+    },
+    {
+        "curr_sour": "CZK",
+        "rate_base": "59.080000000000005"
+    },
+    {
+        "curr_sour": "DKK",
+        "rate_base": "199.83"
+    },
+    {
+        "curr_sour": "EGP",
+        "rate_base": "28.34"
+    },
+    {
+        "curr_sour": "ETB",
+        "rate_base": "11.34"
+    },
+    {
+        "curr_sour": "FJD",
+        "rate_base": "617.46"
+    },
+    {
+        "curr_sour": "GBP",
+        "rate_base": "1791.8500000000001"
+    },
+    {
+        "curr_sour": "HKD",
+        "rate_base": "177.57000000000002"
+    },
+    {
+        "curr_sour": "HUF",
+        "rate_base": "3.72"
+    },
+    {
+        "curr_sour": "IDR",
+        "rate_base": "0.0887"
+    },
+    {
+        "curr_sour": "ILS",
+        "rate_base": "365.93"
+    },
+    {
+        "curr_sour": "INR",
+        "rate_base": "16.41"
+    },
+    {
+        "curr_sour": "JOD",
+        "rate_base": "1946.5400000000002"
+    },
+    {
+        "curr_sour": "KHR",
+        "rate_base": "0.34"
+    },
+    {
+        "curr_sour": "KWD",
+        "rate_base": "4502.1900000000005"
+    },
+    {
+        "curr_sour": "KZT",
+        "rate_base": "2.85"
+    },
+    {
+        "curr_sour": "LKR",
+        "rate_base": "4.71"
+    },
+    {
+        "curr_sour": "LYD",
+        "rate_base": "286.5"
+    },
+    {
+        "curr_sour": "MMK",
+        "rate_base": "0.66"
+    },
+    {
+        "curr_sour": "MOP",
+        "rate_base": "172.28"
+    },
+    {
+        "curr_sour": "MXN",
+        "rate_base": "69.16"
+    },
+    {
+        "curr_sour": "MYR",
+        "rate_base": "318.88"
+    },
+    {
+        "curr_sour": "NOK",
+        "rate_base": "126.37"
+    },
+    {
+        "curr_sour": "NPR",
+        "rate_base": "10.26"
+    },
+    {
+        "curr_sour": "NZD",
+        "rate_base": "833.86"
+    },
+    {
+        "curr_sour": "OMR",
+        "rate_base": "3585.05"
+    },
+    {
+        "curr_sour": "PHP",
+        "rate_base": "23.85"
+    },
+    {
+        "curr_sour": "PKR",
+        "rate_base": "4.95"
+    },
+    {
+        "curr_sour": "PLN",
+        "rate_base": "344.69"
+    },
+    {
+        "curr_sour": "QAR",
+        "rate_base": "378.52000000000004"
+    },
+    {
+        "curr_sour": "RON",
+        "rate_base": "299.64"
+    },
+    {
+        "curr_sour": "RUB",
+        "rate_base": "14.41"
+    },
+    {
+        "curr_sour": "SAR",
+        "rate_base": "367.48"
+    },
+    {
+        "curr_sour": "SEK",
+        "rate_base": "130.9"
+    },
+    {
+        "curr_sour": "SGD",
+        "rate_base": "1048.47"
+    },
+    {
+        "curr_sour": "THB",
+        "rate_base": "41.21"
+    },
+    {
+        "curr_sour": "TRY",
+        "rate_base": "40.28"
+    },
+    {
+        "curr_sour": "TWD",
+        "rate_base": "43.03"
+    },
+    {
+        "curr_sour": "TZS",
+        "rate_base": "0.51"
+    },
+    {
+        "curr_sour": "UZS",
+        "rate_base": "0.11"
+    },
+    {
+        "curr_sour": "VND",
+        "rate_base": "0.0543"
+    },
+    {
+        "curr_sour": "ZAR",
+        "rate_base": "78.7"
+    }
+]

@@ -1,0 +1,41 @@
+/* 전체 애플리케이션에 Roboto 폰트 적용 */
+body {
+    font-family: "Roboto", sans-serif;
+    font-size: 12px;
+}
+
+button {
+    font-size: 12px !important;
+}
+
+select {
+    font-size: 12px !important;
+}
+
+/* 스위치 크기 확대 */
+.form-check-input.large-switch {
+    width: 3rem;
+    height: 1.5rem;
+    margin-top: 0px !important;
+}
+.form-check-input.large-switch:checked {
+    background-color: #0d6efd;
+}
+
+.form-check span {
+    margin-left: 0.5rem;
+}
+
+/* 테이블 글자 세로 가운데 정렬 */
+.table td,
+.table th {
+    vertical-align: middle;
+}
+
+/* 왼쪽 단 고정 (sticky) 설정 */
+.sticky-left {
+    position: sticky;
+    top: 10px; /* 스크롤 시 상단에서의 거리 */
+    height: 100%; /* 왼쪽 단의 높이를 부모 요소에 맞춤 */
+    z-index: 1020; /* 다른 요소보다 위에 위치 */
+}

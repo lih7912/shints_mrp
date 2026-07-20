@@ -1,0 +1,85 @@
+[
+    {
+        "Message": "Success",
+        "Status": "Discharged",
+        "StatusId": 50,
+        "ReferenceNo": "",
+        "BLReferenceNo": "SGN1875542",
+        "ShippingLine": "CMA CGM",
+        "ContainerNumber": "ECMU2175962",
+        "ContainerTEU": "20",
+        "FromCountry": "VIETNAM",
+        "Pol": "HAI PHONG (HAIPHONG)",
+        "LoadingDate": {
+            "Date": "2023-06-30",
+            "IsActual": true
+        },
+        "DepartureDate": {
+            "Date": "2023-07-01",
+            "IsActual": true
+        },
+        "TSPorts": [
+            {
+                "Port": "NINGBO",
+                "ArrivalDate": {
+                    "Date": "2023-07-06",
+                    "IsActual": true
+                },
+                "DepartureDate": {
+                    "Date": "2023-07-17",
+                    "IsActual": true
+                },
+                "Vessel": "CMA CGM OSAKA",
+                "VesselIMO": "9400291",
+                "VesselLatitude": "Not Supported",
+                "VesselLongitude": "Not Supported"
+            },
+            {
+                "Port": "JEDDAH",
+                "ArrivalDate": {
+                    "Date": "2023-08-06",
+                    "IsActual": true
+                },
+                "DepartureDate": {
+                    "Date": "2023-08-26",
+                    "IsActual": true
+                },
+                "Vessel": "LOBIVIA",
+                "VesselIMO": "9228564",
+                "VesselLatitude": 11.6,
+                "VesselLongitude": 43.13333
+            }
+        ],
+        "ToCountry": "DJIBOUTI",
+        "Pod": "DJIBOUTI",
+        "ArrivalDate": {
+            "Date": "2023-09-04",
+            "IsActual": true
+        },
+        "DischargeDate": {
+            "Date": "2023-09-05",
+            "IsActual": true
+        },
+        "Vessel": "COSCO SHIPPING PANAMA",
+        "VesselIMO": "9732606",
+        "VesselLatitude": "Not Supported",
+        "VesselLongitude": "Not Supported",
+        "GateOutDate": "2023-09-15",
+        "EmptyReturnDate": "2023-10-09",
+        "FormatedTransitTime": "67 days",
+        "ETA": "-",
+        "FirstETA": "2023-09-05",
+        "BLContainerCount": 2,
+        "BLContainers": [
+            {
+                "ContainerCode": "DRYU9351924",
+                "ContainerTEU": "40",
+                "LiveMapUrl": "https://shipsgo.com/live-map-container-tracking?query=DRYU9351924",
+                "BLGateOutDate": "2023-10-02",
+                "BLEmptyReturnDate": "2023-10-02"
+            }
+        ],
+        "LiveMapUrl": "https://shipsgo.com/live-map-container-tracking?query=ECMU2175962",
+        "Tags": []
+    }
+]

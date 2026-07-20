@@ -1,0 +1,162 @@
+<!doctype html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <title>TRANSACTION LOG</title>
+        <!-- Bootstrap CSS -->
+        <link
+            href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css"
+            rel="stylesheet"
+        />
+        <link
+            href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;700&display=swap"
+            rel="stylesheet"
+        />
+        <link href="./tr_log.css" rel="stylesheet" />
+        <!-- jQuery CDN -->
+        <script src="https://code.jquery.com/jquery-3.6.4.min.js"></script>
+        <link
+            rel="stylesheet"
+            href="https://cdnjs.cloudflare.com/ajax/libs/toastr.js/latest/toastr.css"
+            integrity="sha512-3pIirOrwegjM6erE5gPSwkUzO+3cTjpnV9lexlNZqvupR64iZBnOOTiiLPb9M36zpMScbmUNIcHUqKD47M719g=="
+            crossorigin="anonymous"
+            referrerpolicy="no-referrer"
+        />
+        <script
+            src="https://cdnjs.cloudflare.com/ajax/libs/toastr.js/latest/toastr.min.js"
+            integrity="sha512-VEd+nq25CkR676O+pLBnDW09R7VQX9Mdiij052gVCp5yVH3jGtH70Ho/UUv4mJDsEdTvqRCFZg0NKGiojGnUCw=="
+            crossorigin="anonymous"
+            referrerpolicy="no-referrer"
+        ></script>
+        <link
+            href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/themes/prism-tomorrow.min.css"
+            rel="stylesheet"
+        />
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/prism.min.js"></script>
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-sql.min.js"></script>
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/moment.js/2.29.4/moment.min.js"></script>
+    </head>
+    <body>
+        <div class="container-fluid mt-4" style="width: 90%">
+            <h3>TRANSACTION LOG</h3>
+            <span style="color: gray"
+                >TRANSACTION이 시작되는 지점과 끝나는 지점 사이의 LOGGING된
+                QUERY입니다.</span
+            >
+            <div class="row mt-4">
+                <div class="filter-bar mb-3" style="width: 100%">
+                    <div class="filter-item calendar-container">
+                        <label for="current-date">DATE</label>
+                        <input
+                            type="date"
+                            id="current-date"
+                            class="form-control"
+                        />
+                        <button
+                            type="button"
+                            id="clear-date"
+                            class="btn btn-outline-secondary btn-sm"
+                        >
+                            Clear
+                        </button>
+                    </div>
+                    <div class="filter-item basic-filter-item">
+                        <span>USER ID</span>
+                        <input
+                            type="text"
+                            id="userId"
+                            class="form-control filter-input"
+                        />
+                    </div>
+                    <div class="filter-item basic-filter-item">
+                        <span>MENU CODE</span>
+                        <input
+                            type="text"
+                            id="menuCode"
+                            class="form-control filter-input"
+                        />
+                    </div>
+                    <div class="filter-item basic-filter-item">
+                        <span>KEYWORD</span>
+                        <input
+                            type="text"
+                            id="keyword"
+                            class="form-control filter-input"
+                        />
+                    </div>
+                    <div class="filter-item">
+                        <span>SEQ</span>
+                        <input
+                            type="number"
+                            id="seq"
+                            class="form-control filter-input"
+                            min="1"
+                        />
+                    </div>
+                    <div class="filter-item">
+                        <button
+                            class="btn btn-primary btn-md"
+                            onclick="setTable()"
+                            id="btnFilterIdScreenCode"
+                        >
+                            필터
+                        </button>
+                    </div>
+                </div>
+                <!-- Left Column -->
+                <div class="col-8 sticky-left">
+                    <div
+                        id="logScrollArea"
+                        style="height: 85vh; overflow-y: auto"
+                    >
+                        <table class="table" id="logTable">
+                            <thead>
+                                <tr>
+                                    <th scope="col">USER ID</th>
+                                    <th scope="col">TIMESTAMP</th>
+                                    <th scope="col">MENU CODE</th>
+                                    <th scope="col">SRC</th>
+                                    <th scope="col">SEQ</th>
+                                </tr>
+                            </thead>
+                            <tbody></tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- Right Column -->
+                <div class="col-4 rounded">
+                    <div style="height: 85vh; overflow: hidden">
+                        <table
+                            class="table"
+                            style="height: 100%; overflow: hidden"
+                        >
+                            <thead>
+                                <tr>
+                                    <th scope="col" class="col-12">QUERY</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr>
+                                    <td>
+                                        <pre><code id="queryArea" class="language-sql"></code></pre>
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div id="loadingOverlay" class="loading-overlay" style="display: none">
+            <div class="spinner-border text-primary" role="status">
+                <span class="visually-hidden">Loading...</span>
+            </div>
+        </div>
+
+        <!-- Bootstrap JS -->
+        <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+        <script src="./tr_log.js"></script>
+    </body>
+</html>

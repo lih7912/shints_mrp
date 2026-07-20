@@ -1,0 +1,802 @@
+// MGR_@@TNAME@@.queries.js
+
+import { Prisma } from '@prisma/client';
+import prisma from '../../db'; //PrismaClient 사용하기 위해 불러오기
+const fs = require('fs');
+import AFLib from '../../commlib'; //PrismaClient 사용하기 위해 불러오기
+import axios from 'axios';
+const Excel = require('exceljs');
+const {
+    generateUploadURL,
+    deleteUploadObject,
+    upload,
+} = require('../../../routes/s3');
+const { MongoClient } = require('mongodb');
+
+// export default로 Query 내용 내보내기
+const moduleQuery_S0217_SALES_MATL_PLAN_LIST_TBL_KSV_ORDER_MST1 = {
+    Query: {
+        mgrQuery_S0217_EXCEL_PRINT: async (_, args, contextValue) => {
+            var tRetDate = AFLib.getCurrTime();
+            var tRetDate1 = tRetDate.substring(0, 8);
+            var tUserInfo = AFLib.getUserInfo(contextValue);
+
+            var tFactoryN = '';
+            var tBuyerN = '';
+            if (args.data.FACTORY_CD === 'FC044') tFactoryN = 'ETP_';
+            if (args.data.BUYER_CD !== '') tBuyerN = `_${args.data.BUYER_CD}`;
+            var tWExcelFile = `${tFactoryN}판매계획${tBuyerN}-${tUserInfo.USER_ID}-${tRetDate1}`;
+
+            var tMonArray = [];
+            for (var tIdx = 1; tIdx <= 12; tIdx++) {
+                var tMMStr = tIdx;
+                if (tIdx < 10) tMMStr = `0${tIdx}`;
+                tMonArray.push(`${args.data.S_DATE.substring(0, 4)}${tMMStr}`);
+            }
+            var tLineArray = ['1', '3', 'D', 'W', 'S'];
+
+            var tArray99 = [];
+            for (var tIdx = 0; tIdx < 12; tIdx++) {
+                var tArray2 = [];
+                for (var tIdx1 = 0; tIdx1 < 10; tIdx1++) {
+                    tArray2.push(0);
+                }
+                tArray99.push(tArray2);
+            }
+
+            try {
+                // Excel Read
+                var tPath0 = '';
+                var tCols0 = __dirname.split('/');
+                var tFlag0 = 0;
+                tCols0.forEach((col, i) => {
+                    if (col !== '') {
+                        if (col === 'src') {
+                            tPath0 += '/upload/excel_template';
+                            tFlag0 = 1;
+                        }
+                        if (tFlag0 === 0) {
+                            tPath0 += '/' + col;
+                        }
+                    }
+                });
+                var tTemplateExcel = `${tPath0}/영업_판매계획.xlsx`;
+
+                const wb = new Excel.Workbook();
+                await wb.xlsx.readFile(tTemplateExcel);
+
+                var tSheetName = `Sheet1`;
+                const sheet = wb.getWorksheet(tSheetName);
+                // const sheet = wb.getWorksheet(1);
+
+                var tTableName = 'KSV_ORDER_PLAN';
+                if (args.data.FACTORY_CD === 'FC044')
+                    tTableName = 'KSV_ORDER_PLAN_ETHIOPIA';
+
+                var tSQL = '';
+                if (args.data.TEAM_CD === '')
+                    tSQL = `and a.buyer_cd like '%${args.data.BUYER_CD}%'`;
+                else tSQL = `and a.buyer_team like '%${args.data.TEAM_CD}%'`;
+
+                var sql_tot_buyer = `
+                    --- SELECT       
+                    ---       A.BUYER_NAME, 
+                    ---       A.BUYER_CD ,
+                    ---       isnull(sum(avr_price*b.tot_cnt*c.usd_rate), 0) AS usamt  
+                    --- from kcd_buyer a,ksv_order_mst b, kcd_curr_com  c 
+                    --- WHERE  A.BUYER_CD = LEFT(B.ORDER_CD, 2) and (B.STYLE_CD <> '00-0000') 
+                    --- and    c.start_date = (SELECT MAX(START_DATE) AS Expr1 FROM KCD_CURR_COM AS KCD_CURR_COM_1 ) and c.curr_cd = b.curr_cd 
+                    --- AND    (LEFT(B.DUE_DATE, 6) >= '${args.data.S_DATE}') AND (LEFT(B.DUE_DATE, 6) <= '${args.data.E_DATE}') 
+                    --- and b.factory_cd='${args.data.FACTORY_CD}' 
+                    --- ${tSQL}
+                    --- and b.order_status <> '*' 
+                    --- and a.buyer_cd not in ('ng','np','nu')  
+                    --- GROUP BY A.BUYER_NAME, A.BUYER_CD 
+                    --- having sum(b.tot_cnt) > 100 
+                    --- union 
+                    SELECT
+                        A.BUYER_NAME,
+                        A.BUYER_CD,
+                        isnull(sum(c.usd_rate * b.PLAN_AMT), 0) AS usamt
+                    FROM
+                        KCD_BUYER a,
+                        ${tTableName} B,
+                        kcd_curr_com c
+                    WHERE
+                        (B.YYMM >= '${args.data.S_DATE}')
+                        AND (B.YYMM <= '${args.data.E_DATE}')
+                        and A.BUYER_CD = B.BUYER_CD
+                        and c.start_date = (
+                            SELECT
+                                MAX(START_DATE) AS Expr1
+                            FROM
+                                KCD_CURR_COM AS KCD_CURR_COM_1
+                        )
+                        and c.curr_cd = b.curr_cd ${tSQL}
+                        and a.buyer_cd not in ('ng', 'np', 'nu')
+                    GROUP BY
+                        A.BUYER_NAME,
+                        A.BUYER_CD
+                    ORDER BY
+                        usamt desc
+                `;
+                var tRet_tot_buyer = await prisma.$queryRaw(
+                    Prisma.raw(sql_tot_buyer),
+                );
+
+                var sql_del = `
+                    delete from ksv_order_plan_temp
+                    WHERE
+                        reg_user = '${tUserInfo.USER_ID}'
+                `;
+                var tRet0 = await prisma.$queryRaw(Prisma.raw(sql_del));
+
+                var tIdx = 0;
+                for (tIdx = 0; tIdx < tRet_tot_buyer.length; tIdx++) {
+                    var tOne = tRet_tot_buyer[tIdx];
+                    var tIn = {};
+                    tIn.buyer_cd = tOne.BUYER_CD;
+                    tIn.usd_amt = tOne.usamt;
+                    tIn.reg_user = tUserInfo.USER_ID;
+                    var sql1 = AFLib.createTableSql('KSV_ORDER_PLAN_TEMP', tIn);
+                    var tRet1 = await prisma.$queryRaw(Prisma.raw(sql1));
+                }
+
+                var tYY = args.data.S_DATE.substring(0, 4);
+                sheet.getCell(2, 2).value = `JAN. ${tYY} ~ DEC. ${tYY}`;
+                sheet.getCell(2, 6).value = tRetDate1;
+
+                for (var tIdx = 0; tIdx < 12; tIdx++) {
+                    for (var tIdx1 = 0; tIdx1 < 10; tIdx1++) {
+                        tArray99[tIdx][tIdx1] = 0;
+                    }
+                }
+                var sql2_1 = `
+                    select
+                        a.yymm,
+                        a.line_type,
+                        isnull(sum(a.order_amt), 0) as order_amt,
+                        isnull(sum(a.order_qty), 0) as order_qty
+                    from
+                        ksv_order_plan_order a,
+                        kcd_buyer b
+                    where
+                        a.factory_cd in ('${args.data.FACTORY_CD}')
+                        and a.buyer_cd like '%${args.data.BUYER_CD}%'
+                        and a.buyer_cd = b.buyer_cd
+                        and a.yymm between '${args.data.S_DATE}' and '${args.data.E_DATE}'
+                    group by
+                        yymm,
+                        a.line_type
+                `;
+                var tRet2_1 = await prisma.$queryRaw(Prisma.raw(sql2_1));
+                tRet2_1.forEach((col, i) => {
+                    var tIndex = -1;
+                    var tIndex2 = -1;
+
+                    tMonArray.forEach((col1, i1) => {
+                        if (col1 === col.yymm) tIndex = i1;
+                    });
+                    tLineArray.forEach((col1, i1) => {
+                        if (col1 === col.line_type) tIndex2 = i1;
+                    });
+
+                    if (tIndex !== -1 && tIndex2 !== -1) {
+                        tArray99[tIndex][tIndex2] = col.order_qty;
+                        tArray99[tIndex][tIndex2 + 1] = col.order_amt;
+                    }
+                });
+                var tStartRow = 5;
+                var tStartCol = 7;
+                for (var tIdx = 0; tIdx < 10; tIdx++) {
+                    for (var tIdx1 = 0; tIdx1 < 12; tIdx1++) {
+                        sheet.getCell(
+                            tStartRow + tIdx,
+                            tStartCol + tIdx1,
+                        ).value = tArray99[tIdx1][tIdx];
+                    }
+                }
+
+                for (var tIdx = 0; tIdx < 12; tIdx++) {
+                    for (var tIdx1 = 0; tIdx1 < 10; tIdx1++) {
+                        tArray99[tIdx][tIdx1] = 0;
+                    }
+                }
+                var sql2_2 = `
+                    SELECT
+                        a.yymm,
+                        a.line_type,
+                        SUM(a.PLAN_QTY) AS totqty,
+                        SUM(a.PLAN_AMT) AS totamt,
+                        sum(b.USD_RATE * a.PLAN_AMT) AS usamt
+                    FROM
+                        ${tTableName} a,
+                        KCD_CURR_COM b
+                    where
+                        a.yymm between '${args.data.S_DATE}' and '${args.data.E_DATE}'
+                        and a.buyer_cd like '%${args.data.BUYER_CD}%'
+                        and (a.CURR_CD = b.CURR_CD)
+                        AND b.start_date = (
+                            SELECT
+                                MAX(START_DATE)
+                            FROM
+                                KCD_CURR_COM
+                        )
+                    GROUP BY
+                        a.YYMM,
+                        a.line_type
+                    order by
+                        a.YYMM,
+                        a.line_type
+                `;
+                var tRet2_2 = await prisma.$queryRaw(Prisma.raw(sql2_2));
+                tRet2_2.forEach((col, i) => {
+                    var tIndex = -1;
+                    var tIndex2 = -1;
+
+                    tMonArray.forEach((col1, i1) => {
+                        if (col1 === col.yymm) tIndex = i1;
+                    });
+                    tLineArray.forEach((col1, i1) => {
+                        if (col1 === col.line_type) tIndex2 = i1;
+                    });
+
+                    if (tIndex !== -1 && tIndex2 !== -1) {
+                        tArray99[tIndex][tIndex2] = col.totqty;
+                        tArray99[tIndex][tIndex2 + 1] = col.usamt;
+                    }
+                });
+                tStartRow += 12;
+                tStartCol = 7;
+                for (var tIdx = 0; tIdx < 10; tIdx++) {
+                    for (var tIdx1 = 0; tIdx1 < 12; tIdx1++) {
+                        sheet.getCell(
+                            tStartRow + tIdx,
+                            tStartCol + tIdx1,
+                        ).value = tArray99[tIdx1][tIdx];
+                    }
+                }
+
+                tStartRow += 12;
+                // Buyer별
+                var tIdx3 = 0;
+                for (tIdx3 = 0; tIdx3 < tRet_tot_buyer.length; tIdx3++) {
+                    var tOne = tRet_tot_buyer[tIdx3];
+                    if (tOne.usamt <= 0) continue;
+
+                    for (var tIdx = 0; tIdx < 12; tIdx++) {
+                        for (var tIdx1 = 0; tIdx1 < 10; tIdx1++) {
+                            tArray99[tIdx][tIdx1] = 0;
+                        }
+                    }
+                    var sql2_1 = `
+                        select
+                            a.yymm,
+                            a.line_type,
+                            isnull(sum(a.order_amt), 0) as order_amt,
+                            isnull(sum(a.order_qty), 0) as order_qty
+                        from
+                            ksv_order_plan_order a,
+                            kcd_buyer b
+                        where
+                            a.factory_cd in ('${args.data.FACTORY_CD}')
+                            and a.buyer_cd = '${tOne.BUYER_CD}'
+                            and a.buyer_cd = b.buyer_cd
+                            and a.yymm between '${args.data.S_DATE}' and '${args.data.E_DATE}'
+                        group by
+                            yymm,
+                            a.line_type
+                    `;
+                    var tRet2_1 = await prisma.$queryRaw(Prisma.raw(sql2_1));
+                    tRet2_1.forEach((col, i) => {
+                        var tIndex = -1;
+                        var tIndex2 = -1;
+
+                        tMonArray.forEach((col1, i1) => {
+                            if (col1 === col.yymm) tIndex = i1;
+                        });
+                        tLineArray.forEach((col1, i1) => {
+                            if (col1 === col.line_type) tIndex2 = i1;
+                        });
+
+                        if (tIndex !== -1 && tIndex2 !== -1) {
+                            tArray99[tIndex][tIndex2] = col.order_qty;
+                            tArray99[tIndex][tIndex2 + 1] = col.order_amt;
+                        }
+                    });
+                    var tStartCol = 7;
+                    sheet.getCell(tStartRow, 2).value = tOne.BUYER_CD;
+                    for (var tIdx = 0; tIdx < 10; tIdx++) {
+                        for (var tIdx1 = 0; tIdx1 < 12; tIdx1++) {
+                            sheet.getCell(
+                                tStartRow + tIdx,
+                                tStartCol + tIdx1,
+                            ).value = tArray99[tIdx1][tIdx];
+                        }
+                    }
+                    tStartRow += 10;
+
+                    for (var tIdx = 0; tIdx < 12; tIdx++) {
+                        for (var tIdx1 = 0; tIdx1 < 10; tIdx1++) {
+                            tArray99[tIdx][tIdx1] = 0;
+                        }
+                    }
+                    var sql2_2 = `
+                        SELECT
+                            a.yymm,
+                            a.line_type,
+                            SUM(a.PLAN_QTY) AS totqty,
+                            SUM(a.PLAN_AMT) AS totamt,
+                            sum(b.USD_RATE * a.PLAN_AMT) AS usamt
+                        FROM
+                            ${tTableName} a,
+                            KCD_CURR_COM b
+                        where
+                            a.yymm between '${args.data.S_DATE}' and '${args.data.E_DATE}'
+                            and (a.BUYER_CD = '${tOne.BUYER_CD}')
+                            and (a.CURR_CD = b.CURR_CD)
+                            AND b.start_date = (
+                                SELECT
+                                    MAX(START_DATE)
+                                FROM
+                                    KCD_CURR_COM
+                            )
+                        GROUP BY
+                            a.YYMM,
+                            a.line_type
+                        order by
+                            a.YYMM,
+                            a.line_type
+                    `;
+                    var tRet2_2 = await prisma.$queryRaw(Prisma.raw(sql2_2));
+                    tRet2_2.forEach((col, i) => {
+                        var tIndex = -1;
+                        var tIndex2 = -1;
+
+                        tMonArray.forEach((col1, i1) => {
+                            if (col1 === col.yymm) tIndex = i1;
+                        });
+                        tLineArray.forEach((col1, i1) => {
+                            if (col1 === col.line_type) tIndex2 = i1;
+                        });
+
+                        if (tIndex !== -1 && tIndex2 !== -1) {
+                            tArray99[tIndex][tIndex2] = col.totqty;
+                            tArray99[tIndex][tIndex2 + 1] = col.usamt;
+                        }
+                    });
+                    tStartCol = 7;
+                    for (var tIdx = 0; tIdx < 10; tIdx++) {
+                        for (var tIdx1 = 0; tIdx1 < 12; tIdx1++) {
+                            sheet.getCell(
+                                tStartRow + tIdx,
+                                tStartCol + tIdx1,
+                            ).value = tArray99[tIdx1][tIdx];
+                        }
+                    }
+                    tStartRow += 10;
+                }
+
+                // Excel Write
+                return await upload(`${tWExcelFile}.xlsx`, wb);
+            } catch (error) {
+                var tRetArray = [];
+                var tObj = {};
+                tObj.id = 1;
+                tObj.CODE = `ERROR:Excel Print:${error.message}`;
+                tRetArray.push(tObj);
+                return tRetArray;
+            }
+        },
+
+        mgrQuery_S0217_EXCEL_PRINT_TOT: async (_, args, contextValue) => {
+            var tRetDate = AFLib.getCurrTime();
+            var tRetDate1 = tRetDate.substring(0, 8);
+            var tUserInfo = AFLib.getUserInfo(contextValue);
+
+            var tFactoryN = '';
+            var tBuyerN = '';
+            if (args.data.FACTORY_CD === 'FC044') tFactoryN = 'ETP_';
+            if (args.data.BUYER_CD !== '') tBuyerN = `_${args.data.BUYER_CD}`;
+            var tWExcelFile = `${tFactoryN}SALES_PLANCM${tBuyerN}-${tUserInfo.USER_ID}-${tRetDate1}`;
+
+            var tMonArray = [];
+            for (var tIdx = 1; tIdx <= 12; tIdx++) {
+                var tMMStr = tIdx;
+                if (tIdx < 10) tMMStr = `0${tIdx}`;
+                tMonArray.push(`${args.data.S_DATE.substring(0, 4)}${tMMStr}`);
+            }
+            var tLineArray = ['1', '3', 'D', 'W', 'S'];
+
+            var tArray99 = [];
+            for (var tIdx = 0; tIdx < 12; tIdx++) {
+                var tArray2 = [];
+                for (var tIdx1 = 0; tIdx1 < 10; tIdx1++) {
+                    tArray2.push(0);
+                }
+                tArray99.push(tArray2);
+            }
+
+            try {
+                // Excel Read
+                var tPath0 = '';
+                var tCols0 = __dirname.split('/');
+                var tFlag0 = 0;
+                tCols0.forEach((col, i) => {
+                    if (col !== '') {
+                        if (col === 'src') {
+                            tPath0 += '/upload/excel_template';
+                            tFlag0 = 1;
+                        }
+                        if (tFlag0 === 0) {
+                            tPath0 += '/' + col;
+                        }
+                    }
+                });
+                var tTemplateExcel = `${tPath0}/SALES_PLANCM.xlsx`;
+
+                const wb = new Excel.Workbook();
+                await wb.xlsx.readFile(tTemplateExcel);
+
+                var tSheetName = `Sheet1`;
+                const sheet = wb.getWorksheet(tSheetName);
+                // const sheet = wb.getWorksheet(1);
+
+                var tTableName = 'KSV_ORDER_PLAN';
+                if (args.data.FACTORY_CD === 'FC044')
+                    tTableName = 'KSV_ORDER_PLAN_ETHIOPIA';
+
+                var tSQL = '';
+                if (args.data.TEAM_CD === '')
+                    tSQL = `and a.buyer_cd like '%${args.data.BUYER_CD}%'`;
+                else tSQL = `and a.buyer_team like '%${args.data.TEAM_CD}%'`;
+
+                var sql_tot_buyer = `
+                    --- SELECT       
+                    ---       A.BUYER_NAME, 
+                    ---       A.BUYER_CD ,
+                    ---       isnull(sum(avr_price*b.tot_cnt*c.usd_rate), 0) AS usamt  
+                    --- from kcd_buyer a,ksv_order_mst b, kcd_curr_com  c 
+                    --- WHERE  A.BUYER_CD = LEFT(B.ORDER_CD, 2) and (B.STYLE_CD <> '00-0000') 
+                    --- and    c.start_date = (SELECT MAX(START_DATE) AS Expr1 FROM KCD_CURR_COM AS KCD_CURR_COM_1 ) and c.curr_cd = b.curr_cd 
+                    --- AND    (LEFT(B.DUE_DATE, 6) >= '${args.data.S_DATE}') AND (LEFT(B.DUE_DATE, 6) <= '${args.data.E_DATE}') 
+                    --- and b.factory_cd='${args.data.FACTORY_CD}' 
+                    --- ${tSQL}
+                    --- and b.order_status <> '*' 
+                    --- and a.buyer_cd not in ('ng','np','nu')  
+                    --- GROUP BY A.BUYER_NAME, A.BUYER_CD 
+                    --- having sum(b.tot_cnt) > 100 
+                    --- union 
+                    SELECT
+                        A.BUYER_NAME,
+                        A.BUYER_CD,
+                        isnull(sum(c.usd_rate * b.PLAN_AMT), 0) AS usamt
+                    FROM
+                        KCD_BUYER a,
+                        ${tTableName} B,
+                        kcd_curr_com c
+                    WHERE
+                        (B.YYMM >= '${args.data.S_DATE}')
+                        AND (B.YYMM <= '${args.data.E_DATE}')
+                        and A.BUYER_CD = B.BUYER_CD
+                        and c.start_date = (
+                            SELECT
+                                MAX(START_DATE) AS Expr1
+                            FROM
+                                KCD_CURR_COM AS KCD_CURR_COM_1
+                        )
+                        and c.curr_cd = b.curr_cd ${tSQL}
+                        and a.buyer_cd not in ('ng', 'np', 'nu')
+                    GROUP BY
+                        A.BUYER_NAME,
+                        A.BUYER_CD
+                    ORDER BY
+                        usamt desc
+                `;
+                var tRet_tot_buyer = await prisma.$queryRaw(
+                    Prisma.raw(sql_tot_buyer),
+                );
+
+                var sql_del = `
+                    delete from ksv_order_plan_temp
+                    WHERE
+                        reg_user = '${tUserInfo.USER_ID}'
+                `;
+                var tRet0 = await prisma.$queryRaw(Prisma.raw(sql_del));
+
+                var tIdx = 0;
+                for (tIdx = 0; tIdx < tRet_tot_buyer.length; tIdx++) {
+                    var tOne = tRet_tot_buyer[tIdx];
+                    var tIn = {};
+                    tIn.buyer_cd = tOne.BUYER_CD;
+                    tIn.usd_amt = tOne.usamt;
+                    tIn.reg_user = tUserInfo.USER_ID;
+                    var sql1 = AFLib.createTableSql('KSV_ORDER_PLAN_TEMP', tIn);
+                    var tRet1 = await prisma.$queryRaw(Prisma.raw(sql1));
+                }
+
+                var tYY = args.data.S_DATE.substring(0, 4);
+                sheet.getCell(2, 2).value = `JAN. ${tYY} ~ DEC. ${tYY}`;
+                sheet.getCell(2, 6).value = tRetDate1;
+
+                for (var tIdx = 0; tIdx < 12; tIdx++) {
+                    tArray99[tIdx][0] = 0;
+                    tArray99[tIdx][1] = 0;
+                }
+                var sql2_1 = `
+                    select
+                        a.yymm,
+                        isnull(sum(a.order_amt), 0) as order_amt,
+                        isnull(sum(a.order_qty), 0) as order_qty
+                    from
+                        ksv_order_plan_order a,
+                        kcd_buyer b
+                    where
+                        a.factory_cd in ('${args.data.FACTORY_CD}')
+                        and a.buyer_cd like '%${args.data.BUYER_CD}%'
+                        and a.buyer_cd = b.buyer_cd
+                        and a.yymm between '${args.data.S_DATE}' and '${args.data.E_DATE}'
+                    group by
+                        yymm
+                `;
+                var tRet2_1 = await prisma.$queryRaw(Prisma.raw(sql2_1));
+                tRet2_1.forEach((col, i) => {
+                    var tIndex = -1;
+                    var tIndex2 = -1;
+
+                    tMonArray.forEach((col1, i1) => {
+                        if (col1 === col.yymm) tIndex = i1;
+                    });
+                    /*
+              tLineArray.forEach((col1, i1) => {
+                  if (col1 === col.line_type) tIndex2 = i1;
+              });
+              */
+                    tIndex2 = 0;
+
+                    if (tIndex !== -1 && tIndex2 !== -1) {
+                        tArray99[tIndex][tIndex2] = col.order_qty;
+                        tArray99[tIndex][tIndex2 + 1] = col.order_amt;
+                    }
+                });
+                var tStartRow = 5;
+                var tStartCol = 7;
+                for (var tIdx1 = 0; tIdx1 < 12; tIdx1++) {
+                    sheet.getCell(tStartRow + 0, tStartCol + tIdx1).value =
+                        tArray99[tIdx1][0];
+                    sheet.getCell(tStartRow + 1, tStartCol + tIdx1).value =
+                        tArray99[tIdx1][1];
+                }
+
+                for (var tIdx = 0; tIdx < 12; tIdx++) {
+                    tArray99[tIdx][0] = 0;
+                    tArray99[tIdx][1] = 0;
+                }
+                var sql2_2 = `
+                    SELECT
+                        a.yymm,
+                        SUM(a.PLAN_QTY) AS totqty,
+                        SUM(a.PLAN_AMT) AS totamt,
+                        sum(b.USD_RATE * a.PLAN_AMT) AS usamt
+                    FROM
+                        ${tTableName} a,
+                        KCD_CURR_COM b
+                    where
+                        a.yymm between '${args.data.S_DATE}' and '${args.data.E_DATE}'
+                        and a.buyer_cd like '%${args.data.BUYER_CD}%'
+                        and (a.CURR_CD = b.CURR_CD)
+                        AND b.start_date = (
+                            SELECT
+                                MAX(START_DATE)
+                            FROM
+                                KCD_CURR_COM
+                        )
+                    GROUP BY
+                        a.YYMM
+                    order by
+                        a.YYMM
+                `;
+                var tRet2_2 = await prisma.$queryRaw(Prisma.raw(sql2_2));
+                tRet2_2.forEach((col, i) => {
+                    var tIndex = -1;
+                    var tIndex2 = -1;
+
+                    tMonArray.forEach((col1, i1) => {
+                        if (col1 === col.yymm) tIndex = i1;
+                    });
+
+                    tIndex2 = 0;
+
+                    if (tIndex !== -1 && tIndex2 !== -1) {
+                        tArray99[tIndex][tIndex2] = col.totqty;
+                        tArray99[tIndex][tIndex2 + 1] = col.usamt;
+                    }
+                });
+                tStartRow += 2;
+                tStartCol = 7;
+                for (var tIdx1 = 0; tIdx1 < 12; tIdx1++) {
+                    sheet.getCell(tStartRow + 0, tStartCol + tIdx1).value =
+                        tArray99[tIdx1][0];
+                    sheet.getCell(tStartRow + 1, tStartCol + tIdx1).value =
+                        tArray99[tIdx1][1];
+                }
+
+                tStartRow += 3;
+                // Buyer별
+                var tIdx3 = 0;
+                for (tIdx3 = 0; tIdx3 < tRet_tot_buyer.length; tIdx3++) {
+                    var tOne = tRet_tot_buyer[tIdx3];
+                    if (tOne.usamt <= 0) continue;
+
+                    for (var tIdx = 0; tIdx < 12; tIdx++) {
+                        tArray99[tIdx][0] = 0;
+                        tArray99[tIdx][1] = 0;
+                    }
+                    var sql2_1 = `
+                        select
+                            a.yymm,
+                            isnull(sum(a.order_amt), 0) as order_amt,
+                            isnull(sum(a.order_qty), 0) as order_qty
+                        from
+                            ksv_order_plan_order a,
+                            kcd_buyer b
+                        where
+                            a.factory_cd in ('${args.data.FACTORY_CD}')
+                            and a.buyer_cd = '${tOne.BUYER_CD}'
+                            and a.buyer_cd = b.buyer_cd
+                            and a.yymm between '${args.data.S_DATE}' and '${args.data.E_DATE}'
+                        group by
+                            yymm
+                    `;
+                    var tRet2_1 = await prisma.$queryRaw(Prisma.raw(sql2_1));
+                    tRet2_1.forEach((col, i) => {
+                        var tIndex = -1;
+                        var tIndex2 = -1;
+
+                        tMonArray.forEach((col1, i1) => {
+                            if (col1 === col.yymm) tIndex = i1;
+                        });
+                        tIndex2 = 0;
+
+                        if (tIndex !== -1 && tIndex2 !== -1) {
+                            tArray99[tIndex][tIndex2] = col.order_qty;
+                            tArray99[tIndex][tIndex2 + 1] = col.order_amt;
+                        }
+                    });
+                    var tStartCol = 7;
+                    sheet.getCell(tStartRow, 2).value = tOne.BUYER_CD;
+                    for (var tIdx1 = 0; tIdx1 < 12; tIdx1++) {
+                        sheet.getCell(tStartRow + 0, tStartCol + tIdx1).value =
+                            tArray99[tIdx1][0];
+                        sheet.getCell(tStartRow + 1, tStartCol + tIdx1).value =
+                            tArray99[tIdx1][1];
+                    }
+                    tStartRow += 2;
+
+                    for (var tIdx = 0; tIdx < 12; tIdx++) {
+                        tArray99[tIdx][0] = 0;
+                        tArray99[tIdx][1] = 0;
+                    }
+                    var sql2_2 = `
+                        SELECT
+                            a.yymm,
+                            SUM(a.PLAN_QTY) AS totqty,
+                            SUM(a.PLAN_AMT) AS totamt,
+                            sum(b.USD_RATE * a.PLAN_AMT) AS usamt
+                        FROM
+                            ${tTableName} a,
+                            KCD_CURR_COM b
+                        where
+                            a.yymm between '${args.data.S_DATE}' and '${args.data.E_DATE}'
+                            and (a.BUYER_CD = '${tOne.BUYER_CD}')
+                            and (a.CURR_CD = b.CURR_CD)
+                            AND b.start_date = (
+                                SELECT
+                                    MAX(START_DATE)
+                                FROM
+                                    KCD_CURR_COM
+                            )
+                        GROUP BY
+                            a.YYMM
+                        order by
+                            a.YYMM
+                    `;
+                    var tRet2_2 = await prisma.$queryRaw(Prisma.raw(sql2_2));
+                    tRet2_2.forEach((col, i) => {
+                        var tIndex = -1;
+                        var tIndex2 = -1;
+
+                        tMonArray.forEach((col1, i1) => {
+                            if (col1 === col.yymm) tIndex = i1;
+                        });
+                        tIndex2 = 0;
+
+                        if (tIndex !== -1 && tIndex2 !== -1) {
+                            tArray99[tIndex][0] = col.totqty;
+                            tArray99[tIndex][1] = col.usamt;
+                        }
+                    });
+                    tStartCol = 7;
+                    for (var tIdx1 = 0; tIdx1 < 12; tIdx1++) {
+                        sheet.getCell(tStartRow + 0, tStartCol + tIdx1).value =
+                            tArray99[tIdx1][0];
+                        sheet.getCell(tStartRow + 1, tStartCol + tIdx1).value =
+                            tArray99[tIdx1][1];
+                    }
+                    tStartRow += 3;
+                }
+
+                return await upload(`${tWExcelFile}.xlsx`, wb);
+            } catch (error) {
+                var tRetArray = [];
+                var tObj = {};
+                tObj.id = 1;
+                tObj.CODE = `ERROR:${error.message}`;
+                tRetArray.push(tObj);
+                return tRetArray;
+            }
+        },
+
+        mgrQuery_S0217_SALES_MATL_PLAN_LIST_TBL_KSV_ORDER_MST1: async (
+            _,
+            args,
+        ) => {
+            var tSQL = '';
+            var tTableName = '';
+            if (args.data.FACTORY_CD !== 'FC034') {
+                tTableName = 'KSV_ORDER_PLAN_ETHIOPIA';
+            }
+            if (args.data.FACTORY_CD !== 'FC044') {
+                tTableName = 'KSV_ORDER_PLAN';
+            }
+
+            if (args.KEY1 !== '') {
+                tSQL += `AND KEY1 = '${args.KEY1}' `;
+            }
+            let sqlStr = `
+                SELECT
+                    COLLECTION,
+                    CURR_CD,
+                    SUM(PLAN_QTY) as SUM_QTY
+                FROM
+                    ${tTableName}
+                WHERE
+                    YYMM BETWEEN '${args.data.S_DATE}' AND '${args.data.E_DATE}'
+                GROUP BY
+                    COLLECTION,
+                    CURR_CD
+            `;
+            var tRet = await prisma.$queryRaw(Prisma.raw(sqlStr));
+
+            var tRetArray = [];
+
+            var tIdx = 0;
+            for (tIdx = 0; tIdx < tRet.length; tIdx++) {
+                var tOne = { ...tRet[tIdx] };
+
+                let sqlStr1 = `
+                    SELECT
+                        YYMM,
+                        SUM(PLAN_QTY) as YYMM_QTY,
+                        SUM(PLAN_AMT) as YYMM_AMT
+                    FROM
+                        ${tTableName}
+                    WHERE
+                        YYMM BETWEEN '${args.data.S_DATE}' AND '${args.data.E_DATE}'
+                        AND COLLECTION = '${tOne.COLLECTION}'
+                        AND CURR_CD = '${tOne.CURR_CD}'
+                    GROUP BY
+                        YYMM
+                `;
+                var tRet1 = await prisma.$queryRaw(Prisma.raw(sqlStr1));
+                tOne.YYMM_SUM = tRet1;
+
+                tRetArray.push(tOne);
+            }
+
+            return tRetArray;
+        },
+    },
+};
+
+export default moduleQuery_S0217_SALES_MATL_PLAN_LIST_TBL_KSV_ORDER_MST1;

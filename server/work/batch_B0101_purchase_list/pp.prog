@@ -1,0 +1,4 @@
+BEGIN { FS="|";}
+{
+tmps = sprintf ("ts-node ./stsin_record.ts %s", $1); print tmps;
+}

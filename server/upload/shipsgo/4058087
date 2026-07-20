@@ -1,0 +1,77 @@
+[
+    {
+        "Message": "Success",
+        "Status": "Sailing",
+        "StatusId": 40,
+        "ReferenceNo": "",
+        "BLReferenceNo": "239558641",
+        "ShippingLine": "MAERSK LINE",
+        "ContainerNumber": "GESU6491288",
+        "ContainerTEU": "40",
+        "FromCountry": "INDIA",
+        "Pol": "TUTICORIN",
+        "LoadingDate": {
+            "Date": "2024-06-03",
+            "IsActual": true
+        },
+        "DepartureDate": {
+            "Date": "2024-06-04",
+            "IsActual": true
+        },
+        "TSPorts": [
+            {
+                "Port": "COLOMBO",
+                "ArrivalDate": {
+                    "Date": "2024-06-04",
+                    "IsActual": true
+                },
+                "DepartureDate": {
+                    "Date": "2024-06-24",
+                    "IsActual": true
+                },
+                "Vessel": "GULF BARAKAH",
+                "VesselIMO": "9464314",
+                "VesselLatitude": "Not Supported",
+                "VesselLongitude": "Not Supported"
+            },
+            {
+                "Port": "SALALAH",
+                "ArrivalDate": {
+                    "Date": "2024-07-01",
+                    "IsActual": true
+                },
+                "DepartureDate": {
+                    "Date": "2024-08-03",
+                    "IsActual": false
+                },
+                "Vessel": "MAERSK SARATOGA",
+                "VesselIMO": "9289207",
+                "VesselLatitude": 16.953,
+                "VesselLongitude": 54.004
+            }
+        ],
+        "ToCountry": "DJIBOUTI",
+        "Pod": "DJIBOUTI",
+        "ArrivalDate": {
+            "Date": "2024-08-12",
+            "IsActual": false
+        },
+        "DischargeDate": {
+            "Date": "2024-08-12",
+            "IsActual": false
+        },
+        "Vessel": "KUO LUNG",
+        "VesselIMO": "9148544",
+        "VesselLatitude": "Not Supported",
+        "VesselLongitude": "Not Supported",
+        "GateOutDate": "",
+        "EmptyReturnDate": "",
+        "FormatedTransitTime": "70 days",
+        "ETA": "-",
+        "FirstETA": "2024-08-12",
+        "BLContainerCount": 1,
+        "BLContainers": [],
+        "LiveMapUrl": "https://shipsgo.com/live-map-container-tracking?query=GESU6491288",
+        "Tags": []
+    }
+]

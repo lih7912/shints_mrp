@@ -1,0 +1,7128 @@
+// MGR_@@TNAME@@.queries.js
+
+import { Prisma } from '@prisma/client';
+import prisma from '../../db'; //PrismaClient 사용하기 위해 불러오기
+import AFLib from '../../commlib'; //PrismaClient 사용하기 위해 불러오기
+const fs = require('fs');
+import axios from 'axios';
+const Excel = require('exceljs');
+const {
+    generateUploadURL,
+    deleteUploadObject,
+    upload,
+} = require('../../../routes/s3');
+const { MongoClient } = require('mongodb');
+
+const moment = require('moment');
+
+//
+
+function styleSheet(
+    sheet,
+    headerRow,
+    borderLastCol = 11,
+    skipRow2Border = false,
+) {
+    const title = sheet.getCell(1, 1);
+    title.font = { bold: true, size: 14, color: { argb: 'FFFF0000' } };
+
+    const header = sheet.getRow(headerRow);
+    header.eachCell((cell) => {
+        cell.font = { bold: true };
+        cell.alignment = { horizontal: 'center' };
+        cell.fill = {
+            type: 'pattern',
+            pattern: 'solid',
+            fgColor: { argb: 'FFFFFF99' },
+        };
+    });
+
+    const dataStart = headerRow + 1;
+
+    sheet.eachRow((row, rowNumber) => {
+        if (rowNumber >= dataStart) {
+            for (let c = 2; c <= borderLastCol - 1; c++) {
+                const cell = row.getCell(c);
+                cell.numFmt = '#,##0';
+                cell.alignment = { horizontal: 'right' };
+            }
+            const cell = row.getCell(borderLastCol);
+            cell.numFmt = '#,##0.00';
+            cell.alignment = { horizontal: 'right' };
+        }
+
+        if (!(skipRow2Border && rowNumber === 2)) {
+            for (let c = 1; c <= borderLastCol; c++) {
+                const cell = row.getCell(c);
+                cell.border = {
+                    top: { style: 'thin' },
+                    left: { style: 'thin' },
+                    bottom: { style: 'thin' },
+                    right: { style: 'thin' },
+                };
+            }
+        }
+    });
+}
+
+function styleSheetOneLine(
+    sheet,
+    headerRow,
+    borderLastCol = 11,
+    skipRow2Border = false,
+) {
+    var tIdx = 0;
+    for (tIdx = 0; tIdx < headerRow.length; tIdx++) {
+        var tRowNo = headerRow[tIdx];
+
+        var tIdx1 = 0;
+        for (tIdx1 = 2; tIdx1 <= borderLastCol; tIdx1++) {
+            sheet.getCell(tRowNo, tIdx1).value = '   ';
+        }
+
+        const header = sheet.getRow(tRowNo);
+        header.eachCell((cell) => {
+            cell.font = { bold: true };
+            cell.alignment = { horizontal: 'center' };
+            cell.fill = {
+                type: 'pattern',
+                pattern: 'solid',
+                fgColor: { argb: 'FFFFFF99' },
+            };
+        });
+    }
+}
+
+function styleSheetOneLine2(
+    sheet,
+    headerRow,
+    borderLastCol = 11,
+    skipRow2Border = false,
+) {
+    var tIdx = 0;
+    for (tIdx = 0; tIdx < headerRow.length; tIdx++) {
+        var tRowNo = headerRow[tIdx];
+
+        /*
+        var tIdx1 = 0;
+        for (tIdx1 = 2; tIdx1 <= borderLastCol; tIdx1++) {
+            sheet.getCell(tRowNo, tIdx1).value = '   ';
+        }
+        */
+
+        const header = sheet.getRow(tRowNo);
+        header.eachCell((cell) => {
+            cell.font = { bold: true };
+            cell.alignment = { horizontal: 'center' };
+            cell.fill = {
+                type: 'pattern',
+                pattern: 'solid',
+                fgColor: { argb: 'FF899DAF' },
+            };
+        });
+    }
+}
+
+// Won. 2
+//
+class S0213_QRY_COMM {
+    async makeBuyerProfitLoss(argData, contextValue) {
+        var tRetDate = AFLib.getCurrTime();
+        var tRetDate1 = tRetDate.substring(0, 8);
+        var tUserInfo = AFLib.getUserInfo(contextValue);
+
+        var tYY1 = parseInt(argData.S_DUE_DATE.substring(0, 4));
+        var tMM1 = parseInt(argData.S_DUE_DATE.substring(4, 6));
+
+        var tYY2 = parseInt(argData.E_DUE_DATE.substring(0, 4));
+        var tMM2 = parseInt(argData.E_DUE_DATE.substring(4, 6));
+
+        var tIdx = 0;
+        var tMonArray = new Array(12);
+        for (tIdx = 0; tIdx < 12; tIdx++) {
+            var tYYStr = String(tYY1);
+            var tMMStr = '';
+            if (tMM1 < 10) tMMStr = `0${tMM1}`;
+            else tMMStr = `${tMM1}`;
+            tMonArray[tIdx] = `${tYYStr}${tMMStr}`;
+
+            if (tMM1 === 12) {
+                tMM1 = 1;
+                tYY1 += 1;
+            } else {
+                tMM1 += 1;
+            }
+        }
+        var tHeader = [];
+        tHeader.push('BUYER');
+        tHeader.push('TOTAL');
+        tMonArray.forEach((col, i) => {
+            tHeader.push(`${col.substring(0, 4)}/${col.substring(4, 6)}`);
+        });
+
+        var tSQLArray = [];
+
+        let sqlStr = `
+            delete from ksv_order_temp21
+            where
+                user_id = '${tUserInfo.USER_ID}'
+        `;
+        var tRet = prisma.$queryRaw(Prisma.raw(sqlStr));
+        tSQLArray.push(tRet);
+
+        let sqlStr = `
+            delete from ksv_order_temp22
+            where
+                user_id = '${tUserInfo.USER_ID}'
+        `;
+        var tRet = prisma.$queryRaw(Prisma.raw(sqlStr));
+        tSQLArray.push(tRet);
+
+        var tInObj = {};
+        tInObj.user_id = tUserInfo.USER_ID;
+        tInObj.header01 = tHeader[0];
+        tInObj.header02 = tHeader[1];
+        tInObj.header03 = tHeader[2];
+        tInObj.header04 = tHeader[3];
+        tInObj.header05 = tHeader[4];
+        tInObj.header06 = tHeader[5];
+        tInObj.header07 = tHeader[6];
+        tInObj.header08 = tHeader[7];
+        tInObj.header09 = tHeader[8];
+        tInObj.header10 = tHeader[9];
+        tInObj.header11 = tHeader[10];
+        tInObj.header12 = tHeader[11];
+        tInObj.header13 = tHeader[12];
+        tInObj.header14 = tHeader[13];
+        let sqlStr = AFLib.createTableSql('KSV_ORDER_TEMP21', tInObj);
+        var tRet = prisma.$queryRaw(Prisma.raw(sqlStr));
+        tSQLArray.push(tRet);
+
+        let sqlStr1 = `
+            select distinct
+                buyer
+            from
+                ksv_order_temp
+            where
+                user_id = '${tUserInfo.USER_ID}'
+            order by
+                buyer
+        `;
+        var tRet1 = await prisma.$queryRaw(Prisma.raw(sqlStr1));
+
+        var tSumArrayOrd = new Array(13);
+        var tSumArrayTot = new Array(13);
+
+        var tIdx2 = 0;
+        for (tIdx2 = 0; tIdx2 < 13; tIdx2++) {
+            tSumArrayOrd[tIdx2] = 0;
+            tSumArrayTot[tIdx2] = 0;
+        }
+
+        var tIdx1 = 0;
+        for (tIdx1 = 0; tIdx1 < tRet1.length; tIdx1++) {
+            var tOne = {
+                ...tRet1[tIdx1],
+            };
+            let sqlStr2 = '';
+            if (argData.DUEDATE_FLAG === '1') {
+                sqlStr2 = `
+                    select
+                        left(a.due_date, 6) as date1,
+                        sum(a.ord_amt) as ord_amt,
+                        sum(a.tot_amt) as tot_amt
+                    from
+                        ksv_order_temp a
+                    where
+                        a.user_id = '${tUserInfo.USER_ID}'
+                        and a.buyer = '${tOne.buyer}'
+                    group by
+                        left(a.due_date, 6)
+                    order by
+                        left(a.due_date, 6)
+                `;
+            }
+            if (argData.SHIPDATE_FLAG === '1') {
+                sqlStr2 = `
+                    select
+                        left(a.ship_date, 6) as date1,
+                        sum(a.ord_amt) as ord_amt,
+                        sum(a.tot_amt) as tot_amt
+                    from
+                        ksv_order_temp a
+                    where
+                        a.user_id = '${tUserInfo.USER_ID}'
+                        and a.buyer = '${tOne.buyer}'
+                        and a.ship_date <> ''
+                    group by
+                        left(a.ship_date, 6)
+                    order by
+                        left(a.ship_date, 6)
+                `;
+            }
+            var tRet2 = await prisma.$queryRaw(Prisma.raw(sqlStr2));
+
+            tRet2.forEach((col, i) => {
+                var tFlag = -1;
+                var tIdx3 = 0;
+                for (tIdx3 = 0; tIdx3 < tMonArray.length; tIdx3++) {
+                    if (col.date1 === tMonArray[tIdx3]) {
+                        tFlag = tIdx3;
+                        tSumArrayOrd[tFlag] = col.ord_amt;
+                        tSumArrayTot[tFlag] = col.tot_amt;
+                        tSumArrayOrd[12] += col.ord_amt;
+                        tSumArrayTot[12] += col.tot_amt;
+                        break;
+                    }
+                }
+            });
+
+            var tInObj1 = {};
+            tInObj1.user_id = tUserInfo.USER_ID;
+            tInObj1.buyer = tOne.buyer;
+            tInObj1.m01_ord = tSumArrayOrd[0];
+            tInObj1.m01_use = tSumArrayTot[0];
+            tInObj1.m02_ord = tSumArrayOrd[1];
+            tInObj1.m02_use = tSumArrayTot[1];
+            tInObj1.m03_ord = tSumArrayOrd[2];
+            tInObj1.m03_use = tSumArrayTot[2];
+            tInObj1.m04_ord = tSumArrayOrd[3];
+            tInObj1.m04_use = tSumArrayTot[3];
+            tInObj1.m05_ord = tSumArrayOrd[4];
+            tInObj1.m05_use = tSumArrayTot[4];
+            tInObj1.m06_ord = tSumArrayOrd[5];
+            tInObj1.m06_use = tSumArrayTot[5];
+            tInObj1.m07_ord = tSumArrayOrd[6];
+            tInObj1.m07_use = tSumArrayTot[6];
+            tInObj1.m08_ord = tSumArrayOrd[7];
+            tInObj1.m08_use = tSumArrayTot[7];
+            tInObj1.m09_ord = tSumArrayOrd[8];
+            tInObj1.m09_use = tSumArrayTot[8];
+            tInObj1.m10_ord = tSumArrayOrd[9];
+            tInObj1.m10_use = tSumArrayTot[9];
+            tInObj1.m11_ord = tSumArrayOrd[10];
+            tInObj1.m11_use = tSumArrayTot[10];
+            tInObj1.m12_ord = tSumArrayOrd[11];
+            tInObj1.m12_use = tSumArrayTot[11];
+            tInObj1.tot_ord = tSumArrayOrd[12];
+            tInObj1.tot_use = tSumArrayTot[12];
+
+            var tSql99 = AFLib.createTableSql('KSV_ORDER_TEMP22', tInObj1);
+            var tRet99 = prisma.$queryRaw(Prisma.raw(tSql99));
+            tSQLArray.push(tRet99);
+        }
+
+        var tFlag2 = 0;
+        try {
+            global.currentTransactionInfo = {
+                contextValue: contextValue,
+                functionName: AFLib.getFunctionName(),
+            };
+            await prisma.$transaction(tSQLArray);
+            delete global.currentTransactionInfo;
+            tFlag2 = 1;
+        } catch (e) {}
+        return tFlag2;
+    }
+    async makeListData2(argData, contextValue) {
+        var tRetDate = AFLib.getCurrTime();
+        var tRetDate1 = tRetDate.substring(0, 8);
+        var tUserInfo = AFLib.getUserInfo(contextValue);
+
+        var logbuff = [];
+
+        var tSQLArray = [];
+
+        let sqlStr = `
+            delete from ksv_order_temp
+            where
+                user_id = '${tUserInfo.USER_ID}'
+        `;
+        var tRet = prisma.$queryRaw(Prisma.raw(sqlStr));
+        tSQLArray.push(tRet);
+
+        var sql_duedate1 = '';
+        if (argData.CHECK_FLAG_3 === '1') {
+            // Excl NSR
+            sql_duedate1 += `and left(a.order_cd,2) not in ('SG','NP','NU','NS', 'WI','a1','ww','wr','ss','si','ny','xs') `;
+        }
+        if (argData.CHECK_FLAG_4 === '1') {
+            // Excl Factory
+            sql_duedate1 += `and left(a.order_cd,2) not in ('SB','EP','SU')  `;
+        }
+        if (argData.CHECK_FLAG_7 === '1') {
+            // NSR Cd
+            sql_duedate1 += `and left(a.order_cd,2) in ('SG','NP','NU','NS','WI','a1','ww','wr','ss','si','ny','xs')`;
+        }
+        if (argData.CHECK_FLAG_8 === '1') {
+            // Factory Cd
+            sql_duedate1 += `and left(a.order_cd,2) in ('SB','EP','SU','00')`;
+            sql_duedate1 += `and a.factory_cd not in ('FC045')`;
+        }
+        if (argData.CHECK_FLAG_9 === '1') {
+            // Excl ETP
+            sql_duedate1 += `left(a.order_cd,2) not in ('EP')`;
+        }
+
+        var sql_duedate = `
+            select
+                a.order_cd,
+                c.style_name,
+                a.due_date,
+                isnull(b.ship_date, '') as ship_date,
+                isnull(sum(b.ship_cnt), 0) as s_ship_cnt,
+                isnull(a.tot_cnt, 0) as tot_cnt,
+                isnull(a.usd_price, 0) as usd_price,
+                isnull(a.matl_amt, 0) as matl_amt,
+                isnull(a.fc_price, 0) as fc_price,
+                isnull(a.etc_amt, 0) as etc_amt,
+                isnull(a.over_amt, 0) as over_amt,
+                isnull(a.commission, 0) as commission,
+                isnull(d.ship_cnt, 0) as ship_cnt,
+                e.factory_name,
+                f.buyer_name,
+                a.order_status,
+                a.sample_flag,
+                isnull(a.line_charge_price, 0) as line_charge_price,
+                f.buyer_team,
+                'ORDER' as report_kind
+            from
+                ksv_order_mst a
+                left join ksv_order_ship b on b.order_cd = a.order_cd
+                and b.ship_ptype in ('0', '5')
+                left join (
+                    select
+                        order_cd,
+                        sum(ship_cnt) as ship_cnt
+                    from
+                        ksv_order_ship
+                    where
+                        ship_ptype in ('0', '5')
+                    group by
+                        order_cd
+                ) d on d.order_cd = a.order_cd,
+                kcd_style c,
+                kcd_factory e,
+                kcd_buyer f
+            where
+                a.due_date between '${argData.S_DUE_DATE}' and '${argData.E_DUE_DATE}'
+                and a.factory_cd like '%${argData.FACTORY_CD}%'
+                and left(a.order_cd, 2) not in ('56')
+                and a.order_status <> '4' 
+                ${sql_duedate1}
+                and a.style_cd <> '00-0000'
+                and a.sample_cost_flag <> '1'
+                and c.style_cd = a.style_cd
+                and e.factory_cd = a.factory_cd
+                and f.buyer_cd = left(a.order_cd, 2)
+                and f.buyer_cd like '%${argData.BUYER_CD}%'
+                and a.order_status <> '*'
+            group by
+                a.order_cd,
+                c.style_name,
+                a.due_date,
+                b.ship_date,
+                isnull(a.tot_cnt, 0),
+                isnull(a.usd_price, 0),
+                isnull(a.matl_amt, 0),
+                isnull(a.fc_price, 0),
+                isnull(a.etc_amt, 0),
+                isnull(a.over_amt, 0),
+                isnull(a.commission, 0),
+                d.ship_cnt,
+                e.factory_name,
+                f.buyer_name,
+                a.order_status,
+                a.sample_flag,
+                a.line_charge_price,
+                f.buyer_team
+        `;
+
+        var sql_shipdate = `
+            select
+                a.order_cd,
+                c.style_name,
+                a.due_date,
+                isnull(b.ship_date, '') as ship_date,
+                isnull(sum(b.ship_cnt), 0) as s_ship_cnt,
+                isnull(a.tot_cnt, 0) as tot_cnt,
+                isnull(a.usd_price, 0) as usd_price,
+                isnull(a.matl_amt, 0) as matl_amt,
+                isnull(a.fc_price, 0) as fc_price,
+                isnull(a.etc_amt, 0) as etc_amt,
+                isnull(a.over_amt, 0) as over_amt,
+                isnull(a.commission, 0) as commission,
+                isnull(d.ship_cnt, 0) as ship_cnt,
+                isnull(d.ship_count, 0) as ship_count,
+                e.factory_name,
+                f.buyer_name,
+                a.order_status,
+                a.sample_flag,
+                isnull(a.line_charge_price, 0) as line_charge_price,
+                f.buyer_team,
+                'ORDER-SHIP' as report_kind,
+                isnull(a.po_matl_amt, 0) as po_matl_amt
+            from
+                ksv_order_mst a,
+                ksv_order_ship b,
+                (
+                    select
+                        order_cd,
+                        sum(ship_cnt) as ship_cnt,
+                        count(*) as ship_count
+                    from
+                        ksv_order_ship
+                    where
+                        ship_ptype in ('0', '5')
+                    group by
+                        order_cd
+                ) d,
+                kcd_style c,
+                kcd_factory e,
+                kcd_buyer f
+            where
+                b.ship_date between '${argData.S_DUE_DATE}' and '${argData.E_DUE_DATE}'
+                and b.order_cd = a.order_cd
+                and d.order_cd = a.order_cd
+                and b.ship_ptype in ('0', '5')
+                and a.factory_cd like '%${argData.FACTORY_CD}%'
+                and left(a.order_cd, 2) not in ('56')
+                and a.order_status <> '4' 
+                ${sql_duedate1}
+                and a.style_cd <> '00-0000'
+                and a.sample_cost_flag <> '1'
+                and c.style_cd = a.style_cd
+                and e.factory_cd = a.factory_cd
+                and f.buyer_cd = left(a.order_cd, 2)
+                and f.buyer_cd like '%${argData.BUYER_CD}%'
+                and a.order_type in ('0', '1')
+            group by
+                a.order_cd,
+                c.style_name,
+                a.due_date,
+                b.ship_date,
+                isnull(a.tot_cnt, 0),
+                isnull(a.usd_price, 0),
+                isnull(a.matl_amt, 0),
+                isnull(a.fc_price, 0),
+                isnull(a.etc_amt, 0),
+                isnull(a.over_amt, 0),
+                isnull(a.commission, 0),
+                d.ship_cnt,
+                d.ship_count,
+                e.factory_name,
+                f.buyer_name,
+                a.order_status,
+                a.sample_flag,
+                a.line_charge_price,
+                f.buyer_team,
+                isnull(a.po_matl_amt, 0)
+        `;
+
+        var sql_sample = `
+            union
+            select
+                a.order_cd,
+                c.style_name,
+                left(g.in_datetime, 8) as due_date,
+                left(g.in_datetime, 8) as ship_date,
+                0 as s_ship_cnt,
+                isnull(a.tot_cnt, 0) as tot_cnt,
+                isnull(a.usd_price, 0) as usd_price,
+                isnull(a.matl_amt, 0) as matl_amt,
+                isnull(a.fc_price, 0) as fc_price,
+                isnull(a.etc_amt, 0) as etc_amt,
+                isnull(a.over_amt, 0) as over_amt,
+                isnull(a.commission, 0) as commission,
+                0 as ship_cnt,
+                0 as ship_count,
+                e.factory_name,
+                f.buyer_name,
+                a.order_status,
+                a.sample_flag,
+                isnull(a.line_charge_price, 0) as line_charge_price,
+                f.buyer_team,
+                'ORDER_SAMPLE' as report_kind,
+                isnull(a.po_matl_amt, 0) as po_matl_amt
+            from
+                ksv_order_mst a
+                join (
+                    select
+                        order_cd,
+                        min(in_datetime) as in_datetime
+                    from
+                        ksv_stock_in
+                    group by
+                        order_cd
+                ) g on g.order_cd = a.order_cd
+                join kcd_style c on c.style_cd = a.style_cd
+                join kcd_factory e on e.factory_cd = a.factory_cd
+                join kcd_buyer f on f.buyer_cd = left(a.order_cd, 2)
+            where
+                left(g.in_datetime, 8) between '${argData.S_DUE_DATE}' and '${argData.E_DUE_DATE}'
+                and a.order_status <> '4'
+                and a.style_cd = '00-0000'
+                and a.order_cd not in (
+                    'FL25-S0159',
+                    'KL25-S0322',
+                    'NB25-S0029',
+                    'OS25-S0192',
+                    'OS25-S0273',
+                    'TS25-S0422'
+                )
+                and a.order_type in ('0', '1')
+                and a.factory_cd like '%${argData.FACTORY_CD}%'
+                and left(a.order_cd, 2) not in ('56')
+                and a.sample_cost_flag <> '1' 
+                ${sql_duedate1}
+                and f.buyer_cd like '%${argData.BUYER_CD}%'
+        `;
+        var sql_cancel = `
+            union
+            select
+                a.order_cd,
+                c.style_name,
+                isnull(left(a.cancel_datetime, 8), a.due_date) as due_date,
+                isnull(left(a.cancel_datetime, 8), a.due_date) as ship_date,
+                isnull(g.ship_cnt, 0) as s_ship_cnt,
+                isnull(a.tot_cnt, 0) as tot_cnt,
+                isnull(a.usd_price, 0) as usd_price,
+                isnull(a.matl_amt, 0) as matl_amt,
+                isnull(a.fc_price, 0) as fc_price,
+                isnull(a.etc_amt, 0) as etc_amt,
+                isnull(a.over_amt, 0) as over_amt,
+                isnull(a.commission, 0) as commission,
+                0 as ship_cnt,
+                0 as ship_count,
+                e.factory_name,
+                f.buyer_name,
+                a.order_status,
+                a.sample_flag,
+                isnull(a.line_charge_price, 0) as line_charge_price,
+                f.buyer_team,
+                'ORDER-CANCEL' as report_kind,
+                isnull(a.po_matl_amt, 0) as po_matl_amt
+            from
+                ksv_order_mst a
+                left join ksv_order_ship g on g.order_cd = a.order_cd,
+                kcd_style c,
+                kcd_factory e,
+                kcd_buyer f
+                -- where a.due_date between '${argData.S_DUE_DATE}' and '${argData.E_DUE_DATE}' 
+            where
+                isnull(left(a.cancel_datetime, 4), left(a.due_date, 4)) = '${tRetDate1.substring(0, 4)}'
+                and a.order_status = '4'
+                and a.order_type in ('0', '1')
+                and a.factory_cd like '%${argData.FACTORY_CD}%'
+                and a.sample_cost_flag <> '1'
+                and left(a.order_cd, 2) not in ('56') 
+                ${sql_duedate1}
+                and c.style_cd = a.style_cd
+                and e.factory_cd = a.factory_cd
+                and f.buyer_cd = left(a.order_cd, 2)
+                and f.buyer_cd like '%${argData.BUYER_CD}'
+        `;
+        var sql_dev_sample = `
+            union
+            select
+                a.order_cd,
+                c.style_name,
+                a.due_date,
+                isnull(b.sample_end_date, '') as ship_date,
+                isnull(sum(b.order_qty), 0) as s_ship_cnt,
+                isnull(a.tot_cnt, 0) as tot_cnt,
+                0 as usd_price,
+                0 as matl_amt,
+                isnull(a.fc_price, 0) as fc_price,
+                0 as etc_amt,
+                0 as over_amt,
+                0 as commission,
+                0 as ship_cnt,
+                1 as ship_count,
+                e.factory_name,
+                f.buyer_name,
+                a.order_status,
+                a.sample_flag,
+                isnull(a.line_charge_price, 0) as line_charge_price,
+                f.buyer_team,
+                'ORDER-개발실' as report_kind,
+                isnull(a.po_matl_amt, 0) as po_matl_amt
+            from
+                ksv_order_mst a,
+                kzz_sample_cost b,
+                kcd_style c,
+                kcd_factory e,
+                kcd_buyer f
+            where
+                b.sample_end_date between '${argData.S_DUE_DATE}' and '${argData.E_DUE_DATE}'
+                and b.order_cd = a.order_cd
+                and a.sample_cost_flag in ('1')
+                and a.factory_cd = 'FC010'
+                and left(a.order_cd, 2) not in ('56')
+                and a.style_cd <> '00-0000' 
+                ${sql_duedate1}
+                and c.style_cd = a.style_cd
+                and e.factory_cd = a.factory_cd
+                and f.buyer_cd = left(a.order_cd, 2)
+                and f.buyer_cd like '%${argData.BUYER_CD}%'
+            group by
+                a.order_cd,
+                c.style_name,
+                a.due_date,
+                b.sample_end_date,
+                isnull(a.tot_cnt, 0),
+                isnull(a.usd_price, 0),
+                isnull(a.matl_amt, 0),
+                isnull(a.fc_price, 0),
+                isnull(a.etc_amt, 0),
+                isnull(a.over_amt, 0),
+                isnull(a.commission, 0),
+                e.factory_name,
+                f.buyer_name,
+                a.order_status,
+                a.sample_flag,
+                a.line_charge_price,
+                f.buyer_team,
+                isnull(a.po_matl_amt, 0)
+        `;
+        var tRet1 = [];
+        var tSQL = '';
+        /*
+               if (argData.DUEDATE_FLAG === '1') {
+                   tSQL = `
+                          ${sql_duedate}
+                          ${sql_sample}
+                          ${sql_cancel}
+                          ${sql_dev_sample}
+                          `;
+               } 
+               if (argData.SHIPDATE_FLAG === '1') {
+                   tSQL = `
+                          ${sql_shipdate}
+                          ${sql_sample}
+                          ${sql_cancel}
+                          ${sql_dev_sample}
+                          `;
+               } 
+        */
+        /*
+        tSQL = `
+                  ${sql_shipdate}
+                  ${sql_sample}
+                  ${sql_cancel}
+                  ${sql_dev_sample}
+                  `;
+        */
+        tSQL = `
+            select
+                pp.*
+            from
+                (${sql_shipdate} ${sql_sample} ${sql_cancel} ${sql_dev_sample}) pp
+            order by
+                pp.order_cd
+        `;
+        var tRet1 = await prisma.$queryRaw(Prisma.raw(tSQL));
+        console.log(
+            `Step-1: sql_shipdate, sql_sample, sql_cancel, sql_dev_sample: ${tRet1.length} `,
+        );
+        logbuff.push(
+            `Step-1: sql_shipdate, sql_sample, sql_cancel, sql_dev_sample: ${tRet1.length} `,
+        );
+
+        var tIdx = 0;
+        var tRet1_1 = [];
+        var saveObjs = [];
+        var saveObj = {};
+        var sum_ship_cnt = 0;
+        var sum_bvt_local = 0;
+        var bvt_price = 0;
+        for (tIdx = 0; tIdx < tRet1.length; tIdx++) {
+            var tOne = {
+                ...tRet1[tIdx],
+            };
+            var tShipCnt = 0;
+            var tShipTot = 0;
+
+            var tShipCnt99 = -1;
+            // if (parseFloat(tOne.ship_cnt) <= 0 && parseFloat(tOne.ship_count) <= 0) {
+            if (parseFloat(tOne.ship_cnt) <= 0) {
+                tShipCnt = tOne.tot_cnt;
+                tShipTot = tOne.tot_cnt;
+
+                if (parseFloat(tOne.ship_count) <= 0) ;
+                else tShipCnt99 = tOne.s_ship_cnt;
+
+                if (tOne.report_kind === 'ORDER-개발실') {
+                    tShipCnt = tOne.s_ship_cnt;
+                    tShipTot = tOne.tot_cnt;
+                }
+            } else {
+                if (parseInt(tOne.order_status) >= 7) {
+                    tShipCnt = tOne.s_ship_cnt;
+                    tShipTot = tOne.ship_cnt;
+                    /*
+                    if (tOne.sample_flag === '1') {
+                        tShipCnt = tOne.s_ship_cnt;
+                        tShipTot = tOne.tot_cnt;
+                    } else {
+                        tShipCnt = tOne.s_ship_cnt;
+                        tShipTot = tOne.s_ship_cnt;
+                    }
+                    */
+                } else {
+                    tShipCnt = tOne.s_ship_cnt;
+                    tShipTot = tOne.tot_cnt;
+                }
+            }
+            if (tIdx === 0) {
+
+                var sqlCmpt = `
+                    select
+                        isnull(BVT_LOCAL, '0') as bvt_local
+                    from
+                        ksv_order_cmpt
+                    where
+                        order_cd = '${tOne.order_cd}'
+                        and nego_type = '1'
+                `;
+                var retCmpt = await prisma.$queryRaw(Prisma.raw(sqlCmpt));
+                bvt_price = 0;
+                if (retCmpt.length > 0) bvt_price = parseFloat(retCmpt[0].bvt_local);
+
+                var bvt_local_amt = bvt_price * tShipCnt;
+                sum_ship_cnt += tShipCnt;
+                sum_bvt_local += bvt_local_amt;
+                tOne.sum_ship_cnt = sum_ship_cnt;
+                tOne.sum_bvt_local = sum_bvt_local;
+                tOne.ship_cnt = tShipCnt;
+                tOne.ship_cnt99 = tShipCnt99;
+                tOne.ship_tot = tShipTot;
+                tOne.bvt_local = parseFloat(bvt_local_amt).toFixed(2);
+                saveObjs.push(tOne);
+                saveObj = { ...tOne };
+
+            } else {
+                if (saveObj.order_cd === tOne.order_cd) {
+                    var bvt_local_amt = bvt_price * tShipCnt;
+
+                    sum_ship_cnt += tShipCnt;
+
+                    sum_bvt_local += bvt_local_amt;
+                    tOne.sum_ship_cnt = sum_ship_cnt;
+                    tOne.sum_bvt_local = sum_bvt_local;
+                    tOne.ship_cnt = tShipCnt;
+                    tOne.ship_cnt99 = tShipCnt99;
+                    tOne.ship_tot = tShipTot;
+                    tOne.bvt_local = parseFloat(bvt_local_amt).toFixed(2);
+                    saveObjs.push(tOne);
+                    saveObj = { ...tOne };
+                } else {
+                    saveObjs.forEach((col9, i9) => {
+                        var tObj9 = { ...col9 };
+                        tObj9.sum_ship_cnt = sum_ship_cnt;
+                        tObj9.sum_bvt_local = sum_bvt_local;
+                        tObj9.sum_count = saveObjs.length;
+                        tRet1_1.push(tObj9);
+                    });
+
+                    var sqlCmpt = `
+                        select
+                            isnull(BVT_LOCAL, '0') as bvt_local
+                        from
+                            ksv_order_cmpt
+                        where
+                            order_cd = '${tOne.order_cd}'
+                            and nego_type = '1'
+                    `;
+                    var retCmpt = await prisma.$queryRaw(Prisma.raw(sqlCmpt));
+                    bvt_price = 0;
+                    if (retCmpt.length > 0) bvt_price = parseFloat(retCmpt[0].bvt_local);
+
+                    var bvt_local_amt = bvt_price * tShipCnt;
+
+                    saveObjs = [];
+                    sum_ship_cnt = 0;
+                    sum_ship_cnt += tShipCnt;
+                     
+                    sum_bvt_local = 0;
+                    sum_bvt_local += bvt_local_amt;
+
+                    tOne.sum_bvt_local = sum_bvt_local;
+                    tOne.sum_ship_cnt = sum_ship_cnt;
+                    tOne.ship_cnt = tShipCnt;
+                    tOne.ship_cnt99 = tShipCnt99;
+                 
+                    tOne.ship_tot = tShipTot;
+                    tOne.bvt_local = parseFloat(bvt_local_amt).toFixed(2);
+                    saveObjs.push(tOne);
+                    saveObj = { ...tOne };
+                }
+            }
+        }
+
+        saveObjs.forEach((col9, i9) => {
+            var tObj9 = { ...col9 };
+            tObj9.sum_bvt_local = sum_bvt_local;
+            tObj9.sum_ship_cnt = sum_ship_cnt;
+            tObj9.sum_count = saveObjs.length;
+            tRet1_1.push(tObj9);
+        });
+
+
+        for (tIdx = 0; tIdx < tRet1_1.length; tIdx++) {
+            var tOne = {
+                ...tRet1_1[tIdx],
+            };
+            var tShipCnt = parseFloat(tOne.ship_cnt);
+            var tShipCnt99 = parseFloat(tOne.ship_cnt99);
+            var tShipTot = parseFloat(tOne.ship_tot);
+
+            var tSumShipCnt = 0;
+            tSumShipCnt = parseFloat(tOne.sum_ship_cnt);
+            /*
+            if (parseFloat(tShipTot) > parseFloat(tOne.sum_ship_cnt))
+                tSumShipCnt = parseFloat(tShipTot);
+            else tSumShipCnt = parseFloat(tOne.sum_ship_cnt);
+            */
+
+            var tCntRate = 0.0;
+            if (parseFloat(tShipTot) !== 0) 
+                tCntRate = tShipCnt / tShipTot;
+            else 
+                tCntRate = 0.0;
+               
+            /*
+            if (parseFloat(tShipTot) > parseFloat(tSumShipCnt))  {
+                if (tOne.sample_flag === '1') {
+                   tCntRate = tShipCnt / tShipTot;
+                } else {
+                   tCntRate = tShipCnt / tSumShipCnt;
+                   if (parseFloat(tOne.sum_count) <= 1) tCntRate = tShipCnt / tShipTot;
+                }
+            }
+            else 
+                tCntRate = tShipCnt / tSumShipCnt;
+            */
+
+            /*
+            if (tSumShipCnt > 0) {
+                tCntRate = tShipCnt / tSumShipCnt;
+            } else {
+                if (tShipTot > 0) {
+                   tCntRate = tShipCnt / tShipTot;
+                }
+            }
+            */
+
+            /*
+            var tMatlRate = 1.0;
+            if (tShipTot > 0) tMatlRate = tSumShipCnt / tShipTot;
+            */
+
+            if (tOne.report_kind === 'ORDER-CANCEL') tShipCnt = 0;
+            else if (tOne.report_kind === 'ORDER_SAMPLE') tShipCnt = 0;
+
+            var tAvrPrice = tOne.usd_price;
+            /*
+            if (
+                tOne.order_cd.substring(0, 2) === 'SG' ||
+                tOne.order_cd.substring(0, 2) === 'NP' ||
+                tOne.order_cd.substring(0, 2) === 'NU' ||
+                tOne.order_cd.substring(0, 2) === 'NS' ||
+                tOne.order_cd.substring(0, 2) === 'WI' ||
+                tOne.order_cd.substring(0, 2) === 'A1' ||
+                tOne.order_cd.substring(0, 2) === 'WW' ||
+                tOne.order_cd.substring(0, 2) === 'WR'
+            ) {
+                tAvrPrice = 0.0;
+            }
+            */
+
+            var sumMatlAmt = parseFloat(tOne.matl_amt);
+            // var tMatlAmt = (sumMatlAmt * tCntRate) - parseFloat(tOne.sum_bvt_local);
+            var tMatlAmt = (sumMatlAmt * tCntRate) - parseFloat(tOne.bvt_local);
+            tMatlAmt = parseFloat(tMatlAmt).toFixed(2);
+
+
+            /*
+            logbuff.push(
+                 `Step-9: ${tOne.matl_amt}, ${sumMatlAmt}, ${tOne.sum_bvt_local} ${tMatlAmt} `,
+            );
+            */
+
+            var bvtLocal = parseFloat(tOne.bvt_local);
+
+            var tFcAmt = 0;
+            var tOrdAmt = 0;
+
+            if (tOne.report_kind === 'ORDER-CANCEL') {
+                tFcAmt = tOne.fc_price * tShipCnt;
+                // tOrdAmt = tAvrPrice * tShipCnt;
+                tOrdAmt = 0;
+            } else if (tOne.report_kind === 'ORDER-개발실') {
+                tFcAmt = tOne.fc_price * tShipTot;
+            } else {
+                if (tOne.s_ship_cnt <= 0 && tOne.tot_cnt < 4) {
+                    tFcAmt = tOne.fc_price * tShipTot;
+                } else {
+                    tFcAmt = tOne.fc_price * tShipCnt;
+                    if (tShipCnt99 >= 0) tFcAmt = tOne.fc_price * tShipTot;
+                    /*
+                    if (tShipCnt99 >= 0) tFcAmt = tOne.fc_price * tShipCnt99;
+                    else  tFcAmt = tOne.fc_price * tShipCnt;
+                    */
+                }
+                tOrdAmt = tAvrPrice * tShipCnt;
+            }
+
+            var tLogBuf = `${sumMatlAmt} / ${tOne.bvt_local} /${tOne.fc_price},${tFcAmt} / ${tCntRate} / ${tShipCnt} / ${tShipTot} `;
+
+            var tEtcAmt =
+                tOne.etc_amt * tCntRate +
+                tOne.over_amt * tCntRate +
+                tOne.line_charge_price * tShipCnt;
+            tEtcAmt = parseFloat(parseFloat(tEtcAmt).toFixed(2));
+            var tCommAmt = tOne.commission * tShipCnt;
+            tCommAmt = parseFloat(parseFloat(tCommAmt).toFixed(2));
+            var tTotAmt = tMatlAmt + bvtLocal + tFcAmt + tEtcAmt + tCommAmt;
+            tTotAmt = parseFloat(parseFloat(tTotAmt).toFixed(2));
+
+            var tTotPrice = 0;
+            if (tShipCnt > 0) tTotPrice = tTotAmt / tShipCnt;
+            tTotPrice = parseFloat(parseFloat(tTotPrice).toFixed(4));
+
+            if (
+                tOne.factory_name === 'SHINTS-DEV' &&
+                tOne.report_kind === 'ORDER-SHIP'
+            ) {
+                tTotAmt = tTotAmt - tFcAmt;
+                tOne.s_ship_cnt = 0;
+                tShipCnt = 0;
+                tFcAmt = 0;
+            }
+
+            if (
+                tOne.factory_name === 'SHINTS TM' ||
+                tOne.factory_name === 'SHINTS TN'
+            ) {
+                tOne.factory_name = 'SHINTS BVT CO., LTD';
+            }
+
+            /*
+            if (tOne.report_kind === 'ORDER_SAMPLE' || 
+                tOne.report_kind === 'ORDER-개발실') {
+                tOne.factory_name = 'SHINTS-DEV';
+            } 
+            */
+
+            var tInsObj = {};
+            tInsObj.user_id = tUserInfo.USER_ID;
+            tInsObj.order_cd = tOne.order_cd;
+            tInsObj.buyer = tOne.buyer_name.replace(/'/gi, '');
+            tInsObj.style = tOne.style_name.replace(/'/gi, '');
+            tInsObj.factory = tOne.factory_name;
+            tInsObj.due_date = tOne.due_date;
+            tInsObj.ship_date = tOne.ship_date;
+            tInsObj.tot_cnt = tShipTot;
+
+            if (tShipCnt99 >= 0) tInsObj.ship_cnt = tShipCnt99;
+            else  tInsObj.ship_cnt = tShipCnt;
+
+            tInsObj.usd_price = tAvrPrice;
+            tInsObj.ord_amt = tOrdAmt;
+            tInsObj.fc_amt = tFcAmt;
+            tInsObj.matl_amt = tMatlAmt;
+            tInsObj.etc_amt = tEtcAmt;
+            tInsObj.comm_amt = tCommAmt;
+            tInsObj.tot_amt = tTotAmt;
+            tInsObj.buyer_team = tOne.buyer_team;
+            tInsObj.type = tOne.report_kind;
+            tInsObj.po_matl_amt = sumMatlAmt;
+            tInsObj.bvt_local = tOne.bvt_local;
+            tInsObj.log = tLogBuf;
+
+
+            var tSql99 = AFLib.createTableSql('KSV_ORDER_TEMP', tInsObj);
+            var tRet = prisma.$queryRaw(Prisma.raw(tSql99));
+            tSQLArray.push(tRet);
+        }
+
+
+        // 개발실 자료
+        sql_duedate1 = '';
+        if (argData.CHECK_FLAG_3 === '1') {
+            // Excl NSR
+            sql_duedate1 += `and left(a.sample_cd,2) not in ('SG','NP','NU','NS', 'WI','a1','ww','wr','ss','si','ny','xs') `;
+        }
+        if (argData.CHECK_FLAG_4 === '1') {
+            // Excl Factory
+            sql_duedate1 += `and left(a.sample_cd,2) not in ('SB','EP','SU')  `;
+        }
+        if (argData.CHECK_FLAG_7 === '1') {
+            // NSR Cd
+            sql_duedate1 += `and left(a.sample_cd,2) in ('SG','NP','NU','NS','WI','nn','a1','ww','wr','ss','si','ny','xs')`;
+        }
+        if (argData.CHECK_FLAG_8 === '1') {
+            // Factory Cd
+            sql_duedate1 += `and left(a.sample_cd,2) in ('SB','EP','SU','00')`;
+            sql_duedate1 += `and a.factory_cd not in ('FC045')`;
+        }
+        if (argData.CHECK_FLAG_9 === '1') {
+            // Excl ETP
+            sql_duedate1 += `and left(a.sample_cd,2) not in ('EP')`;
+        }
+
+        var sql_cost = `
+            select
+                a.sample_cd,
+                c.style_name,
+                a.sample_end_date,
+                a.sample_end_date as ship_date,
+                isnull(a.repair_qty, 0) as s_ship_cnt,
+                isnull(a.repair_qty, 0) as tot_cnt,
+                0 as usd_price,
+                0 as matl_amt,
+                0 as fc_price,
+                (
+                    case b.cd_name
+                        when '시간수선(봉제)' then a.repair_qty * 541 * g.usd_rate
+                        else (
+                            convert(float, right(b.cd_name, 3) * a.repair_qty) * 10000
+                        ) * g.usd_rate
+                    end
+                ) as etc_amt,
+                0 as over_amt,
+                0 as commission,
+                0 as ship_cnt,
+                'SHINTS-DEV' as factory_name,
+                f.buyer_name,
+                '0' as order_status,
+                a.sample_end_flag,
+                f.buyer_team,
+                '개발실' as report_kind
+            from
+                kzz_sample_cost a
+                left join kcd_code b on b.cd_code = a.work_type
+                                    and b.cd_group = 'WORK_TYPE'
+                                    and b.cd_name <> '외주',
+                kcd_style c,
+                kcd_buyer f,
+                kcd_currency g
+            where
+                a.sample_end_date between '${argData.S_DUE_DATE}' and '${argData.E_DUE_DATE}'
+                and a.work_type <> 0
+                and f.buyer_cd = left(a.sample_cd, 2)
+                and f.buyer_cd like '%${argData.BUYER_CD}%'
+                and c.style_cd = a.style_cd 
+                ${sql_duedate1}
+                and a.sample_end_flag = '1'
+                and g.start_date = a.sample_end_date
+                and g.curr_cd = 'krw'
+        `;
+
+        var sql_cost1 = `
+            union
+            select
+                a.sample_cd,
+                c.style_name,
+                a.sample_end_date,
+                a.sample_end_date as ship_date,
+                isnull(a.repair_qty, 0) as s_ship_cnt,
+                isnull(a.repair_qty, 0) as tot_cnt,
+                0 as usd_price,
+                0 as matl_amt,
+                0 as fc_price,
+                (
+                    (convert(float, a.sew_loss_time * 541)) * g.usd_rate
+                ) as etc_amt,
+                0 as over_amt,
+                0 as commission,
+                0 as ship_cnt,
+                'SHINTS-DEV' as factory_name,
+                f.buyer_name,
+                '0' as order_status,
+                a.sample_end_flag,
+                f.buyer_team,
+                '개발실' as report_kind
+            from
+                kzz_sample_cost a,
+                kcd_style c,
+                kcd_buyer f,
+                kcd_currency g
+            where
+                a.sample_end_date between '${argData.S_DUE_DATE}' and '${argData.E_DUE_DATE}'
+                and a.sew_loss = '99'
+                and a.sew_user <> ''
+                and a.sew_loss_time > 0
+                and f.buyer_cd = left(a.sample_cd, 2)
+                and f.buyer_cd like '%${argData.BUYER_CD}%'
+                and c.style_cd = a.style_cd 
+                ${sql_duedate1}
+                and a.sample_end_flag = '1'
+                and g.start_date = a.sample_end_date
+                and g.curr_cd = 'krw'
+        `;
+
+        var sql_cost2 = `
+            union
+            select
+                a.sample_cd,
+                c.style_name,
+                a.sample_end_date,
+                a.sample_end_date as ship_date,
+                isnull(a.repair_qty, 0) as s_ship_cnt,
+                isnull(a.repair_qty, 0) as tot_cnt,
+                0 as usd_price,
+                0 as matl_amt,
+                0 as fc_price,
+                (
+                    (convert(float, a.patt_loss_time * 541)) * g.usd_rate
+                ) as etc_amt,
+                0 as over_amt,
+                0 as commission,
+                0 as ship_cnt,
+                'SHINTS-DEV' as factory_name,
+                f.buyer_name,
+                '0' as order_status,
+                a.sample_end_flag,
+                f.buyer_team,
+                '개발실' as report_kind
+            from
+                kzz_sample_cost a,
+                kcd_style c,
+                kcd_buyer f,
+                kcd_currency g
+            where
+                a.sample_end_date between '${argData.S_DUE_DATE}' and '${argData.E_DUE_DATE}'
+                and a.patt_user <> ''
+                and a.patt_loss_time > 0
+                and f.buyer_cd = left(a.sample_cd, 2)
+                and f.buyer_cd like '%${argData.BUYER_CD}%'
+                and c.style_cd = a.style_cd 
+                ${sql_duedate1}
+                and a.sample_end_flag = '1'
+                and g.start_date = a.sample_end_date
+                and g.curr_cd = 'krw'
+        `;
+
+        var sql_cost3 = `
+            union
+            select
+                a.sample_cd,
+                c.style_name,
+                a.sample_end_date,
+                a.sample_end_date as ship_date,
+                isnull(a.repair_qty, 0) as s_ship_cnt,
+                isnull(a.repair_qty, 0) as tot_cnt,
+                0 as usd_price,
+                0 as matl_amt,
+                0 as fc_price,
+                (
+                    (convert(float, a.sew_loss_time * 541)) * g.usd_rate
+                ) as etc_amt,
+                0 as over_amt,
+                0 as commission,
+                0 as ship_cnt,
+                'SHINTS-DEV' as factory_name,
+                f.buyer_name,
+                '0' as order_status,
+                a.sample_end_flag,
+                f.buyer_team,
+                '개발실' as report_kind
+            from
+                kzz_sample_cost a,
+                kcd_style c,
+                kcd_buyer f,
+                kcd_currency g
+            where
+                a.sample_end_date between '${argData.S_DUE_DATE}' and '${argData.E_DUE_DATE}'
+                and a.sew_loss <> '99'
+                and a.sew_user <> ''
+                and a.sew_loss_time > 0
+                and f.buyer_cd = left(a.sample_cd, 2)
+                and f.buyer_cd like '%${argData.BUYER_CD}%'
+                and c.style_cd = a.style_cd 
+                ${sql_duedate1}
+                and a.sample_end_flag = '1'
+                and g.start_date = a.sample_end_date
+                and g.curr_cd = 'krw'
+        `;
+
+        var tRet2 = [];
+        var tSQL2 = `
+                  ${sql_cost}
+                  ${sql_cost1}
+                  ${sql_cost2}
+                  ${sql_cost3}
+                  `;
+
+        var tRet2 = await prisma.$queryRaw(Prisma.raw(tSQL2));
+        console.log(`Step-2: 개발실 자료 : ${tRet2.length} `);
+        logbuff.push(`Step-2: 개발실 자료 : ${tRet2.length} => ${tSQL2} `);
+
+        tIdx = 0;
+        for (tIdx = 0; tIdx < tRet2.length; tIdx++) {
+            var tOne = {
+                ...tRet2[tIdx],
+            };
+
+            var tInsObj = {};
+            tInsObj.user_id = tUserInfo.USER_ID;
+            tInsObj.order_cd = tOne.sample_cd;
+            tInsObj.buyer = tOne.buyer_name.replace(/'/gi, '');
+            tInsObj.style = tOne.style_name.replace(/'/gi, '');
+            tInsObj.factory = tOne.factory_name;
+            tInsObj.due_date = tOne.sample_end_date;
+            tInsObj.ship_date = tOne.ship_date;
+            tInsObj.tot_cnt = tOne.tot_cnt;
+            tInsObj.ship_cnt = tOne.s_ship_cnt;
+            tInsObj.usd_price = tOne.usd_price;
+            tInsObj.ord_amt = 0;
+            tInsObj.fc_amt = 0;
+            tInsObj.matl_amt = 0;
+            tInsObj.etc_amt = tOne.etc_amt;
+            tInsObj.comm_amt = 0;
+            tInsObj.tot_amt = tOne.etc_amt;
+            tInsObj.buyer_team = tOne.buyer_team;
+            tInsObj.type = tOne.report_kind;
+
+            var tSql99 = AFLib.createTableSql('KSV_ORDER_TEMP', tInsObj);
+            var tRet = prisma.$queryRaw(Prisma.raw(tSql99));
+            tSQLArray.push(tRet);
+        }
+
+        // KZZ_ETC_COST_AMT
+        var sql_duedate1 = '';
+        var sql_duedate2 = '';
+        var sql_duedate3 = '';
+        if (argData.CHECK_FLAG_3 === '1') {
+            // Excl NSR
+            sql_duedate1 += `and b.buyer_cd not in ('SG','NP','NU','NS','WI','a1','ww','wr','ss','si','ny','xs') `;
+            sql_duedate2 += `and left(b.order_cd, 2) not in ('SG','NP','NU','NS','WI','a1','ww','wr','ss','si','ny','xs') `;
+            sql_duedate3 += `and left(c.order_cd, 2) not in ('SG','NP','NU','NS','WI','a1','ww','wr','ss','si','ny','xs') `;
+        }
+        if (argData.CHECK_FLAG_4 === '1') {
+            // Excl Factory
+            sql_duedate1 += `and b.buyer_cd not in ('SB','EP','SU')  `;
+            sql_duedate2 += `and left(b.order_cd, 2) not in ('SB','EP','SU')  `;
+        }
+        if (argData.CHECK_FLAG_7 === '1') {
+            // NSR Cd
+            sql_duedate1 += `and b.buyer_cd in ('SG','NP','NU','NS','WI','a1','nn', 'ww','wr','ss','si','ny','xs')`;
+            sql_duedate2 += `and left(b.order_cd, 2) in ('SG','NP','NU','NS','WI','nn', 'a1','ww','wr','ss','si','ny','xs')`;
+        }
+        if (argData.CHECK_FLAG_8 === '1') {
+            // Factory Cd
+            sql_duedate1 += `and b.buyer_cd in ('SB','EP','SU','00')`;
+            sql_duedate2 += `and left(b.buyer_cd, 2) in ('SB','EP','SU','00')`;
+        }
+        if (argData.CHECK_FLAG_9 === '1') {
+            // Excl ETP
+            sql_duedate1 += `and b.buyer_cd not in ('EP')`;
+            sql_duedate2 += `and left(b.order_cd,2 ) not in ('EP')`;
+        }
+
+        var sql_etc_amt = `
+            select
+                b.etc_cd,
+                (b.account + '-' + b.remark) as style_name,
+                b.end_date as etc_date,
+                b.etc_date as etc_date1,
+                '0' as s_ship_cnt,
+                '0' as tot_cnt,
+                '0' as usd_price,
+                '0' as matl_amt,
+                '0' as fc_price,
+                (b.WITHOUT_TAX * d.usd_rate) as etc_amt,
+                '0' as over_amt,
+                '0' as commission,
+                '0' as ship_cnt,
+                'ShinTS' as factory_name,
+                f.buyer_name,
+                b.end_flag,
+                '0' as sample_end_flag,
+                f.buyer_team,
+                'ETC_Cost' as report_kind
+            from
+                kzz_etc_cost_amt b,
+                kcd_code c,
+                kcd_buyer f,
+                kcd_currency d
+            where
+                b.etc_date between '${argData.S_DUE_DATE}' and '${argData.E_DUE_DATE}'
+                and b.end_flag in ('1')
+                and b.kind = 0
+                and b.etc_seq = (
+                    select
+                        max(etc_seq)
+                    from
+                        kzz_etc_cost_amt
+                    where
+                        b.etc_cd = etc_cd
+                )
+                and b.buyer_cd like '%%' 
+                ${sql_duedate1}
+                and c.cd_code = b.etc_type
+                and c.cd_group = 'ETC_TYPE'
+                and f.buyer_cd = b.buyer_cd
+                and b.etc_date = d.start_date
+                and d.curr_cd = b.curr_cd
+        `;
+        if (argData.FACTORY_CD !== '') sql_etc_amt = '';
+
+        var sql_etc_amt1_bak = `
+            select
+                b.order_cd as etc_cd,
+                b.sts_comment as style_name,
+                b.end_date as etc_date,
+                b.end_date as etc_date1,
+                '0' as s_ship_cnt,
+                '0' as tot_cnt,
+                '0' as usd_price,
+                '0' as matl_amt,
+                '0' as fc_price,
+                b.confirm_amt as etc_amt,
+                '0' as over_amt,
+                '0' as commission,
+                '0' as ship_cnt,
+                e.factory_name,
+                f.buyer_name,
+                b.end_flag,
+                '0' as sample_end_flag,
+                f.buyer_team,
+                'Over-Short' as report_kind
+            from
+                ksv_order_over_short b,
+                kcd_buyer f,
+                ksv_order_mst c,
+                kcd_factory e
+            where
+                b.end_date between '${argData.S_DUE_DATE}' and '${argData.E_DUE_DATE}'
+                and b.end_flag in ('1')
+                and f.buyer_cd = left(b.order_cd, 2)
+                and f.buyer_cd like '%%'
+                ${sql_duedate2}
+                and b.order_cd = c.order_cd
+                and c.factory_cd like '%${argData.FACTORY_CD}%'
+                and e.factory_cd = c.factory_cd
+            union
+            select
+                (b.buyer_cd + b.invoice_no) as etc_cd,
+                b.remark as style_name,
+                b.ship_date as etc_date,
+                b.ship_date as etc_date1,
+                '0' as s_ship_cnt,
+                '0' as tot_cnt,
+                '0' as usd_price,
+                '0' as matl_amt,
+                '0' as fc_price,
+                ((-1 * b.adj_amt) * d.usd_rate) as etc_amt,
+                '0' as over_amt,
+                '0' as commission,
+                '0' as ship_cnt,
+                e.factory_name,
+                f.buyer_name,
+                b.remark as end_flag,
+                '0' as sample_end_flag,
+                f.buyer_team,
+                'Invoice-가감액' as report_kind
+            from
+                ksv_invoice_mst b,
+                kcd_buyer f,
+                kcd_factory e,
+                kcd_currency d
+            where
+                b.ship_date between '${argData.S_DUE_DATE}' and '${argData.E_DUE_DATE}'
+                and b.factory_cd like '%${argData.FACTORY_CD}%'
+                and f.buyer_cd = b.buyer_cd
+                and f.buyer_cd like '%%'
+                and e.factory_cd = b.factory_cd
+                and d.start_date = b.ship_date
+                and d.curr_cd = b.curr_cd
+                and b.adj_amt <> 0
+            order by
+                1,
+                2
+        `;
+
+        var sql_etc_amt1 = `
+            select
+                c.order_cd as etc_cd,
+                isnull(b.sts_comment, '') as style_name,
+                left(b.end_date, 8) as etc_date,
+                left(c.end_datetime, 8) as etc_date1,
+                '0' as s_ship_cnt,
+                '0' as tot_cnt,
+                '0' as usd_price,
+                '0' as matl_amt,
+                '0' as fc_price,
+                convert(float, b.confirm_amt) as etc_amt,
+                '0' as over_amt,
+                '0' as commission,
+                '0' as ship_cnt,
+                e.factory_name,
+                f.buyer_name,
+                b.end_flag,
+                '0' as sample_end_flag,
+                f.buyer_team,
+                'Over-Short' as report_kind
+            from
+                ksv_order_mst c,
+                ksv_order_over_short b,
+                kcd_buyer f,
+                kcd_factory e
+            where
+                left(c.end_datetime, 8) between '${argData.S_DUE_DATE}' and '${argData.E_DUE_DATE}'
+                and c.order_status in ('8', '9')
+                and c.sample_flag = '0'
+                and left(c.order_cd,2) not in ('SN')
+                and b.end_flag in ('1')
+                and f.buyer_cd = left(c.order_cd, 2)
+                and f.buyer_cd like '%%'
+                ${sql_duedate3}
+                and c.factory_cd like '%${argData.FACTORY_CD}%'
+                and e.factory_cd = c.factory_cd
+                and c.order_cd = b.order_cd
+                and convert(float, b.confirm_amt) > 0
+            union
+            select
+                (b.buyer_cd + b.invoice_no) as etc_cd,
+                b.remark as style_name,
+                b.ship_date as etc_date,
+                b.ship_date as etc_date1,
+                '0' as s_ship_cnt,
+                '0' as tot_cnt,
+                '0' as usd_price,
+                '0' as matl_amt,
+                '0' as fc_price,
+                ((-1 * b.adj_amt) * d.usd_rate) as etc_amt,
+                '0' as over_amt,
+                '0' as commission,
+                '0' as ship_cnt,
+                e.factory_name,
+                f.buyer_name,
+                b.remark as end_flag,
+                '0' as sample_end_flag,
+                f.buyer_team,
+                'Invoice-가감액' as report_kind
+            from
+                ksv_invoice_mst b,
+                kcd_buyer f,
+                kcd_factory e,
+                kcd_currency d
+            where
+                b.ship_date between '${argData.S_DUE_DATE}' and '${argData.E_DUE_DATE}'
+                and b.factory_cd like '%${argData.FACTORY_CD}%'
+                and f.buyer_cd = b.buyer_cd
+                and f.buyer_cd like '%%'
+                and e.factory_cd = b.factory_cd
+                and d.start_date = b.ship_date
+                and d.curr_cd = b.curr_cd
+                and b.adj_amt <> 0
+            order by
+                1,
+                2
+        `;
+
+
+
+
+/* 
+Type	Order#	Buyer	Style	Factory	Due Date	Ship Date	 	 	 
+Shipping	 	 	Origin-Destination-Ship Mode-ETA-BL#	공장	ETA	ETA	 	 	 
+Local Shipping	비용고유번호	buyer	Origin-Destination-Ship Mode-ETA-BL#	공장	ETA	ETA	 	 	 
+*/
+
+        var sql_etc_amt2 = `
+            select
+                b.shipment_cd as etc_cd,
+                (a.origin_port + '-' + a.destination + '-' +  left(a.etd, 8) + '-' + left(a.eta, 8) + '-' + b.bl_no) as style_name,
+                left(a.eta, 8) as etc_date,
+                left(a.etd, 8) as etc_date1,
+                '0' as s_ship_cnt,
+                '0' as tot_cnt,
+                '0' as usd_price,
+                '0' as matl_amt,
+                '0' as fc_price,
+                (b.cost_amt * b10.usd_rate) as etc_amt,
+                '0' as over_amt,
+                '0' as commission,
+                '0' as ship_cnt,
+                a.destination as factory_name,
+                b1.buyer_name,
+                '0' as end_flag,
+                '0' as sample_end_flag,
+                b1.buyer_team,
+                b.type2 as report_kind,
+                b.cost_date as cost_date 
+            from
+                ksv_shipment_mst a
+                left join kcd_code a1 on a1.cd_code = a.ship_mode and a1.cd_group = 'shipment_ship_mode',
+                ksv_cost_mst b
+                left join kcd_buyer b1 on b1.buyer_cd = b.buyer_cd
+                left join kcd_currency b10 on b10.curr_cd = b.cost_curr and  b10.start_date = left(b.cost_date , 8)
+            where
+                a.etd between '${argData.S_DUE_DATE}' and '${argData.E_DUE_DATE}'
+                and b1.buyer_cd like '%%'
+                ${sql_duedate1}
+                --and  b.type2 in ('AIR', 'SEA', 'FCL', 'LCL', 'DHL', 'FEDEX', 'EXPRESS', 'EXPRESS(3rd)', 'EXPRESS(Pick-up)', 'EXPRESS(Pick-up)', 'EXPRESS(Pick-up)')
+                and b.type2 in (
+                    select
+                        CD_NAME
+                    from
+                        kcd_code
+                    where
+                        cd_group = 'SHIPMENT_SHIP_MODE'
+                )
+                and  b.type = 'SHIPPING_COST'
+                and  a.shipment_cd = b.shipment_cd
+            union
+            select
+                b.bl_no as etc_cd,
+                (a2.factory_name + '-Korea' + '-' + a1.cd_name + '-' + a.invoice_no) as style_name,
+                left(b.ship_date, 8) as etc_date,
+                left(b.ship_date, 8) as etc_date1,
+                '0' as s_ship_cnt,
+                '0' as tot_cnt,
+                '0' as usd_price,
+                '0' as matl_amt,
+                '0' as fc_price,
+                (b.cost_amt * b10.usd_rate)  as etc_amt,
+                '0' as over_amt,
+                '0' as commission,
+                '0' as ship_cnt, 
+                a2.factory_name as factory_name,
+                b1.buyer_name,
+                '0' as end_flag, 
+                '0' as sample_end_flag,
+                b1.buyer_team,
+                b.type2 as report_kind,
+                b.cost_date as cost_date 
+            from
+                ksv_invoice_mst a
+                left join kcd_code a1 on a1.cd_code = a.delivery_type and a1.cd_group = 'delivery_type'
+                left join kcd_factory a2 on a2.factory_cd = a.factory_cd,
+                ksv_cost_mst b
+                left join kcd_buyer b1 on b1.buyer_cd = b.buyer_cd
+                left join kcd_currency b10 on b10.curr_cd = 'KRW' and  b10.start_date = left(b.cost_date , 8)
+            where
+                b.ship_date  between '${argData.S_DUE_DATE}' and '${argData.E_DUE_DATE}'
+                and b1.buyer_cd like '%%'
+                ${sql_duedate1}
+                and  b.type2 in ('Korea Import Cost')
+                and  a.invoice_no = b.invoice_no
+            union
+            select
+                b.shipment_cd as etc_cd,
+                (a.origin_port + a.destination + '-' + left(a.eta, 8) + '-' + a1.cd_name + '-' + b.bl_no) as style_name,
+                left(a.eta, 8) as etc_date,
+                left(a.etd, 8) as etc_date1,
+                '0' as s_ship_cnt,
+                '0' as tot_cnt,
+                '0' as usd_price,
+                '0' as matl_amt,
+                '0' as fc_price,
+                (b.cost_amt * b10.usd_rate) as etc_amt,
+                '0' as over_amt,
+                '0' as commission,
+                '0' as ship_cnt,
+                a.destination as factory_name,
+                b1.buyer_name,
+                '0' as end_flag,
+                '0' as sample_end_flag,
+                b1.buyer_team,
+                'Local Import Cost' as report_kind,
+                b.cost_date as cost_date 
+            from
+                ksv_shipment_mst a
+                left join kcd_code a1 on a1.cd_code = a.ship_mode and a1.cd_group = 'shipment_ship_mode',
+                ksv_cost_mst b
+                left join kcd_buyer b1 on b1.buyer_cd = b.buyer_cd
+                left join kcd_currency b10 on b10.curr_cd = b.cost_curr and  b10.start_date = b.ship_date 
+            where
+                a.etd  between '${argData.S_DUE_DATE}' and '${argData.E_DUE_DATE}'
+                and b1.buyer_cd like '%%'
+                ${sql_duedate1}
+                and  b.type in ('LOCAL_COST')
+                and  a.shipment_cd = b.shipment_cd
+            union
+            select
+                b.pu_cd as etc_cd,
+                (b1.vendor_name + '-' + b.po_cd + '-' + b2.matl_name) as style_name,
+                left(b.cost_date, 8) as etc_date,
+                left(b.cost_date, 8) as etc_date1,
+                '0' as s_ship_cnt,
+                '0' as tot_cnt,
+                '0' as usd_price,
+                '0' as matl_amt,
+                '0' as fc_price,
+                (b.cost_amt * b10.usd_rate) as etc_amt,
+                '0' as over_amt,
+                '0' as commission,
+                '0' as ship_cnt,
+                a1.factory_name as factory_name,
+                b3.buyer_name,
+                '0' as end_flag,
+                '0' as sample_end_flag,
+                b3.buyer_team,
+                b.type2 as report_kind,
+                b.cost_date as cost_date 
+            from
+                ksv_cost_mst b
+                left join kcd_currency b10 on b10.curr_cd = b.cost_curr and  b10.start_date = left(b.cost_date , 8)
+                left join kcd_vendor b1 on b1.vendor_cd = b.vendor_cd
+                left join kcd_matl_mst b2 on b2.matl_cd = b.matl_cd
+                left join kcd_buyer b3 on b3.buyer_cd = b.buyer_cd,
+                ksv_pu_mst2 a
+                left join kcd_factory  a1 on a.factory_cd = a1.factory_cd
+            where
+                left(b.cost_date, 8)  between '${argData.S_DUE_DATE}' and '${argData.E_DUE_DATE}'
+                and b3.buyer_cd like '%%'
+                ${sql_duedate1}
+                and  b.type2 in ('MOQ999')
+                and  a.pu_cd = b.pu_cd
+            union
+            select
+                b.pu_cd as etc_cd,
+                (b1.vendor_name + '-' + b.po_cd + '-' + b2.matl_name) as style_name,
+                left(b.cost_date, 8) as etc_date,
+                left(b.cost_date, 8) as etc_date1,
+                '0' as s_ship_cnt,
+                '0' as tot_cnt,
+                '0' as usd_price,
+                '0' as matl_amt,
+                '0' as fc_price,
+                (b.cost_amt * b10.usd_rate) as etc_amt,
+                '0' as over_amt,
+                '0' as commission,
+                '0' as ship_cnt,
+                a1.factory_name as factory_name,
+                b3.buyer_name,
+                '0' as end_flag,
+                '0' as sample_end_flag,
+                b3.buyer_team,
+                'Over-Short' as report_kind,
+                b.cost_date as cost_date 
+            from
+                ksv_cost_mst b
+                left join kcd_currency b10 on b10.curr_cd = b.cost_curr and  b10.start_date = left(b.cost_date , 8)
+                left join kcd_vendor b1 on b1.vendor_cd = b.vendor_cd
+                left join kcd_matl_mst b2 on b2.matl_cd = b.matl_cd
+                left join kcd_buyer b3 on b3.buyer_cd = b.buyer_cd,
+                ksv_pu_mst2 a
+                left join kcd_factory  a1 on a.factory_cd = a1.factory_cd
+            where
+                left(b.cost_date, 8)  between '${argData.S_DUE_DATE}' and '${argData.E_DUE_DATE}'
+                and b3.buyer_cd like '%%' 
+                ${sql_duedate1}
+                and  b.type2 in ('OVER9999', 'Overshort9999')
+                and  a.pu_cd = b.pu_cd
+            union
+            select
+                distinct 
+                b.pu_cd as etc_cd,
+                (b1.vendor_name + '-' + b.po_cd + '-' + b2.matl_name + '-' + c.surcharge_remark ) as style_name,
+                left(b.cost_date, 8) as etc_date,
+                left(b.cost_date, 8) as etc_date1,
+                '0' as s_ship_cnt,
+                '0' as tot_cnt,
+                '0' as usd_price,
+                '0' as matl_amt,
+                '0' as fc_price,
+                (b.cost_amt * b10.usd_rate) as etc_amt,
+                '0' as over_amt,
+                '0' as commission,
+                '0' as ship_cnt,
+                a1.factory_name as factory_name,
+                b3.buyer_name,
+                '0' as end_flag,
+                '0' as sample_end_flag,
+                b3.buyer_team,
+                b.type2 as report_kind,
+                b.cost_date as cost_date 
+            from
+                ksv_cost_mst b
+                left join kcd_currency b10 on b10.curr_cd = b.cost_curr and  b10.start_date = left(b.cost_date , 8)
+                left join kcd_vendor b1 on b1.vendor_cd = b.vendor_cd
+                left join kcd_matl_mst b2 on b2.matl_cd = b.matl_cd
+                left join kcd_buyer b3 on b3.buyer_cd = b.buyer_cd,
+                ksv_pu_mst2 a
+                left join kcd_factory  a1 on a.factory_cd = a1.factory_cd, 
+                ksv_stock_mem2 c
+            where
+                left(b.cost_date, 8)  between '${argData.S_DUE_DATE}' and '${argData.E_DUE_DATE}'
+                and b3.buyer_cd like '%%'
+                ${sql_duedate1}
+                and  b.type2 in ('Surcharge9999')
+                and  a.pu_cd = b.pu_cd
+                and  a.pu_cd = c.pu_cd
+                and  b.po_cd = c.po_cd
+                and  b.matl_cd = c.matl_cd
+            order by
+                1,
+                2
+        `;
+
+
+        var tRet2 = [];
+
+        var tSQL2 = '';
+        var tRet2_0 = await prisma.$queryRaw(Prisma.raw(sql_etc_amt));
+        var tRet2_1 = await prisma.$queryRaw(Prisma.raw(sql_etc_amt1));
+        var tRet2_2 = await prisma.$queryRaw(Prisma.raw(sql_etc_amt2));
+
+        tRet2_0.forEach((col, i) => {
+            var tObj = { ...col };
+            tRet2.push(tObj);
+        });
+        tRet2_1.forEach((col, i) => {
+            var tObj = { ...col };
+            tRet2.push(tObj);
+        });
+        tRet2_2.forEach((col, i) => {
+            var tObj = { ...col };
+            tRet2.push(tObj);
+        });
+
+
+        console.log(`Step-3: Etc Cost : ${tRet2.length} `);
+        logbuff.push(`Step-3: Etc Cost : ${tRet2.length} `);
+
+        tIdx = 0;
+        for (tIdx = 0; tIdx < tRet2.length; tIdx++) {
+            var tOne = {
+                ...tRet2[tIdx],
+            };
+
+            if (!tOne.etc_date)  tOne.etc_date = tOne.cost_date;
+
+            /*
+                    strFactory = 'SHINTS BVT CO., LTD';
+                    strFactory = 'SHINTS ETP GARMENT PLC';
+            */
+
+            var tFactory = tOne.factory_name;
+
+            if (
+                tFactory === 'BVT' || tFactory === 'BVT(TN)'
+            ) {
+                tOne.factory_name = 'SHINTS BVT CO., LTD';
+            }
+            else if (
+                tFactory === 'ETP'
+            ) {
+                tOne.factory_name = 'SHINTS ETP GARMENT PLC';
+            } else {
+                ;
+            }
+
+            if (tOne.report_kind === 'Invoice-가감액' && tFactory === 'ShinTS') {
+                tOne.style_name = '';
+                // if (tOne.style_name.substring(0, 2) === 'PO-') tOne.style_name = '';
+            }
+
+            var tInsObj = {};
+            tInsObj.user_id = tUserInfo.USER_ID;
+            tInsObj.order_cd = tOne.etc_cd;
+            tInsObj.buyer = tOne.buyer_name.replace(/'/gi, '');
+            tInsObj.style = tOne.style_name.replace(/'/gi, '');
+            tInsObj.factory = tOne.factory_name;
+            tInsObj.due_date = tOne.etc_date;
+            tInsObj.ship_date = tOne.etc_date1;
+            tInsObj.tot_cnt = tOne.tot_cnt;
+            tInsObj.ship_cnt = tOne.s_ship_cnt;
+            tInsObj.usd_price = tOne.usd_price;
+            tInsObj.ord_amt = 0;
+            tInsObj.fc_amt = 0;
+            tInsObj.matl_amt = 0;
+            tInsObj.etc_amt = tOne.etc_amt;
+            tInsObj.comm_amt = 0;
+            tInsObj.tot_amt = tOne.etc_amt;
+            tInsObj.buyer_team = tOne.buyer_team;
+            tInsObj.type = tOne.report_kind;
+
+            var tSql99 = AFLib.createTableSql('KSV_ORDER_TEMP', tInsObj);
+            var tRet = prisma.$queryRaw(Prisma.raw(tSql99));
+            tSQLArray.push(tRet);
+        }
+
+        //  Debit 데이터 Plus
+        var sql_duedate1 = '';
+        var sql_duedate2 = '';
+        if (argData.CHECK_FLAG_3 === '1') {
+            // Excl NSR
+            sql_duedate1 += `and a.buyer_cd not in ('SG','NP','NU','NS','WI','a1','ww','wr','ss','si','ny','xs') `;
+        }
+        if (argData.CHECK_FLAG_4 === '1') {
+            // Excl Factory
+            sql_duedate1 += `and a.buyer_cd not in ('SB','EP','SU','00')  `;
+        }
+        if (argData.CHECK_FLAG_7 === '1') {
+            // NSR Cd
+            sql_duedate1 += `and a.buyer_cd in ('SG','NP','NU','NS','WI','nn','a1','ww','wr','ss','si','ny','xs')`;
+        }
+        if (argData.CHECK_FLAG_8 === '1') {
+            // Factory Cd
+            sql_duedate1 += `and a.buyer_cd in ('SB','EP','SU','00')`;
+            sql_duedate1 += `and e.factory_cd not in ('FC045')`;
+        }
+        if (argData.CHECK_FLAG_9 === '1') {
+            // Excl ETP
+            sql_duedate1 += `and a.buyer_cd not in ('EP')`;
+        }
+
+        var sql_debit_amt = `
+            select
+                (a.buyer_cd + a.crdb_cd) as crdb_cd,
+                a.title as style_name,
+                b.end_date as due_date,
+                b.end_date as ship_date,
+                '0',
+                '0',
+                '0',
+                '0',
+                '0',
+                (b.crdb_amt * g.usd_rate * -1) as crdb_amt,
+                '0',
+                '0',
+                '0',
+                e.factory_name,
+                f.buyer_name,
+                '0',
+                '0',
+                f.buyer_team,
+                'Debit_Note' as report_kind,
+                a.po_cd,
+                a.order_cd,
+                isnull(a.link_to, '') as link_to,
+                a.messer_cd
+            from
+                ksv_crdb_mst a,
+                ksv_crdb_mem b,
+                kcd_buyer f,
+                kcd_currency g,
+                kcd_factory e
+            where
+                b.end_date between '${argData.S_DUE_DATE}' and '${argData.E_DUE_DATE}'
+                and a.crdb_type = 'd'
+                and a.debit_type <> '4'
+                and a.crdb_cd = b.crdb_cd
+                and a.crdb_seq = (
+                    select
+                        max(crdb_seq)
+                    from
+                        ksv_crdb_mst
+                    where
+                        a.crdb_cd = crdb_cd
+                )
+                and f.buyer_cd = a.buyer_cd
+                and f.buyer_cd like '%%'
+                ${sql_duedate1}
+                and g.start_date = b.end_date
+                and g.curr_cd = a.curr_cd
+                and e.factory_cd = 'fc045'
+        `;
+        console.log(`Step-4-0: Debit Amt;  `);
+        var tRet2_1 = await prisma.$queryRaw(Prisma.raw(sql_debit_amt));
+        console.log(`Step-4: Debit Amt :  ${tRet2_1.length} `);
+        logbuff.push(`Step-4: Debit Amt :  ${tRet2_1.length} `);
+
+        tIdx = 0;
+        for (tIdx = 0; tIdx < tRet2_1.length; tIdx++) {
+            var tOne = {
+                ...tRet2_1[tIdx],
+            };
+
+            var strFactory = '';
+            if (tOne.link_to !== '') {
+                if (
+                    tOne.link_to === 'SB' ||
+                    tOne.link_to === '55' ||
+                    tOne.link_to === '56' ||
+                    tOne.link_to === 'FC034' ||
+                    tOne.link_to === 'FC087' ||
+                    tOne.link_to === 'V0228' ||
+                    tOne.link_to === 'V-BVT'
+                )
+                    strFactory = 'SHINTS BVT CO., LTD';
+                else if (
+                    tOne.link_to === 'FC044' ||
+                    tOne.link_to === 'V1838' ||
+                    tOne.link_to === 'EP' ||
+                    tOne.link_to === 'V-ETP'
+                )
+                    strFactory = 'SHINTS ETP GARMENT PLC';
+            }
+
+            if (strFactory === '' && tOne.po_cd !== '') {
+                var sql100 = `
+                    select
+                        a.factory_cd as link_to
+                    from
+                        ksv_po_mst a
+                    where
+                        a.po_cd = '${tOne.po_cd}'
+                `;
+                var tRet100 = await prisma.$queryRaw(Prisma.raw(sql100));
+                if (tRet100.length > 0) {
+                    var tOne1 = {
+                        ...tRet100[0],
+                    };
+                    if (
+                        tOne1.link_to === 'SB' ||
+                        tOne1.link_to === '55' ||
+                        tOne1.link_to === '56' ||
+                        tOne1.link_to === 'FC034' ||
+                        tOne1.link_to === 'FC087' ||
+                        tOne1.link_to === 'V0228' ||
+                        tOne1.link_to === 'V-BVT'
+                    )
+                        strFactory = 'SHINTS BVT CO., LTD';
+                    else if (
+                        tOne1.link_to === 'FC044' ||
+                        tOne1.link_to === 'V1838' ||
+                        tOne1.link_to === 'EP' ||
+                        tOne1.link_to === 'V-ETP'
+                    )
+                        strFactory = 'SHINTS ETP GARMENT PLC';
+                }
+            }
+
+            if (strFactory === '' && tOne.order_cd !== '') {
+                var sql100 = `
+                    select
+                        a.factory_cd as link_to
+                    from
+                        ksv_order_mst a
+                    where
+                        a.order_cd = '${tOne.order_cd}'
+                `;
+                var tRet100 = await prisma.$queryRaw(Prisma.raw(sql100));
+                if (tRet100.length > 0) {
+                    var tOne1 = {
+                        ...tRet100[0],
+                    };
+                    if (
+                        tOne1.link_to === 'SB' ||
+                        tOne1.link_to === '55' ||
+                        tOne1.link_to === '56' ||
+                        tOne1.link_to === 'FC034' ||
+                        tOne1.link_to === 'FC087' ||
+                        tOne1.link_to === 'V0228' ||
+                        tOne1.link_to === 'V-BVT'
+                    )
+                        strFactory = 'SHINTS BVT CO., LTD';
+                    else if (
+                        tOne1.link_to === 'FC044' ||
+                        tOne1.link_to === 'V1838' ||
+                        tOne1.link_to === 'EP' ||
+                        tOne1.link_to === 'V-ETP'
+                    )
+                        strFactory = 'SHINTS ETP GARMENT PLC';
+                }
+            }
+
+            if (strFactory === '' && tOne.messer_cd !== '') {
+                var tOne1 = {};
+                tOne1.link_to = tOne.messer_cd;
+                if (
+                    tOne1.link_to === 'SB' ||
+                    tOne1.link_to === '55' ||
+                    tOne1.link_to === '56' ||
+                    tOne1.link_to === 'FC034' ||
+                    tOne1.link_to === 'FC087' ||
+                    tOne1.link_to === 'V0228' ||
+                    tOne1.link_to === 'V-BVT'
+                )
+                    strFactory = 'SHINTS BVT CO., LTD';
+                else if (
+                    tOne1.link_to === 'FC044' ||
+                    tOne1.link_to === 'V1838' ||
+                    tOne1.link_to === 'EP' ||
+                    tOne1.link_to === 'V-ETP'
+                )
+                    strFactory = 'SHINTS ETP GARMENT PLC';
+                else strFactory = 'ShinTS';
+            }
+
+            var tInsObj = {};
+            if (
+                argData.FACTORY_CD === 'FC034' &&
+                strFactory === 'SHINTS BVT CO., LTD'
+            ) {
+                tInsObj.user_id = tUserInfo.USER_ID;
+                tInsObj.order_cd = tOne.crdb_cd;
+                tInsObj.buyer = tOne.buyer_name.replace(/'/gi, '');
+                tInsObj.style = tOne.style_name.replace(/'/gi, '');
+                tInsObj.factory = strFactory;
+                tInsObj.due_date = tOne.due_date;
+                tInsObj.ship_date = tOne.ship_date;
+                tInsObj.tot_cnt = '0';
+                tInsObj.ship_cnt = '0';
+                tInsObj.usd_price = '0';
+                tInsObj.ord_amt = 0;
+                tInsObj.fc_amt = 0;
+                tInsObj.matl_amt = 0;
+                tInsObj.etc_amt = tOne.crdb_amt;
+                tInsObj.comm_amt = 0;
+                tInsObj.tot_amt = tOne.crdb_amt;
+                tInsObj.buyer_team = tOne.buyer_team;
+                tInsObj.type = tOne.report_kind;
+            } else if (
+                argData.FACTORY_CD === 'FC044' &&
+                strFactory === 'SHINTS ETP GARMENT PLC'
+            ) {
+                tInsObj.user_id = tUserInfo.USER_ID;
+                tInsObj.order_cd = tOne.crdb_cd;
+                tInsObj.buyer = tOne.buyer_name.replace(/'/gi, '');
+                tInsObj.style = tOne.style_name.replace(/'/gi, '');
+                tInsObj.factory = strFactory;
+                tInsObj.due_date = tOne.due_date;
+                tInsObj.ship_date = tOne.ship_date;
+                tInsObj.tot_cnt = '0';
+                tInsObj.ship_cnt = '0';
+                tInsObj.usd_price = '0';
+                tInsObj.ord_amt = 0;
+                tInsObj.fc_amt = 0;
+                tInsObj.matl_amt = 0;
+                tInsObj.etc_amt = tOne.crdb_amt;
+                tInsObj.comm_amt = 0;
+                tInsObj.tot_amt = tOne.crdb_amt;
+                tInsObj.buyer_team = tOne.buyer_team;
+                tInsObj.type = tOne.report_kind;
+            } else {
+                tInsObj.user_id = tUserInfo.USER_ID;
+                tInsObj.order_cd = tOne.crdb_cd;
+                tInsObj.buyer = tOne.buyer_name.replace(/'/gi, '');
+                tInsObj.style = tOne.style_name.replace(/'/gi, '');
+                tInsObj.factory = strFactory;
+                tInsObj.due_date = tOne.due_date;
+                tInsObj.ship_date = tOne.ship_date;
+                tInsObj.tot_cnt = '0';
+                tInsObj.ship_cnt = '0';
+                tInsObj.usd_price = '0';
+                tInsObj.ord_amt = 0;
+                tInsObj.fc_amt = 0;
+                tInsObj.matl_amt = 0;
+                tInsObj.etc_amt = tOne.crdb_amt;
+                tInsObj.comm_amt = 0;
+                tInsObj.tot_amt = tOne.crdb_amt;
+                tInsObj.buyer_team = tOne.buyer_team;
+                tInsObj.type = tOne.report_kind;
+            }
+
+            var tSql99 = AFLib.createTableSql('KSV_ORDER_TEMP', tInsObj);
+            var tRet = prisma.$queryRaw(Prisma.raw(tSql99));
+            tSQLArray.push(tRet);
+        }
+
+        //  Credit 데이터 Minus
+        var sql_duedate1 = '';
+        var sql_duedate2 = '';
+        if (argData.CHECK_FLAG_3 === '1') {
+            // Excl NSR
+            sql_duedate1 += `and a.buyer_cd not in ('SG','NP','NU','NS','WI','a1','ww','wr','ss','si','ny','xs') `;
+        }
+        if (argData.CHECK_FLAG_4 === '1') {
+            // Excl Factory
+            sql_duedate1 += `and a.buyer_cd not in ('SB','EP','SU',)  `;
+        }
+        if (argData.CHECK_FLAG_7 === '1') {
+            // NSR Cd
+            sql_duedate1 += `and a.buyer_cd in ('SG','NP','NU','NS','WI','nn','a1','ww','wr','ss','si','ny','xs')`;
+        }
+        if (argData.CHECK_FLAG_8 === '1') {
+            // Factory Cd
+            sql_duedate1 += `and a.buyer_cd in ('SB','EP','SU','00')`;
+            sql_duedate1 += `and e.factory_cd not in ('FC045')`;
+        }
+        if (argData.CHECK_FLAG_9 === '1') {
+            // Excl ETP
+            sql_duedate1 += `and a.buyer_cd not in ('EP')`;
+        }
+
+        var sql_debit_amt = `
+            select
+                (a.buyer_cd + a.crdb_cd) as crdb_cd,
+                a.title as style_name,
+                b.end_date as due_date,
+                b.end_date as ship_date,
+                '0',
+                '0',
+                '0',
+                '0',
+                '0',
+                (b.crdb_amt * g.usd_rate) as crdb_amt,
+                '0',
+                '0',
+                '0',
+                e.factory_name,
+                f.buyer_name,
+                '0',
+                '0',
+                f.buyer_team,
+                'Credit_Note' as report_kind,
+                a.po_cd,
+                a.order_cd,
+                isnull(a.link_to, '') as link_to,
+                a.messer_cd
+            from
+                ksv_crdb_mst a,
+                ksv_crdb_mem b,
+                kcd_buyer f,
+                kcd_currency g,
+                kcd_factory e
+            where
+                b.end_date between '${argData.S_DUE_DATE}' and '${argData.E_DUE_DATE}'
+                and a.crdb_type = 'c'
+                and a.debit_type <> '4'
+                and a.crdb_cd = b.crdb_cd
+                and a.crdb_seq = (
+                    select
+                        max(crdb_seq)
+                    from
+                        ksv_crdb_mst
+                    where
+                        a.crdb_cd = crdb_cd
+                )
+                and f.buyer_cd = a.buyer_cd
+                and f.buyer_cd like '%%'
+                ${sql_duedate1}
+                and g.start_date = b.end_date
+                and g.curr_cd = a.curr_cd
+                and e.factory_cd = 'fc045'
+        `;
+        var tRet2 = await prisma.$queryRaw(Prisma.raw(sql_debit_amt));
+        console.log(`Step-5: Credit Amt : ${tRet2.length} `);
+        logbuff.push(`Step-5: Credit Amt : ${tRet2.length} `);
+
+        tIdx = 0;
+        for (tIdx = 0; tIdx < tRet2.length; tIdx++) {
+            var tOne = {
+                ...tRet2[tIdx],
+            };
+
+            var strFactory = '';
+            if (tOne.link_to !== '') {
+                if (
+                    tOne.link_to === 'SB' ||
+                    tOne.link_to === '55' ||
+                    tOne.link_to === '56' ||
+                    tOne.link_to === 'FC034' ||
+                    tOne.link_to === 'FC087' ||
+                    tOne.link_to === 'V0228' ||
+                    tOne.link_to === 'V-BVT'
+                )
+                    strFactory = 'SHINTS BVT CO., LTD';
+                else if (
+                    tOne.link_to === 'FC044' ||
+                    tOne.link_to === 'V1838' ||
+                    tOne.link_to === 'EP' ||
+                    tOne.link_to === 'V-ETP'
+                )
+                    strFactory = 'SHINTS ETP GARMENT PLC';
+            }
+
+            if (strFactory === '' && tOne.po_cd !== '') {
+                var sql100 = `
+                    select
+                        a.factory_cd as link_to
+                    from
+                        ksv_po_mst a
+                    where
+                        a.po_cd = '${tOne.po_cd}'
+                `;
+                var tRet100 = await prisma.$queryRaw(Prisma.raw(sql100));
+                if (tRet100.length > 0) {
+                    var tOne1 = {
+                        ...tRet100[0],
+                    };
+                    if (
+                        tOne1.link_to === 'SB' ||
+                        tOne1.link_to === '55' ||
+                        tOne1.link_to === '56' ||
+                        tOne1.link_to === 'FC034' ||
+                        tOne1.link_to === 'FC087' ||
+                        tOne1.link_to === 'V0228' ||
+                        tOne1.link_to === 'V-BVT'
+                    )
+                        strFactory = 'SHINTS BVT CO., LTD';
+                    else if (
+                        tOne1.link_to === 'FC044' ||
+                        tOne1.link_to === 'V1838' ||
+                        tOne1.link_to === 'EP' ||
+                        tOne1.link_to === 'V-ETP'
+                    )
+                        strFactory = 'SHINTS ETP GARMENT PLC';
+                }
+            }
+
+            if (strFactory === '' && tOne.order_cd !== '') {
+                var sql100 = `
+                    select
+                        a.factory_cd as link_to
+                    from
+                        ksv_order_mst a
+                    where
+                        a.order_cd = '${tOne.order_cd}'
+                `;
+                var tRet100 = await prisma.$queryRaw(Prisma.raw(sql100));
+                if (tRet100.length > 0) {
+                    var tOne1 = {
+                        ...tRet100[0],
+                    };
+                    if (
+                        tOne1.link_to === 'SB' ||
+                        tOne1.link_to === '55' ||
+                        tOne1.link_to === '56' ||
+                        tOne1.link_to === 'FC034' ||
+                        tOne1.link_to === 'FC087' ||
+                        tOne1.link_to === 'V0228' ||
+                        tOne1.link_to === 'V-BVT'
+                    )
+                        strFactory = 'SHINTS BVT CO., LTD';
+                    else if (
+                        tOne1.link_to === 'FC044' ||
+                        tOne1.link_to === 'V1838' ||
+                        tOne1.link_to === 'EP' ||
+                        tOne1.link_to === 'V-ETP'
+                    )
+                        strFactory = 'SHINTS ETP GARMENT PLC';
+                }
+            }
+
+            if (strFactory === '' && tOne.messer_cd !== '') {
+                var tOne1 = {};
+                tOne1.link_to = tOne.messer_cd;
+                if (
+                    tOne1.link_to === 'SB' ||
+                    tOne1.link_to === '55' ||
+                    tOne1.link_to === '56' ||
+                    tOne1.link_to === 'FC034' ||
+                    tOne1.link_to === 'FC087' ||
+                    tOne1.link_to === 'V0228' ||
+                    tOne1.link_to === 'V-BVT'
+                )
+                    strFactory = 'SHINTS BVT CO., LTD';
+                else if (
+                    tOne1.link_to === 'FC044' ||
+                    tOne1.link_to === 'V1838' ||
+                    tOne1.link_to === 'EP' ||
+                    tOne1.link_to === 'V-ETP'
+                )
+                    strFactory = 'SHINTS ETP GARMENT PLC';
+                else strFactory = 'ShinTS';
+            }
+
+            var tInsObj = {};
+            if (
+                argData.FACTORY_CD === 'FC034' &&
+                strFactory === 'SHINTS BVT CO., LTD'
+            ) {
+                tInsObj.user_id = tUserInfo.USER_ID;
+                tInsObj.order_cd = tOne.crdb_cd;
+                tInsObj.buyer = tOne.buyer_name.replace(/'/gi, '');
+                tInsObj.style = tOne.style_name.replace(/'/gi, '');
+                tInsObj.factory = strFactory;
+                tInsObj.due_date = tOne.due_date;
+                tInsObj.ship_date = tOne.ship_date;
+                tInsObj.tot_cnt = '0';
+                tInsObj.ship_cnt = '0';
+                tInsObj.usd_price = '0';
+                tInsObj.ord_amt = 0;
+                tInsObj.fc_amt = 0;
+                tInsObj.matl_amt = 0;
+                tInsObj.etc_amt = tOne.crdb_amt;
+                tInsObj.comm_amt = 0;
+                tInsObj.tot_amt = tOne.crdb_amt;
+                tInsObj.buyer_team = tOne.buyer_team;
+                tInsObj.type = tOne.report_kind;
+            } else if (
+                argData.FACTORY_CD === 'FC044' &&
+                strFactory === 'SHINTS ETP GARMENT PLC'
+            ) {
+                tInsObj.user_id = tUserInfo.USER_ID;
+                tInsObj.order_cd = tOne.crdb_cd;
+                tInsObj.buyer = tOne.buyer_name.replace(/'/gi, '');
+                tInsObj.style = tOne.style_name.replace(/'/gi, '');
+                tInsObj.factory = strFactory;
+                tInsObj.due_date = tOne.due_date;
+                tInsObj.ship_date = tOne.ship_date;
+                tInsObj.tot_cnt = '0';
+                tInsObj.ship_cnt = '0';
+                tInsObj.usd_price = '0';
+                tInsObj.ord_amt = 0;
+                tInsObj.fc_amt = 0;
+                tInsObj.matl_amt = 0;
+                tInsObj.etc_amt = tOne.crdb_amt;
+                tInsObj.comm_amt = 0;
+                tInsObj.tot_amt = tOne.crdb_amt;
+                tInsObj.buyer_team = tOne.buyer_team;
+                tInsObj.type = tOne.report_kind;
+            } else {
+                tInsObj.user_id = tUserInfo.USER_ID;
+                tInsObj.order_cd = tOne.crdb_cd;
+                tInsObj.buyer = tOne.buyer_name.replace(/'/gi, '');
+                tInsObj.style = tOne.style_name.replace(/'/gi, '');
+                tInsObj.factory = strFactory;
+                tInsObj.due_date = tOne.due_date;
+                tInsObj.ship_date = tOne.ship_date;
+                tInsObj.tot_cnt = '0';
+                tInsObj.ship_cnt = '0';
+                tInsObj.usd_price = '0';
+                tInsObj.ord_amt = 0;
+                tInsObj.fc_amt = 0;
+                tInsObj.matl_amt = 0;
+                tInsObj.etc_amt = tOne.crdb_amt;
+                tInsObj.comm_amt = 0;
+                tInsObj.tot_amt = tOne.crdb_amt;
+                tInsObj.buyer_team = tOne.buyer_team;
+                tInsObj.type = tOne.report_kind;
+            }
+
+            var tSql99 = AFLib.createTableSql('KSV_ORDER_TEMP', tInsObj);
+            var tRet = prisma.$queryRaw(Prisma.raw(tSql99));
+            tSQLArray.push(tRet);
+        }
+
+        //  Bvt, ETP Debit 데이터 Minus
+        var tSearchFactory = '';
+        var sql_duedate1 = '';
+        var sql_duedate2 = '';
+        if (argData.CHECK_FLAG_3 === '1') {
+            // Excl NSR
+            sql_duedate1 += `and a.messer_cd not in ('SG','NP','NU','NS','WI','a1','ww','wr','ss','si','ny','xs') `;
+        }
+        if (argData.CHECK_FLAG_4 === '1') {
+            // Excl Factory
+            sql_duedate1 += `and a.messer_cd not in ('SB','EP','SU')  `;
+        }
+        if (argData.CHECK_FLAG_7 === '1') {
+            // NSR Cd
+            sql_duedate1 += `and a.messer_cd in ('SG','NP','NU','NS','WI','nn','a1','ww','wr','ss','si','ny','xs')`;
+        }
+        if (argData.CHECK_FLAG_8 === '1') {
+            // Factory Cd
+            sql_duedate1 += `and a.buyer_cd in ('SB','EP','SU','00')`;
+            sql_duedate1 += `and e.factory_cd not in ('FC045')`;
+        }
+        if (argData.CHECK_FLAG_9 === '1') {
+            // Excl ETP
+            sql_duedate1 += `and a.buyer_cd not in ('EP')`;
+        }
+
+        var tSearchFactory = '';
+        var tCrDbType = '';
+        if (argData.FACTORY_CD !== 'FC010') {
+            if (argData.FACTORY_CD === 'FC034') {
+                tSearchFactory = `('fc034')`;
+                tCrDbType = `'b'`;
+            } else if (argData.FACTORY_CD === 'FC044') {
+                tSearchFactory = `('fc044')`;
+                tCrDbType = `'e'`;
+            } else if (argData.FACTORY_CD === '') {
+                tSearchFactory = `('fc044', 'fc034')`;
+                tCrDbType = `'b', 'e'`;
+            } else {
+                tSearchFactory = `('fc044', 'fc034')`;
+                tCrDbType = `'b', 'e'`;
+            }
+            tCrDbType = `		and a.crdb_type in (${tCrDbType})   `;
+        }
+
+        var sql_debit_amt = `
+            select
+                (a.messer_cd + a.crdb_cd) as crdb_cd,
+                a.title as style_name,
+                b.end_date as due_date,
+                b.end_date as ship_date,
+                '0',
+                '0',
+                '0',
+                '0',
+                '0',
+                -- (b.crdb_amt*g.usd_rate*-1) as crdb_amt,
+                (b.crdb_amt * g.usd_rate) as crdb_amt,
+                '0',
+                '0',
+                '0',
+                '' as factory_name,
+                f.buyer_name,
+                '0',
+                '0',
+                f.buyer_team,
+                'Factory_Debit_Note' as report_kind,
+                a.po_cd,
+                a.order_cd,
+                isnull(a.link_to, '') as link_to,
+                a.messer_cd,
+                a.crdb_type
+            from
+                ksv_crdb_mst a,
+                ksv_crdb_mem b,
+                kcd_buyer f,
+                kcd_currency g
+            where
+                b.end_date between '${argData.S_DUE_DATE}' and '${argData.E_DUE_DATE}'  ${tCrDbType}
+                and a.debit_type <> '4'
+                and a.crdb_cd = b.crdb_cd
+                and a.crdb_seq = (
+                    select
+                        max(crdb_seq)
+                    from
+                        ksv_crdb_mst
+                    where
+                        a.crdb_cd = crdb_cd
+                )
+                -- and f.buyer_cd = a.buyer_cd 
+                and f.buyer_cd = a.messer_cd
+                and f.buyer_cd like '%%'
+                ${sql_duedate1}
+                and g.start_date = b.end_date
+                and g.curr_cd = a.curr_cd
+        `;
+
+        var tRet2 = [];
+        if (argData.FACTORY_CD && arrgData.FACTORY_CD === 'FC010') {
+        } else {
+            tRet2 = await prisma.$queryRaw(Prisma.raw(sql_debit_amt));
+        }
+        console.log(`Step-6: Debit Amt : ${tRet2.length} `);
+        logbuff.push(`Step-6: Debit Amt : ${tRet2.length} `);
+        logbuff.push(`${sql_debit_amt} `);
+        tIdx = 0;
+        for (tIdx = 0; tIdx < tRet2.length; tIdx++) {
+            var tOne = {
+                ...tRet2[tIdx],
+            };
+
+            var strFactory = '';
+            if (tOne.crdb_type === 'B') strFactory = 'SHINTS BVT CO., LTD';
+            else if (tOne.crdb_type === 'E')
+                strFactory = 'SHINTS ETP GARMENT PLC';
+
+            var tInsObj = {};
+            tInsObj.user_id = tUserInfo.USER_ID;
+            tInsObj.order_cd = tOne.crdb_cd;
+            tInsObj.buyer = tOne.buyer_name.replace(/'/gi, '');
+            tInsObj.style = tOne.style_name.replace(/'/gi, '');
+            tInsObj.factory = strFactory;
+            tInsObj.due_date = tOne.due_date;
+            tInsObj.ship_date = tOne.ship_date;
+            tInsObj.tot_cnt = '0';
+            tInsObj.ship_cnt = '0';
+            tInsObj.usd_price = '0';
+            tInsObj.ord_amt = 0;
+            tInsObj.fc_amt = 0;
+            tInsObj.matl_amt = 0;
+            tInsObj.etc_amt = tOne.crdb_amt;
+            tInsObj.comm_amt = 0;
+            tInsObj.tot_amt = tOne.crdb_amt;
+            tInsObj.buyer_team = tOne.buyer_team;
+            tInsObj.type = tOne.report_kind;
+
+            var tSql99 = AFLib.createTableSql('KSV_ORDER_TEMP', tInsObj);
+            var tRet = prisma.$queryRaw(Prisma.raw(tSql99));
+            tSQLArray.push(tRet);
+        }
+
+        //  Freight 데이터 Plus
+        var tSearchFactory = '';
+        var sql_duedate1 = '';
+        var sql_duedate2 = '';
+        if (argData.CHECK_FLAG_3 === '1') {
+            // Excl NSR
+            sql_duedate1 += `and a.buyer_cd not in ('SG','NP','NU','NS','WI','a1','ww','wr','ss','si','ny','xs') `;
+        }
+        if (argData.CHECK_FLAG_4 === '1') {
+            // Excl Factory
+            sql_duedate1 += `and a.buyer_cd not in ('SB','EP','SU','00')  `;
+        }
+        if (argData.CHECK_FLAG_7 === '1') {
+            // NSR Cd
+            sql_duedate1 += `and a.buyer_cd in ('SG','NP','NU','NS','WI','nn','a1','ww','wr','ss','si','ny','xs')`;
+        }
+        /*
+        if (argData.CHECK_FLAG_8 === '1') { // Factory Cd 
+                sql_duedate1 += `and a.buyer_cd in ('SB','EP','SU','00')`;
+                sql_duedate1 += `and e.factory_cd not in ('FC045')`;
+        }
+        */
+        if (argData.CHECK_FLAG_9 === '1') {
+            // Excl ETP
+            sql_duedate1 += `and a.buyer_cd not in ('EP')`;
+        }
+
+        var tSearchFactory = '';
+
+        var sql_freight_amt = `
+            select
+                (
+                    a.buyer_cd + substring(a.frt_date, 3, 2) + '-' + 'FRT00' + a.trade_type
+                ) as order_cd,
+                (b.cd_name + '-' + a.spec + '-' + a.reg_user) as style_name,
+                a.frt_date,
+                a.frt_date as frt_date1,
+                '0',
+                '0',
+                '0',
+                '0',
+                '0',
+                sum(a.amount * c.usd_rate) as frt_amt,
+                '0',
+                '0',
+                '0',
+                'ShinTS' as factory_name,
+                d.buyer_name,
+                d.buyer_team,
+                'Freight' as report_kind,
+                a.destination,
+                a.departure,
+                a.po_cd,
+                isnull(a.order_cd, '') as order_cd2,
+                isnull(a1.shipment_cd, '') as shipment_cd 
+            from
+                kzz_freight a
+                left join ksv_shipment_mem a1 on a1.stsout_cd = a.stsout_cd,
+                kcd_code b,
+                kcd_currency c,
+                kcd_buyer d,
+                kvw_frt_company e
+            where
+                a.frt_date between '${argData.S_DUE_DATE}' and '${argData.E_DUE_DATE}'
+                and a.frt_type = b.cd_code
+                and b.cd_group = 'FRT_TYPE'
+                and e.com_cd = a.destination
+                and c.start_date = a.frt_date
+                and c.curr_cd = a.curr_cd
+                and a.amount <> 0
+                and a.buyer_cd = d.buyer_cd
+                and a.buyer_cd like '%%'
+                ${sql_duedate1}
+                and a.frt_type not in ('1', '2', '3', '41', 'A')
+                and isnull(a1.shipment_cd, '') = ''
+            group by
+                a.buyer_cd + substring(a.frt_date, 3, 2) + '-' + 'FRT00' + a.trade_type,
+                a.spec,
+                a.frt_date,
+                a.frt_date,
+                d.buyer_name,
+                d.buyer_team,
+                e.com_name,
+                a.destination,
+                a.departure,
+                a.po_cd,
+                a.order_cd,
+                b.cd_name,
+                a.reg_user,
+                isnull(a1.shipment_cd, '')
+            union
+            select
+                (
+                    a.buyer_cd + substring(a.frt_date, 3, 2) + '-' + 'FRT00' + a.trade_type
+                ) as order_cd,
+                (b.cd_name + '-' + a.spec) as style_name,
+                a.frt_date,
+                a.frt_date as frt_date1,
+                '0',
+                '0',
+                '0',
+                '0',
+                '0',
+                sum(a.amount * c.usd_rate) as frt_amt,
+                '0',
+                '0',
+                '0',
+                'ShinTS' as factory_name,
+                d.buyer_name,
+                d.buyer_team,
+                'Freight-Trade' as report_kind,
+                a.destination,
+                a.departure,
+                a.po_cd,
+                isnull(a.order_cd, '') as order_cd2,
+                isnull(a1.shipment_cd, '') as shipment_cd 
+            from
+                kzz_freight a
+                left join ksv_shipment_mem a1 on a1.stsout_cd = a.stsout_cd,
+                kcd_code b,
+                kcd_currency c,
+                kcd_buyer d,
+                kvw_frt_company e
+            where
+                a.frt_date between '${argData.S_DUE_DATE}' and '${argData.E_DUE_DATE}'
+                and a.frt_type = b.cd_code
+                and b.cd_group = 'FRT_TYPE'
+                and e.com_cd = a.destination
+                and c.start_date = a.frt_date
+                and c.curr_cd = a.curr_cd
+                and a.amount <> 0
+                and a.buyer_cd = d.buyer_cd
+                and a.buyer_cd like '%%'
+                ${sql_duedate1}
+                and a.frt_type in ('1', '2')
+                and a.reg_user in (
+                    'nuri',
+                    'leah',
+                    'trade2',
+                    'jooyun',
+                    'trade1',
+                    'hung'
+                )
+                and isnull(a1.shipment_cd, '') = ''
+            group by
+                a.buyer_cd + substring(a.frt_date, 3, 2) + '-' + 'FRT00' + a.trade_type,
+                a.spec,
+                a.frt_date,
+                a.frt_date,
+                d.buyer_name,
+                d.buyer_team,
+                e.com_name,
+                a.destination,
+                a.departure,
+                a.po_cd,
+                a.order_cd,
+                b.cd_name,
+                isnull(a1.shipment_cd, '')
+            union
+            select
+                (
+                    a.buyer_cd + substring(a.frt_date, 3, 2) + '-' + 'FRT00' + a.trade_type
+                ) as order_cd,
+                (b.cd_name + '-' + a.spec) as style_name,
+                a.frt_date,
+                a.frt_date as frt_date1,
+                '0',
+                '0',
+                '0',
+                '0',
+                '0',
+                sum(a.amount * c.usd_rate) as frt_amt,
+                '0',
+                '0',
+                '0',
+                'ShinTS' as factory_name,
+                d.buyer_name,
+                d.buyer_team,
+                'Freight-Air' as report_kind,
+                a.destination,
+                a.departure,
+                a.po_cd,
+                isnull(a.order_cd, '') as order_cd2,
+                isnull(a1.shipment_cd, '')  as shipment_cd
+            from
+                kzz_freight a
+                left join ksv_shipment_mem a1 on a1.stsout_cd = a.stsout_cd,
+                kcd_code b,
+                kcd_currency c,
+                kcd_buyer d,
+                kvw_frt_company e
+            where
+                a.frt_date between '${argData.S_DUE_DATE}' and '${argData.E_DUE_DATE}'
+                and a.frt_type = b.cd_code
+                and b.cd_group = 'FRT_TYPE'
+                and e.com_cd = a.destination
+                and c.start_date = a.frt_date
+                and c.curr_cd = a.curr_cd
+                and a.amount <> 0
+                and a.buyer_cd = d.buyer_cd
+                and a.buyer_cd like '%%'
+                ${sql_duedate1}
+                and a.frt_type in ('3')
+                and a.sender in ('cost')
+                and isnull(a1.shipment_cd, '') = ''
+            group by
+                a.buyer_cd + substring(a.frt_date, 3, 2) + '-' + 'FRT00' + a.trade_type,
+                a.spec,
+                a.frt_date,
+                a.frt_date,
+                d.buyer_name,
+                d.buyer_team,
+                e.com_name,
+                a.destination,
+                a.departure,
+                a.po_cd,
+                a.order_cd,
+                b.cd_name,
+                isnull(a1.shipment_cd, '')
+        `;
+
+        var tRet2 = [];
+        if (argData.CHECK_FLAG_8 !== '1') {
+            tRet2 = await prisma.$queryRaw(Prisma.raw(sql_freight_amt));
+        } else {
+            ;
+        }
+        console.log(`Step-7: Freigith Amt : ${tRet2.length} `);
+        logbuff.push(`Step-7: Freigith Amt : ${tRet2.length} `);
+        tIdx = 0;
+        for (tIdx = 0; tIdx < tRet2.length; tIdx++) {
+            var tOne = {
+                ...tRet2[tIdx],
+            };
+
+            var strFactory = '';
+            if (strFactory === '' && tOne.po_cd !== '') {
+                var sql100 = `
+                    select
+                        a.factory_cd as link_to
+                    from
+                        ksv_po_mst a
+                    where
+                        a.po_cd = '${tOne.po_cd}'
+                `;
+                var tRet100 = await prisma.$queryRaw(Prisma.raw(sql100));
+                if (tRet100.length > 0) {
+                    var tOne1 = {
+                        ...tRet100[0],
+                    };
+                    if (
+                        tOne1.link_to === 'SB' ||
+                        tOne1.link_to === '55' ||
+                        tOne1.link_to === '56' ||
+                        tOne1.link_to === 'FC034' ||
+                        tOne1.link_to === 'FC087' ||
+                        tOne1.link_to === 'V0228' ||
+                        tOne1.link_to === 'V-BVT'
+                    )
+                        strFactory = 'SHINTS BVT CO., LTD';
+                    else if (
+                        tOne1.link_to === 'FC044' ||
+                        tOne1.link_to === 'V1838' ||
+                        tOne1.link_to === 'EP' ||
+                        tOne1.link_to === 'V-ETP'
+                    )
+                        strFactory = 'SHINTS ETP GARMENT PLC';
+                }
+            }
+
+            if (strFactory === '' && tOne.order_cd2 !== '') {
+                var sql100 = `
+                    select
+                        a.factory_cd as link_to
+                    from
+                        ksv_order_mst a
+                    where
+                        a.order_cd = '${tOne.order_cd2}'
+                `;
+                var tRet100 = await prisma.$queryRaw(Prisma.raw(sql100));
+                if (tRet100.length > 0) {
+                    var tOne1 = {
+                        ...tRet100[0],
+                    };
+                    if (
+                        tOne1.link_to === 'SB' ||
+                        tOne1.link_to === '55' ||
+                        tOne1.link_to === '56' ||
+                        tOne1.link_to === 'FC034' ||
+                        tOne1.link_to === 'FC087' ||
+                        tOne1.link_to === 'V0228' ||
+                        tOne1.link_to === 'V-BVT'
+                    )
+                        strFactory = 'SHINTS BVT CO., LTD';
+                    else if (
+                        tOne1.link_to === 'FC044' ||
+                        tOne1.link_to === 'V1838' ||
+                        tOne1.link_to === 'ETP' ||
+                        tOne1.link_to === 'EP' ||
+                        tOne1.link_to === 'V-ETP'
+                    )
+                        strFactory = 'SHINTS ETP GARMENT PLC';
+                }
+            }
+
+            if (strFactory === '' && tOne.destination !== '') {
+                var tOne1 = {};
+                tOne1.link_to = tOne.destination;
+                if (
+                    tOne1.link_to === 'SB' ||
+                    tOne1.link_to === '55' ||
+                    tOne1.link_to === '56' ||
+                    tOne1.link_to === 'FC034' ||
+                    tOne1.link_to === 'FC087' ||
+                    tOne1.link_to === 'V0228' ||
+                    tOne1.link_to === 'V-BVT'
+                )
+                    strFactory = 'SHINTS BVT CO., LTD';
+                else if (
+                    tOne1.link_to === 'FC044' ||
+                    tOne1.link_to === 'V1838' ||
+                    tOne1.link_to === 'ETP' ||
+                    tOne1.link_to === 'EP' ||
+                    tOne1.link_to === 'V-ETP'
+                )
+                    strFactory = 'SHINTS ETP GARMENT PLC';
+            }
+
+            if (strFactory === '' && tOne.departure !== '') {
+                var tOne1 = {};
+                tOne1.link_to = tOne.departure;
+                if (
+                    tOne1.link_to === 'SB' ||
+                    tOne1.link_to === '55' ||
+                    tOne1.link_to === '56' ||
+                    tOne1.link_to === 'FC034' ||
+                    tOne1.link_to === 'FC087' ||
+                    tOne1.link_to === 'V0228' ||
+                    tOne1.link_to === 'V-BVT'
+                )
+                    strFactory = 'SHINTS BVT CO., LTD';
+                else if (
+                    tOne1.link_to === 'FC044' ||
+                    tOne1.link_to === 'V1838' ||
+                    tOne1.link_to === 'ETP' ||
+                    tOne1.link_to === 'EP' ||
+                    tOne1.link_to === 'V-ETP'
+                )
+                    strFactory = 'SHINTS ETP GARMENT PLC';
+            }
+
+            if (!strFactory) strFactory = 'ShinTS';
+
+            var tOrderCd = tOne.order_cd2;
+            if (!tOrderCd) tOrderCd = tOne.order_cd;
+
+            var tInsObj = {};
+            tInsObj.user_id = tUserInfo.USER_ID;
+            tInsObj.order_cd = tOne.order_cd;
+            tInsObj.buyer = '';
+            tInsObj.style = '';
+            console.log(`Freight: ${tOne.style_name}`);
+            if (tOne.buyer_name)
+                tInsObj.buyer = tOne.buyer_name.replace(/'/gi, '');
+            if (tOne.style_name)
+                tInsObj.style = tOne.style_name.replace(/'/gi, '');
+            tInsObj.factory = strFactory;
+            tInsObj.due_date = tOne.frt_date;
+            tInsObj.ship_date = tOne.frt_date1;
+            tInsObj.tot_cnt = '0';
+            tInsObj.ship_cnt = '0';
+            tInsObj.usd_price = '0';
+            tInsObj.ord_amt = 0;
+            tInsObj.fc_amt = 0;
+            tInsObj.matl_amt = 0;
+            tInsObj.etc_amt = tOne.frt_amt;
+            tInsObj.comm_amt = 0;
+            tInsObj.tot_amt = tOne.frt_amt;
+            tInsObj.buyer_team = tOne.buyer_team;
+            tInsObj.type = tOne.report_kind;
+
+            var tSql99 = AFLib.createTableSql('KSV_ORDER_TEMP', tInsObj);
+            var tRet = prisma.$queryRaw(Prisma.raw(tSql99));
+            tSQLArray.push(tRet);
+        }
+
+        //  invoice 자재 MACHINES/PARTS
+        var tSearchFactory = '';
+        var sql_duedate1 = '';
+        var sql_duedate2 = '';
+        if (argData.CHECK_FLAG_3 === '1') {
+            // Excl NSR
+            sql_duedate1 += `and g.buyer_cd not in ('SG','NP','NU','NS','WI','a1','ww','wr','ss','si','ny','xs') `;
+        }
+        if (argData.CHECK_FLAG_4 === '1') {
+            // Excl Factory
+            sql_duedate1 += `and g.buyer_cd not in ('SB','EP','SU','00')  `;
+        }
+        if (argData.CHECK_FLAG_7 === '1') {
+            // NSR Cd
+            sql_duedate1 += `and g.buyer_cd in ('SG','NP','NU','NS','WI','nn','a1','ww','wr','ss','si','ny','xs')`;
+        }
+        if (argData.CHECK_FLAG_8 === '1') {
+            // Factory Cd
+            sql_duedate1 += `and g.buyer_cd in ('SB','EP','SU','00')`;
+        }
+        if (argData.CHECK_FLAG_9 === '1') {
+            // Excl ETP
+            sql_duedate1 += `and g.buyer_cd not in ('EP')`;
+        }
+
+        var tSearchFactory = '';
+
+        var sql_debit_amt = `
+            select
+                left(e.order_cd, 2) as order_cd,
+                a.invoice_no as style_name,
+                a.out_date,
+                a.out_date as out_date1,
+                '0',
+                '0',
+                '0',
+                '0',
+                '0',
+                (b.po_amt * f.usd_rate * -1) as matl_amt,
+                '0',
+                '0',
+                '0',
+                d.factory_name,
+                g.buyer_name,
+                '0',
+                '0',
+                g.buyer_team,
+                'INVOICE-판매(M/P)' as report_kind
+            from
+                ksv_invoice_matl a,
+                ksv_invoice_matlmem b,
+                ksv_po_mst c,
+                kcd_factory d,
+                ksv_po_mem e,
+                kcd_currency f,
+                kcd_buyer g
+            where
+                a.out_date between '${argData.S_DUE_DATE}' and '${argData.E_DUE_DATE}'
+                and a.invoice_no = b.invoice_no
+                and a.payment_type = '1'
+                and a.trade_kind = '1'
+                and b.po_cd = c.po_cd
+                and c.po_seq = '1'
+                and e.po_cd = c.po_cd
+                and d.factory_cd = c.factory_cd
+                and f.start_date = a.out_date
+                and f.curr_cd = a.curr_cd
+                and c.factory_cd like '${argData.FACTORY_CD}%' 
+                ${sql_duedate1}
+                and g.buyer_cd like '%%'
+                and left(e.order_cd, 2) = g.buyer_cd
+        `;
+
+        var tRet2 = [];
+        tRet2 = await prisma.$queryRaw(Prisma.raw(sql_debit_amt));
+        console.log(`Step-8: Invoice matl : ${tRet2.length} `);
+        logbuff.push(`Step-8: Invoice matl : ${tRet2.length} `);
+        tIdx = 0;
+        for (tIdx = 0; tIdx < tRet2.length; tIdx++) {
+            var tOne = {
+                ...tRet2[tIdx],
+            };
+
+            var tInsObj = {};
+            tInsObj.user_id = tUserInfo.USER_ID;
+            tInsObj.order_cd = tOne.order_cd;
+            tInsObj.buyer = '';
+            tInsObj.style = '';
+            if (tOne.buyer_name)
+                tInsObj.buyer = tOne.buyer_name.replace(/'/gi, '');
+            if (tOne.style_name)
+                tInsObj.style = tOne.style_name.replace(/'/gi, '');
+            tInsObj.factory = tOne.factory_name;
+            tInsObj.due_date = tOne.out_date;
+            tInsObj.ship_date = tOne.out_date1;
+            tInsObj.tot_cnt = '0';
+            tInsObj.ship_cnt = '0';
+            tInsObj.usd_price = '0';
+            tInsObj.ord_amt = 0;
+            tInsObj.fc_amt = 0;
+            tInsObj.matl_amt = 0;
+            tInsObj.etc_amt = tOne.matl_amt;
+            tInsObj.comm_amt = 0;
+            tInsObj.tot_amt = tOne.matl_amt;
+            tInsObj.buyer_team = tOne.buyer_team;
+            tInsObj.type = tOne.report_kind;
+
+            var tSql99 = AFLib.createTableSql('KSV_ORDER_TEMP', tInsObj);
+            var tRet = prisma.$queryRaw(Prisma.raw(tSql99));
+            tSQLArray.push(tRet);
+        }
+
+        //  invoice nego
+        var tSearchFactory = '';
+        var sql_duedate1 = '';
+        var sql_duedate2 = '';
+        if (argData.CHECK_FLAG_3 === '1') {
+            // Excl NSR
+            sql_duedate1 += `and g.buyer_cd not in ('SG','NP','NU','NS','WI','a1','ww','wr','ss','si','ny','xs') `;
+        }
+        if (argData.CHECK_FLAG_4 === '1') {
+            // Excl Factory
+            sql_duedate1 += `and g.buyer_cd not in ('SB','EP','SU','00')  `;
+        }
+        if (argData.CHECK_FLAG_7 === '1') {
+            // NSR Cd
+            sql_duedate1 += `and g.buyer_cd in ('SG','NP','NU','NS','WI','nn','a1','ww','wr','ss','si','ny','xs')`;
+        }
+        if (argData.CHECK_FLAG_8 === '1') {
+            // Factory Cd
+            sql_duedate1 += `and g.buyer_cd in ('SB','EP','SU','00')`;
+        }
+        if (argData.CHECK_FLAG_9 === '1') {
+            // Excl ETP
+            sql_duedate1 += `and g.buyer_cd not in ('EP')`;
+        }
+
+        var tSearchFactory = '';
+
+        var sql_debit_amt = `
+            select
+                a.buyer_cd as order_cd,
+                (
+                    'LC/NEGO' + '-' + a.ref_no + '-' + cast(a.tot_amt as varchar(15)) + a.curr_cd
+                ) as style_name,
+                a.start_date,
+                a.bill_date,
+                '0',
+                '0',
+                '0',
+                '0',
+                '0',
+                a.less_charge,
+                '0',
+                '0',
+                '0',
+                d.factory_name,
+                g.buyer_name,
+                '0',
+                '0',
+                g.buyer_team,
+                'ETC_Cost' as report_kind
+            from
+                ksv_invoice_nego a,
+                kcd_factory d,
+                kcd_currency f,
+                kcd_buyer g
+            where
+                a.bill_date between '${argData.S_DUE_DATE}' and '${argData.E_DUE_DATE}'
+                and a.invoice_nego_type = '3'
+                and a.factory_cd = d.factory_cd
+                and a.buyer_cd = g.buyer_cd
+                and g.buyer_cd like '%%' 
+                ${sql_duedate1}
+                and f.start_date = a.bill_date
+                and f.curr_cd = a.curr_cd
+                and a.factory_cd like '%${argData.FACTORY_CD}%'
+        `;
+
+        var tRet2 = [];
+        tRet2 = await prisma.$queryRaw(Prisma.raw(sql_debit_amt));
+        console.log(`Step-9: Invoice nego : ${tRet2.length} `);
+        logbuff.push(`Step-9: Invoice nego : ${tRet2.length} `);
+        tIdx = 0;
+        for (tIdx = 0; tIdx < tRet2.length; tIdx++) {
+            var tOne = {
+                ...tRet2[tIdx],
+            };
+
+            var tInsObj = {};
+            tInsObj.user_id = tUserInfo.USER_ID;
+            tInsObj.order_cd = tOne.order_cd;
+            tInsObj.buyer = '';
+            tInsObj.style = '';
+            if (tOne.buyer_name)
+                tInsObj.buyer = tOne.buyer_name.replace(/'/gi, '');
+            if (tOne.style_name)
+                tInsObj.style = tOne.style_name.replace(/'/gi, '');
+            tInsObj.factory = tOne.factory_name;
+            tInsObj.due_date = tOne.start_date;
+            tInsObj.ship_date = tOne.bill_date1;
+            tInsObj.tot_cnt = '0';
+            tInsObj.ship_cnt = '0';
+            tInsObj.usd_price = '0';
+            tInsObj.ord_amt = 0;
+            tInsObj.fc_amt = 0;
+            tInsObj.matl_amt = 0;
+            tInsObj.etc_amt = tOne.less_charge;
+            tInsObj.comm_amt = 0;
+            tInsObj.tot_amt = tOne.less_charge;
+            tInsObj.buyer_team = tOne.buyer_team;
+            tInsObj.type = tOne.report_kind;
+
+            var tSql99 = AFLib.createTableSql('KSV_ORDER_TEMP', tInsObj);
+            var tRet = prisma.$queryRaw(Prisma.raw(tSql99));
+            tSQLArray.push(tRet);
+        }
+
+        // Import Charge
+        var sql_duedate1 = '';
+        var sql_duedate2 = '';
+        if (argData.CHECK_FLAG_3 === '1') {
+            // Excl NSR
+            sql_duedate1 += `and b.buyer_cd not in ('SG','NP','NU','NS','WI','a1','ww','wr','ss','si','ny','xs') `;
+        }
+        if (argData.CHECK_FLAG_4 === '1') {
+            // Excl Factory
+            sql_duedate1 += `and b.buyer_cd not in ('SB','EP','SU')  `;
+        }
+        if (argData.CHECK_FLAG_7 === '1') {
+            // NSR Cd
+            sql_duedate1 += `and b.buyer_cd in ('SG','NP','NU','NS','WI','nn','a1','ww','wr','ss','si','ny','xs')`;
+        }
+        if (argData.CHECK_FLAG_8 === '1') {
+            // Factory Cd
+            sql_duedate1 += `and b.buyer_cd in ('SB','EP','SU','00')`;
+        }
+        if (argData.CHECK_FLAG_9 === '1') {
+            // Excl ETP
+            sql_duedate1 += `and b.buyer_cd not in ('EP')`;
+        }
+
+        var tSearchFactory = 'ShinTS';
+
+        var sql_debit_amt = `
+            select
+                (b.buyer_cd + b.invoice_no) as order_cd,
+                b.remark as style_name,
+                b.ship_date,
+                b.ship_date as ship_date1,
+                '0',
+                '0',
+                '0',
+                '0',
+                '0',
+                (b.tot_amt * d.usd_rate) as impcharge_amt,
+                '0',
+                '0',
+                '0',
+                '${tSearchFactory}' as factory_name,
+                f.buyer_name,
+                '0',
+                '0',
+                f.buyer_team,
+                'ORDER-SHIP' as report_type
+            from
+                ksv_impcharge_mst b,
+                kcd_buyer f,
+                kcd_currency d
+            where
+                b.ship_date between '${argData.S_DUE_DATE}' and '${argData.E_DUE_DATE}'
+                and b.invoice_no in (
+                    select
+                        a.invoice_no
+                    from
+                        ksv_impcharge_mst a
+                        left outer join ksv_impcharge_mem b on a.invoice_no = b.invoice_no
+                    where
+                        a.ship_date between '${argData.S_DUE_DATE}' and '${argData.E_DUE_DATE}'
+                        and b.invoice_no is null
+                )
+                and f.buyer_cd = b.buyer_cd
+                and f.buyer_cd like '%%'
+                and d.start_date = b.ship_date
+                and d.curr_cd = b.curr_cd
+                and b.tot_amt <> 0
+                ${sql_duedate1}
+            union
+            select
+                b.buyer_cd + b.invoice_no,
+                b.remark,
+                b.ship_date,
+                b.ship_date as ship_date1,
+                '0',
+                '0',
+                '0',
+                '0',
+                '0',
+                (b.tot_amt * d.usd_rate) as impcharge_amt,
+                '0',
+                '0',
+                '0',
+                '${tSearchFactory}' as factory_name,
+                f.buyer_name,
+                '0',
+                '0',
+                f.buyer_team,
+                'ORDER-SHIP' as report_kind
+            from
+                ksv_impcharge_matl_mst b,
+                kcd_buyer f,
+                kcd_currency d
+            where
+                b.ship_date between '${argData.S_DUE_DATE}' and '${argData.E_DUE_DATE}'
+                and f.buyer_cd = b.buyer_cd
+                and f.buyer_cd like '%%'
+                and d.start_date = b.ship_date
+                and d.curr_cd = b.curr_cd
+                and b.tot_amt <> 0
+                ${sql_duedate1}
+            union
+            select
+                (b.buyer_cd + b.invoice_no) as order_cd,
+                b.remark,
+                b.sending_date as ship_date,
+                b.sending_date as ship_date1,
+                '0',
+                '0',
+                '0',
+                '0',
+                '0',
+                (b.ord_amt * d.usd_rate) as impcharge_amt,
+                '0',
+                '0',
+                '0',
+                '${tSearchFactory}' as factory_name,
+                f.buyer_name,
+                '0',
+                '0',
+                f.buyer_team,
+                'ORDER-SHIP' as report_type
+            from
+                ksv_impcharge_matl_mst_ethiopia b,
+                kcd_buyer f,
+                kcd_currency d
+            where
+                b.sending_date between '${argData.S_DUE_DATE}' and '${argData.E_DUE_DATE}'
+                and f.buyer_cd = b.buyer_cd
+                and f.buyer_cd like '%%'
+                and d.start_date = b.sending_date
+                and d.curr_cd = b.curr_cd
+                and b.ord_amt <> 0
+                ${sql_duedate1}
+            order by
+                1,
+                2
+        `;
+
+        var tRet2 = [];
+        tRet2 = await prisma.$queryRaw(Prisma.raw(sql_debit_amt));
+        console.log(`Step-10: import charge : ${tRet2.length} `);
+        logbuff.push(`Step-10: import charge : ${tRet2.length} `);
+        tIdx = 0;
+        for (tIdx = 0; tIdx < tRet2.length; tIdx++) {
+            var tOne = {
+                ...tRet2[tIdx],
+            };
+
+            var tInsObj = {};
+            tInsObj.user_id = tUserInfo.USER_ID;
+            tInsObj.order_cd = tOne.order_cd;
+            tInsObj.buyer = '';
+            tInsObj.style = '';
+            if (tOne.buyer_name)
+                tInsObj.buyer = tOne.buyer_name.replace(/'/gi, '');
+            if (tOne.style_name)
+                tInsObj.style = tOne.style_name.replace(/'/gi, '');
+            tInsObj.factory = tOne.factory_name;
+            tInsObj.due_date = tOne.ship_date;
+            tInsObj.ship_date = tOne.ship_date1;
+            tInsObj.tot_cnt = '0';
+            tInsObj.ship_cnt = '0';
+            tInsObj.usd_price = '0';
+            tInsObj.ord_amt = 0;
+            tInsObj.fc_amt = 0;
+            tInsObj.matl_amt = 0;
+            tInsObj.etc_amt = tOne.impcharge_amt;
+            tInsObj.comm_amt = 0;
+            tInsObj.tot_amt = tOne.impcharge_amt;
+            tInsObj.buyer_team = tOne.buyer_team;
+            tInsObj.type = tOne.report_kind;
+
+            var tSql99 = AFLib.createTableSql('KSV_ORDER_TEMP', tInsObj);
+            var tRet = prisma.$queryRaw(Prisma.raw(tSql99));
+            tSQLArray.push(tRet);
+        }
+
+
+        var tFlag = 0;
+        try {
+            global.currentTransactionInfo = {
+                contextValue: contextValue,
+                functionName: AFLib.getFunctionName(),
+            };
+            await prisma.$transaction(tSQLArray);
+            delete global.currentTransactionInfo;
+            tFlag = 1;
+
+        } catch (e) {}
+
+        console.log(`Insert order_temp: ${tSQLArray.length}`);
+
+        logbuff.forEach((col, i) => {
+            console.log(col);
+        });
+
+        console.log(sql_etc_amt);
+        console.log(sql_etc_amt1);
+        console.log(sql_etc_amt2);
+        console.log(sql_freight_amt);
+        console.log(sql_shipdate);
+        console.log(sql_sample);
+        console.log(sql_cancel);
+        console.log(sql_dev_sample);
+
+        return tFlag;
+    }
+
+    async updateMatlAmt(argData, contextValue) {
+        var tRetDate = AFLib.getCurrTime();
+        var tRetDate1 = tRetDate.substring(0, 8);
+        var tUserInfo = AFLib.getUserInfo(contextValue);
+
+        var tInObj = {};
+        tInObj.KIND = 'S0213_UPDATE_MATLAMT';
+        tInObj.USER_ID = tUserInfo.USER_ID;
+        tInObj.REG_DATETIME = tRetDate;
+        tInObj.STATUS_CD = '0';
+        let sql9 = AFLib.createTableSql('KCD_JOBMONITOR', tInObj);
+        var tRet9 = await prisma.$queryRaw(Prisma.raw(sql9));
+
+        try {
+            var tSQLArray = [];
+
+            var tSql = `
+                update ksv_order_mst
+                set
+                    matl_amt = 0
+                where
+                    matl_pay_flag = '0'
+                    and order_cd like '%${argData.ORDER_CD}%'
+            `;
+            var tSql99 = await prisma.$queryRaw(Prisma.raw(tSql));
+            tSQLArray.push(tSql99);
+
+            var tSql0 = `
+                select
+                    b.order_cd,
+                    b.order_status,
+                    a.po_cd,
+                    c.status_cd,
+                    b.curr_cd
+                from
+                    ksv_po_mem a,
+                    ksv_order_mst b,
+                    ksv_po_mst c
+                where
+                    b.matl_pay_flag = '0'
+                    and b.order_cd like '%${argData.ORDER_CD}%'
+                    and a.po_seq = 1
+                    and a.order_cd = b.order_cd
+                    and c.po_cd = a.po_cd
+                    and c.po_seq = a.po_seq
+            `;
+            var tRet0 = await prisma.$queryRaw(Prisma.raw(tSql0));
+
+            var tIdx = 0;
+            for (tIdx = 0; tIdx < tRet0.length; tIdx++) {
+                var tOne = tRet0[tIdx];
+                var tSql1 = `
+                    select
+                        a.pay_curr_cd,
+                        a.pay_date,
+                        sum(a.pay_price * a.in_qty) as matl_amt,
+                        c.vendor_name
+                    from
+                        ksv_stock_in a,
+                        kcd_matl_mst b,
+                        kcd_vendor c
+                    where
+                        a.po_cd = '${tOne.po_cd}'
+                        and a.order_cd = '${tOne.order_cd}'
+                        and a.matl_cd = b.matl_cd
+                        and c.vendor_cd = b.vendor_cd
+                    group by
+                        a.pay_curr_cd,
+                        a.pay_date,
+                        c.vendor_name
+                    union
+                    select
+                        a.pay_curr_cd,
+                        a.pay_date,
+                        sum(a.pay_price * a.in_qty) as matl_amt,
+                        c.vendor_name
+                    from
+                        ksv_stock_in a,
+                        ksv_stock_mem b,
+                        kcd_matl_mst d,
+                        kcd_vendor c
+                    where
+                        a.po_cd = '${tOne.po_cd}'
+                        and b.min_order = '${tOne.order_cd}'
+                        and b.po_seq in ('98', '99', '97')
+                        and a.po_cd = b.po_cd
+                        and a.po_seq = b.po_seq
+                        and a.order_cd = b.order_cd
+                        and a.matl_cd = b.matl_cd
+                        and a.mrp_seq = b.mrp_seq
+                        and a.matl_seq = b.matl_seq
+                        and a.matl_cd = d.matl_cd
+                        and c.vendor_cd = d.vendor_cd
+                    group by
+                        a.pay_curr_cd,
+                        a.pay_date,
+                        c.vendor_name
+                `;
+                var tRet1 = await prisma.$queryRaw(Prisma.raw(tSql1));
+
+                var tIdx2 = 0;
+                var tSumMatlAmt = 0;
+                for (tIdx2 = 0; tIdx2 < tRet1.length; tIdx2++) {
+                    var tOne2 = tRet1[tIdx2];
+
+                    var tCurrDate = '';
+                    if (parseFloat(tOne2.pay_date) <= parseFloat(tRetDate1))  tCurrDate = tOne2.pay_date;
+                    else tCurrDate = tRetDate1;
+
+                    var tMatlAmt = 0;
+                    var tRet2 = [];
+                    var tSql2 = `
+                        select
+                            won_amt2 
+                        from
+                            kcd_currency
+                        where
+                            where start_date =  '${tCurrDate}'
+                            and   curr_cd = '${tOne2.pay_curr_cd}'
+                    `;
+                    tRet2 = await prisma.$queryRaw(Prisma.raw(tSql2));
+                    if (tRet2.length <= 0) {
+                        var tSql2 = `
+                            select
+                                won_amt2
+                           from
+                               kcd_currency
+                           where
+                               start_date = (
+                                   select
+                                       max(start_date)
+                                   from
+                                       kcd_currency
+                                   where
+                                       curr_cd = '${tOne2.pay_curr_cd}'
+                               )
+                               and curr_cd = '${tOne2.pay_curr_cd}'
+                       `;
+                       tRet2 = await prisma.$queryRaw(Prisma.raw(tSql2));
+                    }
+                    var tUsdRate = 0;
+                    if (tRet2.length > 0) tUsdRate = tRet2[0].won_amt2;
+                    tMatlAmt = tOne2.matl_amt * tUsdRate;
+
+                    if (
+                        tOne2.vendor_name.includes('free') ||
+                        tOne2.vendor_name.includes('FREE') ||
+                        tOne2.vendor_name.includes('Free')
+                    )
+                        tMatlAmt = 0;
+
+                    tSumMatlAmt += tMatlAmt;
+                }
+
+                var tSql = `
+                    update ksv_order_mst
+                    set
+                        matl_amt = ${tSumMatlAmt}
+                    where
+                        order_cd = '${tOne.order_cd}'
+                `;
+                var tSql99 = await prisma.$queryRaw(Prisma.raw(tSql));
+                tSQLArray.push(tSql99);
+
+                // 지급일이 지났으며 완료인 오더에 대해서
+                var tSql3 = `
+                    select
+                        count(*) as cnt
+                    from
+                        ksv_stock_in
+                    where
+                        po_cd = '${tOne.po_cd}'
+                        and order_cd = '${tOne.order_cd}'
+                        and pay_date > '${tRetDate1}'
+                `;
+                var tRet3 = await prisma.$queryRaw(Prisma.raw(tSql3));
+                var tCnt1 = 0;
+                if (tRet3.length > 0) tCnt1 = tRet3[0].cnt;
+                if (tCnt1 <= 0 && tOne.order_status === '9') {
+                    var tSql = `
+                        update ksv_order_mst
+                        set
+                            matl_pay_flag = '1',
+                            matl_pay_user = '${tUserInfo.USER_ID}',
+                            matl_pay_datetime = '${tRetDate1}'
+                        where
+                            order_cd = '${tOne.order_cd}'
+                    `;
+                    var tSql99 = await prisma.$queryRaw(Prisma.raw(tSql));
+                    tSQLArray.push(tSql99);
+                } else {
+                    var tSql = `
+                        update ksv_order_mst
+                        set
+                            matl_pay_user = '${tUserInfo.USER_ID}',
+                            matl_pay_datetime = '${tRetDate1}'
+                        where
+                            order_cd = '${tOne.order_cd}'
+                    `;
+                    var tSql99 = await prisma.$queryRaw(Prisma.raw(tSql));
+                    tSQLArray.push(tSql99);
+                }
+            }
+
+            var tSql = `
+                update kcd_system
+                set
+                    sys_val = '${tRetDate}'
+                where
+                    sys_cd = 'MatlAmtUpdateDate'
+            `;
+            var tSql99 = await prisma.$queryRaw(Prisma.raw(tSql));
+            tSQLArray.push(tSql99);
+
+            let sql0 = `
+                update kcd_jobmonitor
+                set
+                    status_cd = '1',
+                    result = 'SUCCESS:Update Matl Amt'
+                where
+                    user_id = '${tUserInfo.USER_ID}'
+                    and kind = 'S0213_UPDATE_MATLAMT'
+            `;
+            var tRet0 = await prisma.$queryRaw(Prisma.raw(sql0));
+        } catch (e) {
+            let sql0 = `
+                update kcd_jobmonitor
+                set
+                    status_cd = '1',
+                    result = 'ERROR:Update Matl Amt'
+                where
+                    user_id = '${tUserInfo.USER_ID}'
+                    and kind = 'S0213_UPDATE_MATLAMT'
+            `;
+            var tRet0 = await prisma.$queryRaw(Prisma.raw(sql0));
+            return '';
+        }
+
+        return '';
+    }
+}
+
+// export default로 Query 내용 내보내기
+const moduleQuery_S0213_ORDER_REPORT_TBL_KSV_ORDER_MST = {
+    Query: {
+        mgrQuery_S0213_EXCEL_ORDER_STATUS: async (_, args, contextValue) => {
+
+            // 오더현황종합
+            var tRetDate = AFLib.getCurrTime();
+            var tRetDate1 = tRetDate.substring(0, 8);
+            var tUserInfo = AFLib.getUserInfo(contextValue);
+
+            var tWExcelFile = `영업_오더현황(종합)-${tUserInfo.USER_ID}-${tRetDate1}`;
+            if (args.data.FACTORY_CD === '') {
+                if (args.data.BUYER_CD === '')
+                    tWExcelFile = `영업_오더현황(종합)-${tUserInfo.USER_ID}-${tRetDate1}`;
+                else
+                    tWExcelFile = `영업_오더현황(${args.data.BUYER_CD})-${tUserInfo.USER_ID}-${tRetDate1}`;
+            } else if (args.data.FACTORY_CD === 'FC034') {
+                if (args.data.BUYER_CD === '')
+                    tWExcelFile = `BVT-영업_오더현황(종합)-${tUserInfo.USER_ID}-${tRetDate1}`;
+                else
+                    tWExcelFile = `BVT-영업_오더현황(${args.data.BUYER_CD})-${tUserInfo.USER_ID}-${tRetDate1}`;
+            } else if (args.data.FACTORY_CD === 'FC044') {
+                if (args.data.BUYER_CD === '')
+                    tWExcelFile = `ETP-영업_오더현황(종합)-${tUserInfo.USER_ID}-${tRetDate1}`;
+                else
+                    tWExcelFile = `ETP-영업_오더현황(${args.data.BUYER_CD})-${tUserInfo.USER_ID}-${tRetDate1}`;
+            }
+            if (args.data.DETAIL_FLAG && args.data.DETAIL_FLAG === '1') {
+                tWExcelFile = `${tWExcelFile}-Detail`;
+            }
+
+            var tSubTitle = '';
+            if (args.data.FACTORY_CD === '') {
+                if (args.data.SHIPDATE_FLAG === '1')
+                    tSubTitle = `${args.data.S_DUE_DATE} ~ ${args.data.E_DUE_DATE} 현황 (제품선적기준)`;
+                else
+                    tSubTitle = `${args.data.S_DUE_DATE} ~ ${args.data.E_DUE_DATE} 현황 (오더납기기준)`;
+            } else if (args.data.FACTORY_CD === 'FC034') {
+                if (args.data.SHIPDATE_FLAG === '1')
+                    tSubTitle = `${args.data.S_DUE_DATE} ~ ${args.data.E_DUE_DATE} 현황 (제품선적기준)-BVT`;
+                else
+                    tSubTitle = `${args.data.S_DUE_DATE} ~ ${args.data.E_DUE_DATE} 현황 (오더납기기준)-BVT`;
+            } else if (args.data.FACTORY_CD === 'FC044') {
+                if (args.data.SHIPDATE_FLAG === '1')
+                    tSubTitle = `${args.data.S_DUE_DATE} ~ ${args.data.E_DUE_DATE} 현황 (제품선적기준)-ETP`;
+                else
+                    tSubTitle = `${args.data.S_DUE_DATE} ~ ${args.data.E_DUE_DATE} 현황 (오더납기기준)-ETP`;
+            } else {
+                if (args.data.SHIPDATE_FLAG === '1')
+                    tSubTitle = `${args.data.S_DUE_DATE} ~ ${args.data.E_DUE_DATE} 현황 (제품선적기준)-`;
+                else
+                    tSubTitle = `${args.data.S_DUE_DATE} ~ ${args.data.E_DUE_DATE} 현황 (오더납기기준)-`;
+            }
+
+            var tFunc = new S0213_QRY_COMM();
+            var tFlag = await tFunc.makeListData2(args.data, contextValue);
+
+            var strHeader = new Array(11);
+            strHeader[0] = '';
+            strHeader[1] = '수주수량';
+            strHeader[2] = '수주금액';
+            strHeader[3] = '자재비';
+            strHeader[4] = '공장구매자재';
+            strHeader[5] = '임가공비';
+            strHeader[6] = '기타비용';
+            strHeader[7] = '커미션';
+            strHeader[8] = '비용총액';
+            strHeader[9] = '제조손익';
+            strHeader[10] = '%';
+
+            var sqlExclNsr = '';
+            if (args.data.CHECK_FLAG_3 === '1') {
+                // Excl NSR
+                sqlExclNsr = `and b.buyer_cd not in ('SG','NP','NU','NS','WI','a1','ww','wr','ss','si','ny','xs') `;
+           }
+
+
+            // Total
+            var tSQL = '';
+            let sqlStr = `
+                select
+                    isnull(sum(a.ship_cnt), 0) as ship_cnt,
+                    isnull(sum(a.ord_amt), 0) as ord_amt,
+                    isnull(sum(a.matl_amt), 0) as matl_amt,
+                    isnull(sum(a.bvt_local), 0) as bvt_local,
+                    isnull(sum(a.fc_amt), 0) as fc_amt,
+                    isnull(sum(a.etc_amt), 0) as etc_amt,
+                    isnull(sum(a.comm_amt), 0) as comm_amt,
+                    isnull(sum(a.tot_amt), 0) as tot_amt
+                from
+                    ksv_order_temp a
+                    inner join kcd_buyer b on b.buyer_name = a.buyer
+                where
+                    user_id = '${tUserInfo.USER_ID}'
+                    and b.buyer_cd like '%${args.data.BUYER_CD}%'
+                    ${sqlExclNsr}
+            `;
+            var tRetSum = await prisma.$queryRaw(Prisma.raw(sqlStr));
+            var tSumArray = [];
+            tRetSum.forEach((col, i) => {
+                var tObj = {
+                    ...col,
+                };
+                tObj.title = 'TOTAL';
+
+                var tTotAmt = parseFloat(tObj.matl_amt) +
+                              parseFloat(tObj.bvt_local) +
+                              parseFloat(tObj.fc_amt) +
+                              parseFloat(tObj.etc_amt) +
+                              parseFloat(tObj.comm_amt);
+                tObj.tot_amt = parseFloat(parseFloat(tTotAmt).toFixed(0));
+
+                tObj.diff = tObj.ord_amt - tObj.tot_amt;
+                if (tObj.ord_amt > 0)
+                    tObj.rate = (tObj.diff / tObj.ord_amt) * 100.0;
+                else tObj.rate = 0.0;
+                tSumArray.push(tObj);
+            });
+
+            // Buyer별 - 신티에스 : SHINTS
+            tSQL = '';
+            sqlStr = `
+                select
+                    a.buyer as title,
+                    isnull(sum(a.ship_cnt), 0) as ship_cnt,
+                    isnull(sum(a.ord_amt), 0) as ord_amt,
+                    isnull(sum(a.matl_amt), 0) as matl_amt,
+                    isnull(sum(a.bvt_local), 0) as bvt_local,
+                    isnull(sum(a.fc_amt), 0) as fc_amt,
+                    isnull(sum(a.etc_amt), 0) as etc_amt,
+                    isnull(sum(a.comm_amt), 0) as comm_amt,
+                    isnull(sum(a.tot_amt), 0) as tot_amt,
+                    c.cd_name as buyer_team
+                from
+                    ksv_order_temp a,
+                    kcd_buyer b
+                    left join kcd_code c on c.cd_code = b.buyer_team
+                    and c.cd_group = 'BUYER_TEAM'
+                where
+                    a.user_id = '${tUserInfo.USER_ID}'
+                    and b.glove_flag = '0'
+                    and b.buyer_name = a.buyer 
+                    and b.buyer_cd like '%${args.data.BUYER_CD}%'
+                    ${sqlExclNsr}
+                group by
+                    a.buyer,
+                    c.cd_name
+                order by
+                    a.buyer
+            `;
+            var tRetSumBuyer = await prisma.$queryRaw(Prisma.raw(sqlStr));
+            var tSumArrayBuyer = [];
+
+            var s_ship_cnt = 0;
+            var s_ord_amt = 0;
+            var s_matl_amt = 0;
+            var s_bvt_local = 0;
+            var s_fc_amt = 0;
+            var s_etc_amt = 0;
+            var s_comm_amt = 0;
+            var s_tot_amt = 0;
+            var s_diff = 0;
+
+            tRetSumBuyer.forEach((col, i) => {
+                var tObj = {
+                    ...col,
+                };
+                var tTotAmt0 = parseFloat(tObj.matl_amt) + 
+                          parseFloat(tObj.bvt_local) + 
+                          parseFloat(tObj.fc_amt) + 
+                          parseFloat(tObj.etc_amt) + 
+                          parseFloat(tObj.comm_amt); 
+                tObj.tot_amt = tTotAmt0;
+                var tDiff0 = parseFloat(tObj.ord_amt) - parseFloat(tObj.tot_amt);
+                tObj.diff = tDiff0;
+                if (tObj.ord_amt > 0)
+                    tObj.rate = (tObj.diff / tObj.ord_amt) * 100.0;
+                else tObj.rate = 0.0;
+                tSumArrayBuyer.push(tObj);
+
+                s_ship_cnt += tObj.ship_cnt;
+                s_ord_amt += tObj.ord_amt;
+                s_matl_amt += tObj.matl_amt;
+                s_bvt_local += tObj.bvt_local;
+                s_fc_amt += tObj.fc_amt;
+                s_etc_amt += tObj.etc_amt;
+                s_comm_amt += tObj.comm_amt;
+                s_tot_amt += tObj.tot_amt;
+                s_diff += tObj.diff;
+            });
+
+            var tObjTot = {
+                ...tRetSumBuyer[0],
+            };
+            tObjTot.title = 'TOTAL';
+            tObjTot.ship_cnt = s_ship_cnt;
+            tObjTot.ord_amt = s_ord_amt;
+            tObjTot.matl_amt = s_matl_amt;
+            tObjTot.bvt_local = s_bvt_local;
+            tObjTot.fc_amt = s_fc_amt;
+            tObjTot.etc_amt = s_etc_amt;
+            tObjTot.comm_amt = s_comm_amt;
+
+            var tTotAmt = parseFloat(tObjTot.matl_amt) + 
+                          parseFloat(tObjTot.bvt_local) + 
+                          parseFloat(tObjTot.fc_amt) + 
+                          parseFloat(tObjTot.etc_amt) + 
+                          parseFloat(tObjTot.comm_amt); 
+            tObjTot.tot_amt = tTotAmt;
+            var tDiff = parseFloat(tObjTot.ord_amt) - parseFloat(tObjTot.tot_amt);
+            tObjTot.diff = tDiff;
+            if (tObjTot.ord_amt > 0)
+                tObjTot.rate = (tObjTot.diff / tObjTot.ord_amt) * 100.0;
+            else tObjTot.rate = 0.0;
+            tSumArrayBuyer.push(tObjTot);
+
+            var tRetSumBuyerGlove = [];
+            var tSumArrayBuyerGlove = [];
+
+            var tRetSumBuyerNsr = [];
+            var tSumArrayBuyerNsr = [];
+
+            var tRetSumBuyerFactory = [];
+            var tSumArrayBuyerFactory = [];
+
+            var tRetSumBuyerTeam = [];
+            var tSumArrayBuyerTeam = [];
+
+            if (args.data.BUYER_CD === '') {
+                // Buyer별 - 신티에스 :GLOVE
+                tSQL = '';
+                sqlStr = `
+                    select
+                        a.buyer as title,
+                        isnull(sum(a.ship_cnt), 0) as ship_cnt,
+                        isnull(sum(a.ord_amt), 0) as ord_amt,
+                        isnull(sum(a.matl_amt), 0) as matl_amt,
+                        isnull(sum(a.bvt_local), 0) as bvt_local,
+                        isnull(sum(a.fc_amt), 0) as fc_amt,
+                        isnull(sum(a.etc_amt), 0) as etc_amt,
+                        isnull(sum(a.comm_amt), 0) as comm_amt,
+                        isnull(sum(a.tot_amt), 0) as tot_amt,
+                        c.cd_name as buyer_team
+                    from
+                        ksv_order_temp a,
+                        kcd_buyer b
+                        left join kcd_code c on c.cd_code = b.buyer_team
+                        and c.cd_group = 'BUYER_TEAM'
+                    where
+                        a.user_id = '${tUserInfo.USER_ID}'
+                        and b.glove_flag = '1'
+                        and b.buyer_name = a.buyer
+                        and b.buyer_cd like '%${args.data.BUYER_CD}%'
+                        ${sqlExclNsr}
+                    group by
+                        a.buyer,
+                        c.cd_name
+                    order by
+                        a.buyer
+                `;
+                tRetSumBuyerGlove = await prisma.$queryRaw(Prisma.raw(sqlStr));
+                tSumArrayBuyerGlove = [];
+
+                s_ship_cnt = 0;
+                s_ord_amt = 0;
+                s_matl_amt = 0;
+                s_bvt_local = 0;
+                s_fc_amt = 0;
+                s_etc_amt = 0;
+                s_comm_amt = 0;
+                s_tot_amt = 0;
+                s_diff = 0;
+
+                tRetSumBuyerGlove.forEach((col, i) => {
+                    var tObj = {
+                        ...col,
+                    };
+                    tObj.diff = tObj.ord_amt - tObj.tot_amt;
+                    if (tObj.ord_amt > 0)
+                        tObj.rate = (tObj.diff / tObj.ord_amt) * 100.0;
+                    else tObj.rate = 0.0;
+                    tSumArrayBuyerGlove.push(tObj);
+
+                    s_ship_cnt += tObj.ship_cnt;
+                    s_ord_amt += tObj.ord_amt;
+                    s_matl_amt += tObj.matl_amt;
+                    s_bvt_local += tObj.bvt_local;
+                    s_fc_amt += tObj.fc_amt;
+                    s_etc_amt += tObj.etc_amt;
+                    s_comm_amt += tObj.comm_amt;
+                    s_tot_amt += tObj.tot_amt;
+                    s_diff += tObj.diff;
+                });
+
+                var tObjTot = {
+                    ...tRetSumBuyerGlove[0],
+                };
+                tObjTot.title = 'TOTAL';
+                tObjTot.ship_cnt = s_ship_cnt;
+                tObjTot.ord_amt = s_ord_amt;
+                tObjTot.matl_amt = s_matl_amt;
+                tObjTot.bvt_local = s_bvt_local;
+                tObjTot.fc_amt = s_fc_amt;
+                tObjTot.etc_amt = s_etc_amt;
+                tObjTot.comm_amt = s_comm_amt;
+                tObjTot.tot_amt = s_tot_amt;
+                tObjTot.diff = s_diff;
+                tSumArrayBuyerGlove.push(tObjTot);
+
+                // Buyer별 - NSR
+                tSQL = '';
+                sqlStr = `
+                    select
+                        a.buyer as title,
+                        isnull(sum(a.ship_cnt), 0) as ship_cnt,
+                        isnull(sum(a.ord_amt), 0) as ord_amt,
+                        isnull(sum(a.matl_amt), 0) as matl_amt,
+                        isnull(sum(a.bvt_local), 0) as bvt_local,
+                        isnull(sum(a.fc_amt), 0) as fc_amt,
+                        isnull(sum(a.etc_amt), 0) as etc_amt,
+                        isnull(sum(a.comm_amt), 0) as comm_amt,
+                        isnull(sum(a.tot_amt), 0) as tot_amt
+                    from
+                        ksv_order_temp a
+                        inner join kcd_buyer b on b.buyer_name = a.buyer
+                    where
+                        a.user_id = '${tUserInfo.USER_ID}'
+                        and b.buyer_cd like '%${args.data.BUYER_CD}%'
+                        ${sqlExclNsr}
+                    group by
+                        a.buyer
+                    order by
+                        a.buyer
+                `;
+                tRetSumBuyerNsr = await prisma.$queryRaw(Prisma.raw(sqlStr));
+                tSumArrayBuyerNsr = [];
+
+                s_ship_cnt = 0;
+                s_ord_amt = 0;
+                s_matl_amt = 0;
+                s_bvt_local = 0;
+                s_fc_amt = 0;
+                s_etc_amt = 0;
+                s_comm_amt = 0;
+                s_tot_amt = 0;
+                s_diff = 0;
+
+                tRetSumBuyerNsr.forEach((col, i) => {
+                    var tObj = {
+                        ...col,
+                    };
+                    tObj.diff = tObj.ord_amt - tObj.tot_amt;
+                    if (tObj.ord_amt > 0)
+                        tObj.rate = (tObj.diff / tObj.ord_amt) * 100.0;
+                    else tObj.rate = 0.0;
+                    tSumArrayBuyerNsr.push(tObj);
+
+                    s_ship_cnt += tObj.ship_cnt;
+                    s_ord_amt += tObj.ord_amt;
+                    s_matl_amt += tObj.matl_amt;
+                    s_bvt_local += tObj.bvt_local;
+                    s_fc_amt += tObj.fc_amt;
+                    s_etc_amt += tObj.etc_amt;
+                    s_comm_amt += tObj.comm_amt;
+                    s_tot_amt += tObj.tot_amt;
+                    s_diff += tObj.diff;
+                });
+
+                var tObjTot = {
+                    ...tRetSumBuyerNsr[0],
+                };
+                tObjTot.title = 'TOTAL';
+                tObjTot.ship_cnt = s_ship_cnt;
+                tObjTot.ord_amt = s_ord_amt;
+                tObjTot.matl_amt = s_matl_amt;
+                tObjTot.bvt_local = s_bvt_local;
+                tObjTot.fc_amt = s_fc_amt;
+                tObjTot.etc_amt = s_etc_amt;
+                tObjTot.comm_amt = s_comm_amt;
+                tObjTot.tot_amt = s_tot_amt;
+                tObjTot.diff = s_diff;
+                tSumArrayBuyerNsr.push(tObjTot);
+
+                // 공장별   - Factory
+                tSQL = '';
+                sqlStr = `
+                    select
+                        a.factory as title,
+                        isnull(sum(a.ship_cnt), 0) as ship_cnt,
+                        isnull(sum(a.ord_amt), 0) as ord_amt,
+                        isnull(sum(a.matl_amt), 0) as matl_amt,
+                        isnull(sum(a.bvt_local), 0) as bvt_local,
+                        isnull(sum(a.fc_amt), 0) as fc_amt,
+                        isnull(sum(a.etc_amt), 0) as etc_amt,
+                        isnull(sum(a.comm_amt), 0) as comm_amt,
+                        isnull(sum(a.tot_amt), 0) as tot_amt
+                    from
+                        ksv_order_temp a
+                        inner join kcd_buyer b on b.buyer_name = a.buyer
+                    where
+                        a.user_id = '${tUserInfo.USER_ID}'
+                        and b.buyer_cd like '%${args.data.BUYER_CD}%'
+                    group by
+                        a.factory
+                    order by
+                        a.factory
+                `;
+                tRetSumBuyerFactory = await prisma.$queryRaw(
+                    Prisma.raw(sqlStr),
+                );
+                tSumArrayBuyerFactory = [];
+
+                s_ship_cnt = 0;
+                s_ord_amt = 0;
+                s_matl_amt = 0;
+                s_bvt_local = 0;
+                s_fc_amt = 0;
+                s_etc_amt = 0;
+                s_comm_amt = 0;
+                s_tot_amt = 0;
+                s_diff = 0;
+
+                tRetSumBuyerFactory.forEach((col, i) => {
+                    var tObj = {
+                        ...col,
+                    };
+                    var tTotAmt0 = parseFloat(tObj.matl_amt) +   
+                          parseFloat(tObj.bvt_local) +   
+                          parseFloat(tObj.fc_amt) +   
+                          parseFloat(tObj.etc_amt) +   
+                          parseFloat(tObj.comm_amt);   
+                    tObj.tot_amt = tTotAmt0;
+                    var tDiff0 = parseFloat(tObj.ord_amt) - parseFloat(tObj.tot_amt);
+                    tObj.diff = tDiff0;
+                    if (tObj.ord_amt > 0)
+                        tObj.rate = (tObj.diff / tObj.ord_amt) * 100.0;
+                    else tObj.rate = 0.0;
+                    tSumArrayBuyerFactory.push(tObj);
+
+                    s_ship_cnt += tObj.ship_cnt;
+                    s_ord_amt += tObj.ord_amt;
+                    s_matl_amt += tObj.matl_amt;
+                    s_bvt_local += tObj.bvt_local;
+                    s_fc_amt += tObj.fc_amt;
+                    s_etc_amt += tObj.etc_amt;
+                    s_comm_amt += tObj.comm_amt;
+                    s_tot_amt += tObj.tot_amt;
+                    s_diff += tObj.diff;
+                });
+
+                var tObjTot = {
+                    ...tRetSumBuyerFactory[0],
+                };
+                tObjTot.title = 'TOTAL';
+                tObjTot.ship_cnt = s_ship_cnt;
+                tObjTot.ord_amt = s_ord_amt;
+                tObjTot.matl_amt = s_matl_amt;
+                tObjTot.bvt_local = s_bvt_local;
+                tObjTot.fc_amt = s_fc_amt;
+                tObjTot.etc_amt = s_etc_amt;
+                tObjTot.comm_amt = s_comm_amt;
+
+                tTotAmt = parseFloat(tObjTot.matl_amt) + 
+                          parseFloat(tObjTot.bvt_local) + 
+                          parseFloat(tObjTot.fc_amt) +   
+                          parseFloat(tObjTot.etc_amt) +
+                          parseFloat(tObjTot.comm_amt); 
+                tObjTot.tot_amt = tTotAmt;
+
+                tDiff = parseFloat(tObjTot.ord_amt) - parseFloat(tObjTot.tot_amt);
+                tObjTot.diff = tDiff;
+                if (tObjTot.ord_amt > 0)
+                    tObjTot.rate = (tObjTot.diff / tObjTot.ord_amt) * 100.0;
+                else tObjTot.rate = 0.0;
+                tSumArrayBuyerFactory.push(tObjTot);
+
+                // 팀별   -Buyer Team
+                var sqlStr99 = `
+                    SELECT distinct
+                        c.cd_name as buyer_team_n,
+                        b.buyer_team
+                    FROM
+                        KSV_ORDER_TEMP a,
+                        KCD_BUYER b
+                        left join KCD_CODE c on c.cd_code = b.buyer_team
+                                            and c.cd_group = 'BUYER_TEAM'
+                    where a.buyer = b.buyer_name
+                     and  a.user_id = '${tUserInfo.USER_ID}'
+                     and  b.buyer_cd like '%${args.data.BUYER_CD}%'
+                    order by
+                        1
+                `;
+                var tRet99 = await prisma.$queryRaw(Prisma.raw(sqlStr99));
+
+                var tIdx99 = 0;
+                tSumArrayBuyerTeam = [];
+                s_ship_cnt = 0;
+                s_ord_amt = 0;
+                s_matl_amt = 0;
+                s_bvt_local = 0;
+                s_fc_amt = 0;
+                s_etc_amt = 0;
+                s_comm_amt = 0;
+                s_tot_amt = 0;
+                s_diff = 0;
+
+                for (tIdx99 = 0; tIdx99 < tRet99.length; tIdx99++) {
+                    var tOne99 = tRet99[tIdx99];
+
+                    var s0_ship_cnt = 0;
+                    var s0_ord_amt = 0;
+                    var s0_matl_amt = 0;
+                    var s0_bvt_local = 0;
+                    var s0_fc_amt = 0;
+                    var s0_etc_amt = 0;
+                    var s0_comm_amt = 0;
+                    var s0_tot_amt = 0;
+                    var s0_diff = 0;
+
+                    tSQL = '';
+                    sqlStr = `
+                        select
+                            a.buyer,
+                            isnull(sum(a.ship_cnt), 0) as ship_cnt,
+                            isnull(sum(a.ship_cnt), 0) as ship_cnt,
+                            isnull(sum(a.ord_amt), 0) as ord_amt,
+                            isnull(sum(a.matl_amt), 0) as matl_amt,
+                            isnull(sum(a.bvt_local), 0) as bvt_local,
+                            isnull(sum(a.fc_amt), 0) as fc_amt,
+                            isnull(sum(a.etc_amt), 0) as etc_amt,
+                            isnull(sum(a.comm_amt), 0) as comm_amt,
+                            isnull(sum(a.tot_amt), 0) as tot_amt
+                        from
+                            ksv_order_temp a,
+                            kcd_buyer b
+                        where
+                            a.user_id = '${tUserInfo.USER_ID}'
+                            and b.buyer_team = '${tOne99.buyer_team}'
+                            and a.buyer = b.buyer_name
+                            and b.buyer_cd like '%${args.data.BUYER_CD}%'
+                        group by
+                            a.buyer
+                            -- and left(a.order_cd, 2) like '%${tOne99.buyer_cd}%'
+                    `;
+                    tRetSumBuyerTeam = await prisma.$queryRaw(
+                        Prisma.raw(sqlStr),
+                    );
+
+                    tRetSumBuyerTeam.forEach((col, i) => {
+                        var tObj = {
+                            ...col,
+                        };
+                        tObj.team = tOne99.buyer_team_n;
+
+                        var tTotAmt0 = parseFloat(tObj.matl_amt) +
+                              parseFloat(tObj.bvt_local) +
+                              parseFloat(tObj.fc_amt) +
+                              parseFloat(tObj.etc_amt) +
+                              parseFloat(tObj.comm_amt);
+                        tObj.tot_amt = tTotAmt0;
+                        var tDiff0 = parseFloat(tObj.ord_amt) - parseFloat(tObj.tot_amt);
+                        tObj.diff = tDiff0;
+                        if (tObj.ord_amt > 0)
+                            tObj.rate = (tObj.diff / tObj.ord_amt) * 100.0;
+                        else tObj.rate = 0.0;
+                        tSumArrayBuyerTeam.push(tObj);
+
+                        s_ship_cnt += tObj.ship_cnt;
+                        s_ord_amt += tObj.ord_amt;
+                        s_matl_amt += tObj.matl_amt;
+                        s_bvt_local += tObj.bvt_local;
+                        s_fc_amt += tObj.fc_amt;
+                        s_etc_amt += tObj.etc_amt;
+                        s_comm_amt += tObj.comm_amt;
+                        s_tot_amt += tObj.tot_amt;
+                        s_diff += tObj.diff;
+
+                        s0_ship_cnt += tObj.ship_cnt;
+                        s0_ord_amt += tObj.ord_amt;
+                        s0_matl_amt += tObj.matl_amt;
+                        s0_bvt_local += tObj.bvt_local;
+                        s0_fc_amt += tObj.fc_amt;
+                        s0_etc_amt += tObj.etc_amt;
+                        s0_comm_amt += tObj.comm_amt;
+                        s0_tot_amt += tObj.tot_amt;
+                        s0_diff += tObj.diff;
+                    });
+
+                    var tObjTot = {};
+                    tObjTot.team = '';
+                    tObjTot.buyer = 'TOTAL';
+                    tObjTot.ship_cnt = s0_ship_cnt;
+                    tObjTot.ord_amt = s0_ord_amt;
+                    tObjTot.matl_amt = s0_matl_amt;
+                    tObjTot.bvt_local = s0_bvt_local;
+                    tObjTot.fc_amt = s0_fc_amt;
+                    tObjTot.etc_amt = s0_etc_amt;
+                    tObjTot.comm_amt = s0_comm_amt;
+
+                    tTotAmt = parseFloat(tObjTot.matl_amt) +
+                          parseFloat(tObjTot.bvt_local) +
+                          parseFloat(tObjTot.fc_amt) +
+                          parseFloat(tObjTot.etc_amt) +
+                          parseFloat(tObjTot.comm_amt);
+                    tObjTot.tot_amt = tTotAmt;
+
+                    tDiff = parseFloat(tObjTot.ord_amt) - parseFloat(tObjTot.tot_amt);
+                    tObjTot.diff = tDiff;
+                    if (tObjTot.ord_amt > 0)
+                        tObjTot.rate = (tObjTot.diff / tObjTot.ord_amt) * 100.0;
+                    else tObjTot.rate = 0.0;
+                    tSumArrayBuyerTeam.push(tObjTot);
+                }
+
+                var tObjTot = {
+                    ...tRetSumBuyerTeam[0],
+                };
+                tObjTot.team = '';
+                tObjTot.buyer = 'GRAND TOTAL';
+                tObjTot.ship_cnt = s_ship_cnt;
+                tObjTot.ord_amt = s_ord_amt;
+                tObjTot.matl_amt = s_matl_amt;
+                tObjTot.bvt_local = s_bvt_local;
+                tObjTot.fc_amt = s_fc_amt;
+                tObjTot.etc_amt = s_etc_amt;
+                tObjTot.comm_amt = s_comm_amt;
+                tObjTot.tot_amt = s_tot_amt;
+                tObjTot.diff = s_diff;
+
+                tTotAmt = parseFloat(tObjTot.matl_amt) +
+                          parseFloat(tObjTot.bvt_local) +
+                          parseFloat(tObjTot.fc_amt) +
+                          parseFloat(tObjTot.etc_amt) +
+                          parseFloat(tObjTot.comm_amt);
+                tObjTot.tot_amt = tTotAmt;
+
+                tDiff = parseFloat(tObjTot.ord_amt) - parseFloat(tObjTot.tot_amt);
+                tObjTot.diff = tDiff;
+                if (tObjTot.ord_amt > 0)
+                    tObjTot.rate = (tObjTot.diff / tObjTot.ord_amt) * 100.0;
+                else tObjTot.rate = 0.0;
+
+                tSumArrayBuyerTeam.push(tObjTot);
+            }
+
+            // 선적일별: 선적년월
+            tSQL = '';
+            if (args.data.DUEDATE_FLAG === '1') {
+                sqlStr = `
+                    select
+                        left(a.due_date, 6) as title,
+                        isnull(sum(a.ship_cnt), 0) as ship_cnt,
+                        isnull(sum(a.ord_amt), 0) as ord_amt,
+                        isnull(sum(a.matl_amt), 0) as matl_amt,
+                        isnull(sum(a.bvt_local), 0) as bvt_local,
+                        isnull(sum(a.fc_amt), 0) as fc_amt,
+                        isnull(sum(a.etc_amt), 0) as etc_amt,
+                        isnull(sum(a.comm_amt), 0) as comm_amt,
+                        isnull(sum(a.tot_amt), 0) as tot_amt
+                    from
+                        ksv_order_temp a
+                        inner join kcd_buyer b on b.buyer_name = a.buyer
+                    where
+                        a.user_id = '${tUserInfo.USER_ID}'
+                        -- and left(order_cd, 2) like '%${args.data.BUYER_CD}%'
+                        and b.buyer_cd like '%${args.data.BUYER_CD}%'
+                    group by
+                        left(a.due_date, 6)
+                    order by
+                        left(a.due_date, 6)
+                `;
+            }
+            if (args.data.SHIPDATE_FLAG === '1') {
+                sqlStr = `
+                    select
+                        left(a.ship_date, 6) as title,
+                        isnull(sum(a.ship_cnt), 0) as ship_cnt,
+                        isnull(sum(a.ord_amt), 0) as ord_amt,
+                        isnull(sum(a.matl_amt), 0) as matl_amt,
+                        isnull(sum(a.bvt_local), 0) as bvt_local,
+                        isnull(sum(a.fc_amt), 0) as fc_amt,
+                        isnull(sum(a.etc_amt), 0) as etc_amt,
+                        isnull(sum(a.comm_amt), 0) as comm_amt,
+                        isnull(sum(a.tot_amt), 0) as tot_amt
+                    from
+                        ksv_order_temp a
+                        inner join kcd_buyer b on b.buyer_name = a.buyer
+                    where
+                        a.user_id = '${tUserInfo.USER_ID}'
+                        -- and left(order_cd, 2) like '%${args.data.BUYER_CD}%'
+                        and b.buyer_cd like '%${args.data.BUYER_CD}%'
+                    group by
+                        left(a.ship_date, 6)
+                    order by
+                        left(a.ship_date, 6)
+                `;
+            }
+            var tRetSumShip = await prisma.$queryRaw(Prisma.raw(sqlStr));
+            var tSumArrayShip = [];
+
+            s_ship_cnt = 0;
+            s_ord_amt = 0;
+            s_matl_amt = 0;
+            s_bvt_local = 0;
+            s_fc_amt = 0;
+            s_etc_amt = 0;
+            s_comm_amt = 0;
+            s_tot_amt = 0;
+            s_diff = 0;
+
+            tRetSumShip.forEach((col, i) => {
+                var tObj = {
+                    ...col,
+                };
+                var tTotAmt0 = parseFloat(tObj.matl_amt) +
+                              parseFloat(tObj.bvt_local) +
+                              parseFloat(tObj.fc_amt) +
+                              parseFloat(tObj.etc_amt) +
+                              parseFloat(tObj.comm_amt);
+                tObj.tot_amt = tTotAmt0;
+                var tDiff0 = parseFloat(tObj.ord_amt) - parseFloat(tObj.tot_amt);
+                tObj.diff = tDiff0;
+                if (tObj.ord_amt > 0)
+                    tObj.rate = (tObj.diff / tObj.ord_amt) * 100.0;
+                else tObj.rate = 0.0;
+                tSumArrayShip.push(tObj);
+
+                s_ship_cnt += tObj.ship_cnt;
+                s_ord_amt += tObj.ord_amt;
+                s_matl_amt += tObj.matl_amt;
+                s_bvt_local += tObj.bvt_local;
+                s_fc_amt += tObj.fc_amt;
+                s_etc_amt += tObj.etc_amt;
+                s_comm_amt += tObj.comm_amt;
+                s_tot_amt += tObj.tot_amt;
+                s_diff += tObj.diff;
+            });
+
+            var tObjTot = {
+                ...tRetSumShip[0],
+            };
+            tObjTot.title = 'TOTAL';
+            tObjTot.ship_cnt = s_ship_cnt;
+            tObjTot.ord_amt = s_ord_amt;
+            tObjTot.matl_amt = s_matl_amt;
+            tObjTot.bvt_local = s_bvt_local;
+            tObjTot.fc_amt = s_fc_amt;
+            tObjTot.etc_amt = s_etc_amt;
+            tObjTot.comm_amt = s_comm_amt;
+
+            tTotAmt = parseFloat(tObjTot.matl_amt) +
+                          parseFloat(tObjTot.bvt_local) +
+                          parseFloat(tObjTot.fc_amt) +
+                          parseFloat(tObjTot.etc_amt) +
+                          parseFloat(tObjTot.comm_amt);
+            tObjTot.tot_amt = tTotAmt;
+
+            tDiff = parseFloat(tObjTot.ord_amt) - parseFloat(tObjTot.tot_amt);
+            tObjTot.diff = tDiff;
+            if (tObjTot.ord_amt > 0)
+                tObjTot.rate = (tObjTot.diff / tObjTot.ord_amt) * 100.0;
+            else tObjTot.rate = 0.0;
+            tSumArrayShip.push(tObjTot);
+
+            try {
+                var tSQL = '';
+
+                // Excel Read
+                var tPath0 = '';
+                var tCols0 = __dirname.split('/');
+                var tFlag0 = 0;
+                tCols0.forEach((col, i) => {
+                    if (col !== '') {
+                        if (col === 'src') {
+                            tPath0 += '/upload/excel_template';
+                            tFlag0 = 1;
+                        }
+                        if (tFlag0 === 0) {
+                            tPath0 += '/' + col;
+                        }
+                    }
+                });
+
+                var tTemplateExcel = `${tPath0}/list.xlsx`;
+
+                const wb = new Excel.Workbook();
+                await wb.xlsx.readFile(tTemplateExcel);
+
+                var tSheetName = `Sheet1`;
+                const sheet = wb.getWorksheet(tSheetName);
+                sheet.name = '오더현황 종합';
+
+                sheet.getCell(1, 1).value = tSubTitle;
+                sheet.getCell(2, 10).value = moment(
+                    tRetDate1,
+                    'YYYYMMDD',
+                ).format('YYYY-MM-DD');
+                sheet.getCell(2, 11).value = '단위($)';
+
+                var headerRows = [];
+
+                strHeader.forEach((col, i) => {
+                    const cell = sheet.getCell(3, 1 + i);
+                    cell.value = col;
+                    cell.font = {
+                        bold: true,
+                    };
+                    cell.alignment = {
+                        horizontal: 'center',
+                    };
+                    cell.fill = {
+                        type: 'pattern',
+                        pattern: 'solid',
+                        fgColor: { argb: 'FFFFFF99' },
+                    };
+                });
+
+                var tRowIdx = 4;
+                tSumArray.forEach((col, i) => {
+                    var tOne = {
+                        ...col,
+                    };
+                    sheet.getCell(tRowIdx, 1).value = tOne.title;
+                    sheet.getCell(tRowIdx, 2).value = tOne.ship_cnt;
+                    sheet.getCell(tRowIdx, 3).value = tOne.ord_amt;
+                    sheet.getCell(tRowIdx, 4).value = tOne.matl_amt;
+                    sheet.getCell(tRowIdx, 5).value = tOne.bvt_local;
+                    sheet.getCell(tRowIdx, 6).value = tOne.fc_amt;
+                    sheet.getCell(tRowIdx, 7).value = tOne.etc_amt;
+                    sheet.getCell(tRowIdx, 8).value = tOne.comm_amt;
+                    sheet.getCell(tRowIdx, 9).value = tOne.tot_amt;
+                    sheet.getCell(tRowIdx, 10).value = tOne.diff;
+                    sheet.getCell(tRowIdx, 11).value = tOne.rate;
+                    tRowIdx += 1;
+                });
+                tRowIdx += 1;
+
+                // Buyer별
+                headerRows.push(tRowIdx);
+                sheet.getCell(tRowIdx, 1).value = 'SHINTS';
+                tRowIdx += 1;
+                tSumArrayBuyer.forEach((col, i) => {
+                    var tOne = {
+                        ...col,
+                    };
+
+                    sheet.getCell(tRowIdx, 1).value = tOne.title;
+                    sheet.getCell(tRowIdx, 2).value = tOne.ship_cnt;
+                    sheet.getCell(tRowIdx, 3).value = tOne.ord_amt;
+                    sheet.getCell(tRowIdx, 4).value = tOne.matl_amt;
+                    sheet.getCell(tRowIdx, 5).value = tOne.bvt_local;
+                    sheet.getCell(tRowIdx, 6).value = tOne.fc_amt;
+                    sheet.getCell(tRowIdx, 7).value = tOne.etc_amt;
+                    sheet.getCell(tRowIdx, 8).value = tOne.comm_amt;
+                    sheet.getCell(tRowIdx, 9).value = tOne.tot_amt;
+                    sheet.getCell(tRowIdx, 10).value = tOne.diff;
+                    sheet.getCell(tRowIdx, 11).value = tOne.rate;
+                    if (tOne.title === 'TOTAL') {
+                        sheet.getCell(tRowIdx, 12).value = '';
+                    } else {
+                        sheet.getCell(tRowIdx, 12).value = tOne.buyer_team;
+                    }
+
+                    tRowIdx += 1;
+                });
+                tRowIdx += 1;
+
+                // Buyer별 - Glove
+                headerRows.push(tRowIdx);
+                sheet.getCell(tRowIdx, 1).value = 'Glove';
+                tRowIdx += 1;
+                tSumArrayBuyerGlove.forEach((col, i) => {
+                    var tOne = {
+                        ...col,
+                    };
+                    sheet.getCell(tRowIdx, 1).value = tOne.title;
+                    sheet.getCell(tRowIdx, 2).value = tOne.ship_cnt;
+                    sheet.getCell(tRowIdx, 3).value = tOne.ord_amt;
+                    sheet.getCell(tRowIdx, 4).value = tOne.matl_amt;
+                    sheet.getCell(tRowIdx, 5).value = tOne.bvt_local;
+                    sheet.getCell(tRowIdx, 6).value = tOne.fc_amt;
+                    sheet.getCell(tRowIdx, 7).value = tOne.etc_amt;
+                    sheet.getCell(tRowIdx, 8).value = tOne.comm_amt;
+                    sheet.getCell(tRowIdx, 9).value = tOne.tot_amt;
+                    sheet.getCell(tRowIdx, 10).value = tOne.diff;
+                    sheet.getCell(tRowIdx, 11).value = tOne.rate;
+                    if (tOne.title === 'TOTAL') {
+                        var tRate = 0;
+                        if (parseFloat(tOne.tot_amt) !== 0) {
+                            tRate =
+                                (parseFloat(tOne.diff) /
+                                    parseFloat(tOne.tot_amt)) *
+                                100.0;
+                            tRate = parseFloat(tRate.toFixed(2));
+                        }
+                        sheet.getCell(tRowIdx, 11).value = tRate;
+                    }
+                    tRowIdx += 1;
+                });
+                tRowIdx += 1;
+
+                // Buyer별
+                headerRows.push(tRowIdx);
+                sheet.getCell(tRowIdx, 1).value = 'SHINTS CM';
+                tRowIdx += 1;
+                tSumArrayBuyerNsr.forEach((col, i) => {
+                    var tOne = {
+                        ...col,
+                    };
+
+                    sheet.getCell(tRowIdx, 1).value = tOne.title;
+                    sheet.getCell(tRowIdx, 2).value = tOne.ship_cnt;
+                    sheet.getCell(tRowIdx, 3).value = tOne.ord_amt;
+                    sheet.getCell(tRowIdx, 4).value = tOne.matl_amt;
+                    sheet.getCell(tRowIdx, 5).value = tOne.bvt_local;
+                    sheet.getCell(tRowIdx, 6).value = tOne.fc_amt;
+                    sheet.getCell(tRowIdx, 7).value = tOne.etc_amt;
+                    sheet.getCell(tRowIdx, 8).value = tOne.comm_amt;
+                    sheet.getCell(tRowIdx, 9).value = tOne.tot_amt;
+                    sheet.getCell(tRowIdx, 10).value = tOne.diff;
+                    sheet.getCell(tRowIdx, 11).value = tOne.rate;
+
+                    tRowIdx += 1;
+                });
+                tRowIdx += 1;
+
+                // Factory별
+                headerRows.push(tRowIdx);
+                sheet.getCell(tRowIdx, 1).value = 'Factory';
+                tRowIdx += 1;
+                tSumArrayBuyerFactory.forEach((col, i) => {
+                    var tOne = {
+                        ...col,
+                    };
+
+                    sheet.getCell(tRowIdx, 1).value = tOne.title;
+                    sheet.getCell(tRowIdx, 2).value = tOne.ship_cnt;
+                    sheet.getCell(tRowIdx, 3).value = tOne.ord_amt;
+                    sheet.getCell(tRowIdx, 4).value = tOne.matl_amt;
+                    sheet.getCell(tRowIdx, 5).value = tOne.bvt_local;
+                    sheet.getCell(tRowIdx, 6).value = tOne.fc_amt;
+                    sheet.getCell(tRowIdx, 7).value = tOne.etc_amt;
+                    sheet.getCell(tRowIdx, 8).value = tOne.comm_amt;
+                    sheet.getCell(tRowIdx, 9).value = tOne.tot_amt;
+                    sheet.getCell(tRowIdx, 10).value = tOne.diff;
+                    sheet.getCell(tRowIdx, 11).value = tOne.rate;
+                    tRowIdx += 1;
+                });
+                tRowIdx += 1;
+
+                // 선적년월
+                headerRows.push(tRowIdx);
+                sheet.getCell(tRowIdx, 1).value = '선적년월';
+                tRowIdx += 1;
+                tSumArrayShip.forEach((col, i) => {
+                    var tOne = {
+                        ...col,
+                    };
+
+                    sheet.getCell(tRowIdx, 1).value = tOne.title;
+                    sheet.getCell(tRowIdx, 2).value = tOne.ship_cnt;
+                    sheet.getCell(tRowIdx, 3).value = tOne.ord_amt;
+                    sheet.getCell(tRowIdx, 4).value = tOne.matl_amt;
+                    sheet.getCell(tRowIdx, 5).value = tOne.bvt_local;
+                    sheet.getCell(tRowIdx, 6).value = tOne.fc_amt;
+                    sheet.getCell(tRowIdx, 7).value = tOne.etc_amt;
+                    sheet.getCell(tRowIdx, 8).value = tOne.comm_amt;
+                    sheet.getCell(tRowIdx, 9).value = tOne.tot_amt;
+                    sheet.getCell(tRowIdx, 10).value = tOne.diff;
+                    sheet.getCell(tRowIdx, 11).value = tOne.rate;
+                    tRowIdx += 1;
+                });
+                tRowIdx += 1;
+
+                styleSheet(sheet, 3, 11, true);
+                styleSheetOneLine(sheet, headerRows, 11, true);
+
+                //
+                var tSheetName = `Sheet2`;
+                const sheet2 = wb.getWorksheet(tSheetName);
+                sheet2.name = '사후마감 리스트 설명';
+                sheet2.getCell(3, 1).value = '사후마감 List';
+                sheet2.getCell(6, 1).value =
+                    '1.전체 매출손익 리스트 (nsr10% 마진 넣은것 -> 제조비용임) NSR 비용/수익 임의로 넣고, 모든 공장 구매 및 운임 비용 포함함';
+                sheet2.getCell(7, 1).value =
+                    '2.전체 매출손익 리스트-NSR 수익뺌 (=NSR의 상품매출이 없다는 가정 하) NSR(SG,NP,NU,WF,NS,WI)의 비용만 넣고, NN 및 SS는 수익 포함(바로 매출이 일어남으로).임의 수익은 제외함,모든 공장 구매 및 운임비';
+                sheet2.getCell(8, 1).value =
+                    '3.모든 NSR관련 비용/수익 제외한 순수 매출손익(공장구매 및 운임비용 포함) SG,NP,NU,WF,NS,WI제외함. NN 및 SS는 포함(바로 매출이 일어남으로). 모든 공장 구매 및 운임 비용 포함';
+                sheet2.getCell(9, 1).value =
+                    '4.1-모든 공장 구매 비용 제외함 NSR 비용/수익 임의로 넣고, 모든 공장 운임 포함. 공장 구매비용 제외함(Shints BVT, Shints Ethiopia, Shints USA, Shint Textile Solution)';
+                sheet2.getCell(10, 1).value =
+                    '5.2-모든 공장 구매 비용 제외함 NSR의 비용만 넣고, 임의 수익은 제외함,모든 공장 운임 포함. 공장 구매비용 제외함(Shints BVT, Shints Ethiopia, Shints USA, Shint Textile';
+                sheet2.getCell(11, 1).value =
+                    '6. 3-모든 공장 구매 비용 제외함 SG,NP,NU,WF,NS,WI 제외함. NN 및 SS는 포함(바로 매출이 일어남으로). 모든 공장 운임 포함. 공장 구매비용 제외함(Shints BVT, Shint)';
+                sheet2.getCell(12, 1).value =
+                    '7. NSR 비용 리스트 SG,NP,NU,WF,NS,WI 는 수익 없이 비용만 기재함';
+                sheet2.getCell(13, 1).value = '8. 모든 공장 구매 비용만';
+                sheet2.getCell(14, 1).value =
+                    '9. ETP 투자금액 제외한 전체 매출손익 리스트 NSR 비용/수익 임의로 넣고, 모든 공장 구매 및 운임 비용 포함함 단, Shints Ethiopia 금액 제외';
+                sheet2.getCell(10, 1).value = '';
+
+                var tSheetName = `Sheet3`;
+                const sheet3 = wb.getWorksheet(tSheetName);
+                sheet3.name = '기타비용 설명';
+                sheet3.getCell(3, 1).value =
+                    '사후마감(오더현황)의 기타비용에 끌고오는 항목들';
+                sheet3.getCell(6, 1).value = '프로그램 코드';
+                sheet3.getCell(7, 1).value = 'V';
+                sheet3.getCell(8, 1).value = 'U';
+                sheet3.getCell(9, 1).value = 'W';
+                sheet3.getCell(10, 1).value = 'G';
+                sheet3.getCell(16, 1).value = 'FRT';
+                sheet3.getCell(21, 1).value = 'A';
+                sheet3.getCell(22, 1).value = 'Others';
+
+                sheet3.getCell(6, 2).value = '내용';
+                sheet3.getCell(7, 2).value = 'Shints Debit note';
+                sheet3.getCell(8, 2).value = 'BVT Debit note';
+                sheet3.getCell(9, 2).value = 'Credit';
+                sheet3.getCell(10, 2).value = 'ETC Cost Record';
+                sheet3.getCell(11, 2).value = '1) 퀵서비스';
+                sheet3.getCell(12, 2).value = '2) 외주 샘플 및 패턴';
+                sheet3.getCell(13, 2).value = '3) 자수비';
+                sheet3.getCell(14, 2).value = '4) 지출결의서에 따른 기타비용';
+                sheet3.getCell(15, 2).value = '5) 샘플 판매비(매출)';
+
+                sheet3.getCell(16, 2).value = 'Material Freight';
+                sheet3.getCell(17, 2).value = '1) Express 대선';
+                sheet3.getCell(18, 2).value = '2) DHL';
+                sheet3.getCell(19, 2).value = '3) LCL/FCL (sea)';
+                sheet3.getCell(20, 2).value = '4) Air';
+
+                sheet3.getCell(21, 2).value = '수선비';
+                sheet3.getCell(22, 2).value = '오더 별 Import charge';
+                sheet3.getCell(23, 2).value = '(완제품에 적용되는 통관 및 운송';
+                sheet3.getCell(24, 2).value = '비용-관세,부과세,운임,통관비)';
+
+                sheet3.getCell(6, 3).value = '관리자';
+                sheet3.getCell(7, 3).value = 'SMD/ end 처리는 재경 및 무역팀';
+                sheet3.getCell(8, 3).value = 'VMD/ end 처리는 재경 및 무역팀';
+                sheet3.getCell(9, 3).value =
+                    '각 영업/ end 처리는 재경 및 무역 팀';
+                sheet3.getCell(10, 3).value = '';
+                sheet3.getCell(11, 3).value = '총무님';
+                sheet3.getCell(12, 3).value = '각 영업/ end 처리는 재경팀';
+                sheet3.getCell(13, 3).value = '각 영업/ end 처리는 재경팀';
+                sheet3.getCell(14, 3).value = '해당자 (주로 영업 및 자재)';
+                sheet3.getCell(15, 3).value = '해당자 (주로 영업)';
+
+                sheet3.getCell(16, 3).value = '';
+                sheet3.getCell(17, 3).value = '각 영업 및 자재부';
+                sheet3.getCell(18, 3).value = '각 영업 및 자재부';
+                sheet3.getCell(19, 3).value = '각 영업 및 자재부';
+                sheet3.getCell(20, 3).value = '각 영업 및 자재부';
+
+                sheet3.getCell(21, 3).value = '개발실';
+                sheet3.getCell(22, 3).value = '무역부';
+                sheet2.getCell(23, 3).value = '';
+                sheet3.getCell(24, 3).value = '';
+
+                sheet3.getCell(27, 1).value =
+                    '사후마감(오더현황)의 기타비용 관련 추가 사항';
+                sheet3.getCell(29, 1).value =
+                    '1. Labor commission은 사후마감(오더현황)에 포함되지 않는다';
+                sheet3.getCell(30, 1).value =
+                    '2. ETP 투자비용 (인건비 등)은 사후마감(오더현황)에 포함되지 않는다';
+                sheet3.getCell(31, 1).value =
+                    '3. Overage/ Shortage로 발행된 전체 Debit (Shin Textile Solution - Shints BVT간)은 Factory의 기타비용에 추가되지 않는다 ';
+                sheet3.getCell(32, 1).value =
+                    '   다만, 각 바이어별 금액으로 잡히게 된다';
+
+                //  Sheet4
+                var headerRows2 = [];
+                var tSheetName = `Sheet4`;
+                const sheet4 = wb.getWorksheet(tSheetName);
+                sheet4.name = '팀별 오더현황';
+                sheet4.getCell(2, 1).value = '팀';
+                sheet4.getCell(2, 2).value = 'Buyer';
+                sheet4.getCell(2, 3).value = '수주수량';
+                sheet4.getCell(2, 4).value = '수주금액';
+                sheet4.getCell(2, 5).value = '자재비';
+                sheet4.getCell(2, 6).value = '공장구매자재';
+                sheet4.getCell(2, 7).value = '임가공비';
+                sheet4.getCell(2, 8).value = '기타비용';
+                sheet3.getCell(2, 9).value = '커미션';
+                sheet4.getCell(2, 10).value = '비용총액';
+                sheet4.getCell(2, 11).value = '제조손익';
+                sheet4.getCell(2, 12).value = '%';
+
+                tRowIdx = 3;
+                tSumArrayBuyerTeam.forEach((col, i) => {
+                    var tOne = {
+                        ...col,
+                    };
+
+                    if (tOne.buyer === 'GRAND TOTAL') {
+                        tOne.buyer = 'TOTAL';
+                        tRowIdx += 1;
+                    }
+
+                    if (tOne.buyer === 'TOTAL') headerRows2.push(tRowIdx);
+
+                    sheet4.getCell(tRowIdx, 1).value = tOne.team;
+                    sheet4.getCell(tRowIdx, 2).value = tOne.buyer;
+                    sheet4.getCell(tRowIdx, 3).value = tOne.ship_cnt;
+                    sheet4.getCell(tRowIdx, 4).value = tOne.ord_amt;
+                    sheet4.getCell(tRowIdx, 5).value = tOne.matl_amt;
+                    sheet4.getCell(tRowIdx, 6).value = tOne.bvt_local;
+                    sheet4.getCell(tRowIdx, 7).value = tOne.fc_amt;
+                    sheet4.getCell(tRowIdx, 8).value = tOne.etc_amt;
+                    sheet4.getCell(tRowIdx, 9).value = tOne.comm_amt;
+                    sheet4.getCell(tRowIdx, 10).value = tOne.tot_amt;
+                    sheet4.getCell(tRowIdx, 11).value = tOne.diff;
+                    sheet4.getCell(tRowIdx, 12).value = tOne.rate;
+                    tRowIdx += 1;
+                });
+                tRowIdx += 1;
+
+                styleSheet(sheet4, 2, 12);
+                styleSheetOneLine2(sheet4, headerRows2, 12);
+
+                // Sheet5
+                if (args.data.DETAIL_FLAG && args.data.DETAIL_FLAG === '1') {
+                    var tSheetName = `Sheet5`;
+                    const sheet5 = wb.getWorksheet(tSheetName);
+                    sheet5.name = 'Detail list';
+                    sheet5.getCell(2, 1).value = 'ORDER';
+                    sheet5.getCell(2, 2).value = 'BUYER';
+                    sheet5.getCell(2, 3).value = 'STYLE';
+                    sheet5.getCell(2, 4).value = 'FACTORY';
+                    sheet5.getCell(2, 5).value = 'DUE_DATE';
+                    sheet5.getCell(2, 6).value = 'SHIP_DATE';
+                    sheet5.getCell(2, 7).value = 'TOT_CNT';
+                    sheet5.getCell(2, 8).value = 'SHIP_CNT';
+                    sheet5.getCell(2, 9).value = 'USER_PRICE';
+                    sheet5.getCell(2, 10).value = 'ORDER_AMT';
+                    sheet5.getCell(2, 11).value = 'FC_AMT';
+                    sheet5.getCell(2, 12).value = 'MATL_AMT';
+                    sheet5.getCell(2, 13).value = 'BVT_LOCAL';
+                    sheet5.getCell(2, 14).value = 'ETC_AMT';
+                    sheet5.getCell(2, 15).value = 'COMM_AMT';
+                    sheet5.getCell(2, 16).value = 'TOT_AMT';
+                    sheet5.getCell(2, 17).value = 'TYPE';
+
+                    var sql5 = `
+                        select
+                            ORDER_CD,
+                            BUYER,
+                            STYLE,
+                            FACTORY,
+                            DUE_DATE,
+                            SHIP_DATE,
+                            TOT_CNT,
+                            SHIP_CNT,
+                            USD_PRICE,
+                            ORD_AMT,
+                            FC_AMT,
+                            MATL_AMT,
+                            BVT_LOCAL,
+                            ETC_AMT,
+                            COMM_AMT,
+                            TOT_AMT,
+                        TYPE
+                        from
+                            ksv_order_temp
+                        where
+                            user_id = '${tUserInfo.USER_ID}'
+                        order by
+                            1
+                    `;
+                    var ret5 = await prisma.$queryRaw(Prisma.raw(sql5));
+
+                    tRowIdx = 3;
+                    ret5.forEach((col, i) => {
+                        var tOne = {
+                            ...col,
+                        };
+                        sheet5.getCell(tRowIdx, 1).value = tOne.ORDER_CD;
+                        sheet5.getCell(tRowIdx, 2).value = tOne.BUYER;
+                        sheet5.getCell(tRowIdx, 3).value = tOne.STYLE;
+                        sheet5.getCell(tRowIdx, 4).value = tOne.FACTORY;
+                        sheet5.getCell(tRowIdx, 5).value = tOne.DUE_DATE;
+                        sheet5.getCell(tRowIdx, 6).value = tOne.SHIP_DATE;
+                        sheet5.getCell(tRowIdx, 7).value = tOne.TOT_CNT;
+                        sheet5.getCell(tRowIdx, 8).value = tOne.SHIP_CNT;
+                        sheet5.getCell(tRowIdx, 9).value = tOne.USD_PRICE;
+                        sheet5.getCell(tRowIdx, 10).value = tOne.ORD_AMT;
+                        sheet5.getCell(tRowIdx, 11).value = tOne.FC_AMT;
+                        sheet5.getCell(tRowIdx, 12).value = tOne.MATL_AMT;
+                        sheet5.getCell(tRowIdx, 13).value = tOne.BVT_LOCAL;
+                        sheet5.getCell(tRowIdx, 14).value = tOne.ETC_AMT;
+                        sheet5.getCell(tRowIdx, 15).value = tOne.COMM_AMT;
+                        sheet5.getCell(tRowIdx, 16).value = tOne.TOT_AMT;
+                        sheet5.getCell(tRowIdx, 17).value = tOne.TYPE;
+                        tRowIdx += 1;
+                    });
+                    tRowIdx += 1;
+
+                    styleSheet(sheet5, 2, 17);
+                }
+
+                return await upload(`${tWExcelFile}.xlsx`, wb);
+            } catch (error) {
+                var tRetArray = [];
+                var tObj = {};
+                tObj.id = 0;
+                tObj.CODE = 'ERROR: ' + error.message;
+                tRetArray.push(tObj);
+                return tRetArray;
+            }
+        },
+
+        mgrQuery_S0213_EXCEL_REPORT2: async (_, args, contextValue) => {
+            var tRetDate = AFLib.getCurrTime();
+            var tRetDate1 = tRetDate.substring(0, 8);
+            var tUserInfo = AFLib.getUserInfo(contextValue);
+
+            var tWExcelFile = `영업_오더현황(바이어)-${tUserInfo.USER_ID}-${tRetDate1}`;
+
+            var tTitle = 'ORDER STATUS (BUYER)';
+            var tSubTitle = ``;
+            if (args.data.DUEDATE_FLAG === '1')
+                tSubTitle = `${moment(args.data.S_DUE_DATE).format('YYYY-MM-DD')} ~ ${moment(args.data.E_DUE_DATE, 'YYYYMMDD').format('YYYY-MM-DD')} 현황 (오더납기기준)`;
+            if (args.data.SHIPDATE_FLAG === '1')
+                tSubTitle = `${moment(args.data.S_DUE_DATE).format('YYYY-MM-DD')} ~ ${moment(args.data.E_DUE_DATE, 'YYYYMMDD').format('YYYY-MM-DD')} 현황 (제품선적기준)`;
+            var tUnitTitle = `${moment(tRetDate1, 'YYYYMMDD').format('YYYY-MM-DD')} 단위($)`;
+
+            var tFunc = new S0213_QRY_COMM();
+            var tFlag = await tFunc.makeListData2(args.data, contextValue);
+
+            var strHeader = new Array(12);
+            strHeader[0] = 'Buyer';
+            strHeader[1] = 'Style';
+            strHeader[2] = '년월';
+            strHeader[3] = '수주수량';
+            strHeader[4] = '수주금액';
+            strHeader[5] = '자재비';
+            strHeader[6] = '임가공비';
+            strHeader[7] = '기타비용';
+            strHeader[8] = '커미션';
+            strHeader[9] = '비용총액';
+            strHeader[10] = '제조손익';
+            strHeader[11] = '%';
+
+            var s_ship_cnt = 0;
+            var s_tot_cnt = 0;
+            var s_ord_amt = 0;
+            var s_matl_amt = 0;
+            var s_fc_amt = 0;
+            var s_etc_amt = 0;
+            var s_comm_amt = 0;
+            var s_tot_amt = 0;
+            var s_diff = 0;
+
+            var tSQL = '';
+            let sqlStr = `
+                select
+                    a.buyer,
+                    a.style,
+                    left(a.ship_date, 6) as ship_date,
+                    sum(a.ship_cnt) as ship_cnt,
+                    sum(a.tot_cnt) as tot_cnt,
+                    sum(a.ord_amt) as ord_amt,
+                    sum(a.matl_amt+a.bvt_local) as matl_amt,
+                    sum(a.fc_amt) as fc_amt,
+                    sum(a.etc_amt) as etc_amt,
+                    sum(a.comm_amt) as comm_amt,
+                    sum(a.tot_amt) as tot_amt
+                from
+                    ksv_order_temp a
+                where
+                    user_id = '${tUserInfo.USER_ID}'
+                group by
+                    a.buyer,
+                    a.style,
+                    left(a.ship_date, 6)
+                order by
+                    a.buyer,
+                    a.style,
+                    left(a.ship_date, 6)
+            `;
+            var tRet = await prisma.$queryRaw(Prisma.raw(sqlStr));
+            var tRetArray = [];
+            tRet.forEach((col, i) => {
+                var tObj = {
+                    ...col,
+                };
+                tObj.title = 'TOTAL';
+                
+                var tTotAmt = parseFloat(tObj.matl_amt) + parseFloat(tObj.fc_amt) + parseFloat(tObj.etc_amt) + parseFloat(tObj.comm_amt);
+                tObj.tot_amt = parseFloat(tTotAmt);
+                tObj.diff = tObj.ord_amt - tObj.tot_amt;
+                if (tObj.ord_amt > 0)
+                    tObj.rate = (tObj.diff / tObj.ord_amt) * 100.0;
+                else tObj.rate = 0.0;
+                tRetArray.push(tObj);
+
+                s_ship_cnt += tObj.ship_cnt;
+                s_tot_cnt += tObj.tot_cnt;
+                s_ord_amt += tObj.ord_amt;
+                s_matl_amt += tObj.matl_amt;
+                s_fc_amt += tObj.fc_amt;
+                s_etc_amt += tObj.etc_amt;
+                s_comm_amt += tObj.comm_amt;
+                s_tot_amt += tObj.tot_amt;
+                s_diff += tObj.diff;
+            });
+
+            var tObjTot = {
+                ...tRetArray[0],
+            };
+            tObjTot.buyer = 'TOTAL';
+            tObjTot.style = '';
+            tObjTot.ship_date = '';
+            tObjTot.ship_cnt = Number(parseFloat(s_ship_cnt).toFixed(0));
+            tObjTot.tot_cnt = Number(parseFloat(s_tot_cnt).toFixed(0));
+            tObjTot.ord_amt = Number(parseFloat(s_ord_amt).toFixed(0));
+            tObjTot.matl_amt = Number(parseFloat(s_matl_amt).toFixed(0));
+            tObjTot.fc_amt = Number(parseFloat(s_fc_amt).toFixed(0));
+            tObjTot.etc_amt = Number(parseFloat(s_etc_amt).toFixed(0));
+            tObjTot.comm_amt = Number(parseFloat(s_comm_amt).toFixed(0));
+            tObjTot.tot_amt = Number(parseFloat(s_tot_amt).toFixed(0));
+            tObjTot.diff = Number(parseFloat(s_diff).toFixed(2));
+            tRetArray.unshift(tObjTot);
+
+            try {
+                var tSQL = '';
+
+                // Excel Read
+                var tPath0 = '';
+                var tCols0 = __dirname.split('/');
+                var tFlag0 = 0;
+                tCols0.forEach((col, i) => {
+                    if (col !== '') {
+                        if (col === 'src') {
+                            tPath0 += '/upload/excel_template';
+                            tFlag0 = 1;
+                        }
+                        if (tFlag0 === 0) {
+                            tPath0 += '/' + col;
+                        }
+                    }
+                });
+
+                var tTemplateExcel = `${tPath0}/영업_오더현황(바이어).xlsx`;
+
+                const wb = new Excel.Workbook();
+                await wb.xlsx.readFile(tTemplateExcel);
+
+                var tSheetName = `Sheet1`;
+                const sheet = wb.getWorksheet(tSheetName);
+
+                sheet.getCell(1, 1).value = tTitle;
+                sheet.getCell(2, 2).value = tSubTitle;
+                sheet.getCell(2, 11).value = tUnitTitle;
+
+                strHeader.forEach((col, i) => {
+                    const cell = sheet.getCell(3, 1 + i);
+
+                    cell.value = col;
+
+                    cell.font = {
+                        bold: true,
+                    };
+
+                    cell.alignment = {
+                        horizontal: 'center',
+                    };
+
+                    cell.fill = {
+                        type: 'pattern',
+                        pattern: 'solid',
+                        fgColor: {
+                            argb: 'FFFFFF99',
+                        },
+                    };
+                });
+
+                var tRowIdx = 4;
+                var prevBuyer = null; // 이전 buyer 저장
+                var startMergeRow = 6; // A 컬럼 병합 시작 행
+                var lastMergeRow = 6; // 마지막으로 병합될 행 추적
+                var subTotalRow = null; // Sub Total이 있는 경우 해당 행
+
+                var subTotal = {
+                    ship_cnt: 0,
+                    ord_amt: 0,
+                    matl_amt: 0,
+                    fc_amt: 0,
+                    etc_amt: 0,
+                    comm_amt: 0,
+                    tot_amt: 0,
+                    diff: 0,
+                };
+
+                // ✅ 4번째 행 (헤더) Bold + 빨간색 글씨 적용
+                for (let col = 1; col <= 12; col++) {
+                    sheet.getCell(4, col).font = {
+                        bold: true,
+                        color: {
+                            argb: 'FFFF0000',
+                        },
+                    };
+                }
+
+                tRetArray.forEach((col, i) => {
+                    var tOne = {
+                        ...col,
+                    };
+
+                    // Buyer가 변경될 때 Sub Total 추가
+                    if (prevBuyer !== null && prevBuyer !== tOne.buyer) {
+                        subTotalRow = tRowIdx; // Sub Total 행 위치 저장
+
+                        // ✅ B, C 컬럼 병합 (Merge)
+                        sheet.mergeCells(tRowIdx, 2, tRowIdx, 3);
+
+                        // ✅ "Sub Total" 라벨링 + Bold + 빨간색 적용
+                        sheet.getCell(tRowIdx, 2).value = 'Sub Total';
+                        sheet.getCell(tRowIdx, 2).font = {
+                            bold: true,
+                        };
+
+                        // ✅ Sub Total 데이터 입력 (Bold + 빨간색)
+                        for (let col = 4; col <= 12; col++) {
+                            sheet.getCell(tRowIdx, col).value =
+                                subTotal[Object.keys(subTotal)[col - 4]];
+                            sheet.getCell(tRowIdx, col).font = {
+                                bold: true,
+                            };
+                        }
+
+                        var tRate =
+                            subTotal.ord_amt > 0
+                                ? (subTotal.diff / subTotal.ord_amt) * 100.0
+                                : 0;
+                        sheet.getCell(tRowIdx, 12).value = tRate;
+
+                        tRowIdx += 1;
+
+                        // ✅ A 컬럼 병합 (이전 Buyer 영역)
+                        if (startMergeRow < subTotalRow - 1) {
+                            sheet.mergeCells(startMergeRow, 1, subTotalRow, 1);
+                        }
+
+                        // 다음 Buyer의 시작 행 설정
+                        startMergeRow = tRowIdx;
+
+                        // Sub Total 초기화
+                        subTotal = {
+                            ship_cnt: 0,
+                            ord_amt: 0,
+                            matl_amt: 0,
+                            fc_amt: 0,
+                            etc_amt: 0,
+                            comm_amt: 0,
+                            tot_amt: 0,
+                            diff: 0,
+                        };
+                    }
+
+                    // 데이터 입력
+                    sheet.getCell(tRowIdx, 1).value = tOne.buyer;
+                    sheet.getCell(tRowIdx, 2).value = tOne.style;
+                    sheet.getCell(tRowIdx, 3).value = moment(
+                        tOne.ship_date,
+                        'YYYYMM',
+                    ).format('YYYY-MM');
+                    sheet.getCell(tRowIdx, 4).value = tOne.ship_cnt;
+                    sheet.getCell(tRowIdx, 5).value = tOne.ord_amt;
+                    sheet.getCell(tRowIdx, 6).value = tOne.matl_amt;
+                    sheet.getCell(tRowIdx, 7).value = tOne.fc_amt;
+                    sheet.getCell(tRowIdx, 8).value = tOne.etc_amt;
+                    sheet.getCell(tRowIdx, 9).value = tOne.comm_amt;
+                    sheet.getCell(tRowIdx, 10).value = tOne.tot_amt;
+                    sheet.getCell(tRowIdx, 11).value = tOne.diff;
+
+                    var tRate =
+                        tOne.ord_amt > 0
+                            ? (tOne.diff / tOne.ord_amt) * 100.0
+                            : 0;
+                    sheet.getCell(tRowIdx, 12).value = tRate;
+
+                    // Sub Total 업데이트
+                    subTotal.ship_cnt += tOne.ship_cnt;
+                    subTotal.ord_amt += tOne.ord_amt;
+                    subTotal.matl_amt += tOne.matl_amt;
+                    subTotal.fc_amt += tOne.fc_amt;
+                    subTotal.etc_amt += tOne.etc_amt;
+                    subTotal.comm_amt += tOne.comm_amt;
+                    subTotal.tot_amt += tOne.tot_amt;
+                    subTotal.diff += tOne.diff;
+
+                    prevBuyer = tOne.buyer;
+                    lastMergeRow = tRowIdx;
+                    tRowIdx += 1;
+                });
+
+                // 마지막 Buyer의 Sub Total 추가
+                if (prevBuyer !== null) {
+                    subTotalRow = tRowIdx;
+
+                    // ✅ B, C 컬럼 병합 (Merge)
+                    sheet.mergeCells(tRowIdx, 2, tRowIdx, 3);
+
+                    // ✅ "Sub Total" 라벨링 + Bold + 빨간색 적용
+                    sheet.getCell(tRowIdx, 2).value = 'Sub Total';
+                    sheet.getCell(tRowIdx, 2).font = {
+                        bold: true,
+                    };
+
+                    // ✅ Sub Total 데이터 입력 (Bold + 빨간색)
+                    for (let col = 4; col <= 12; col++) {
+                        sheet.getCell(tRowIdx, col).value =
+                            subTotal[Object.keys(subTotal)[col - 4]];
+                        sheet.getCell(tRowIdx, col).font = {
+                            bold: true,
+                        };
+                    }
+
+                    var tRate =
+                        subTotal.ord_amt > 0
+                            ? (subTotal.diff / subTotal.ord_amt) * 100.0
+                            : 0;
+                    sheet.getCell(tRowIdx, 12).value = tRate;
+
+                    tRowIdx += 1;
+
+                    // ✅ 마지막 Buyer의 A 컬럼 병합
+                    if (startMergeRow < subTotalRow - 1) {
+                        sheet.mergeCells(startMergeRow, 1, subTotalRow, 1);
+                    }
+                }
+                sheet.getCell(4, 3).value = '';
+                sheet.mergeCells(4, 1, 4, 3);
+
+                // 5행 내용 모두 지우기
+                sheet.getRow(5).values = [];
+
+                // ✅ 4번 라인부터 끝까지 테두리 적용
+                const lastRow = sheet.rowCount; // 마지막 행 찾기
+                for (let row = 4; row <= lastRow; row++) {
+                    sheet.getRow(row).eachCell((cell) => {
+                        cell.border = {
+                            top: {
+                                style: 'thin',
+                            },
+                            left: {
+                                style: 'thin',
+                            },
+                            bottom: {
+                                style: 'thin',
+                            },
+                            right: {
+                                style: 'thin',
+                            },
+                        };
+                    });
+                }
+
+                return await upload(`${tWExcelFile}.xlsx`, wb);
+            } catch (error) {
+                console.log(error);
+                var tRetArray = [];
+                var tObj = {};
+                tObj.id = 0;
+                tObj.CODE = 'ERROR: ' + error.message;
+                tRetArray.push(tObj);
+                return tRetArray;
+            }
+        },
+
+        mgrQuery_S0213_EXCEL_REPORT4: async (_, args, contextValue) => {
+            var tRetDate = AFLib.getCurrTime();
+            var tRetDate1 = tRetDate.substring(0, 8);
+            var tUserInfo = AFLib.getUserInfo(contextValue);
+
+            var tFunc = new S0213_QRY_COMM();
+            var tFlag = await tFunc.makeListData2(args.data, contextValue);
+            var tFlag2 = await tFunc.makeBuyerProfitLoss(
+                args.data,
+                contextValue,
+            );
+
+            var tWExcelFile = `영업_바이어별손익현황-${tUserInfo.USER_ID}-${tRetDate1}`;
+
+            var tTitle = 'Profit and Loss';
+            var tSubTitle = ``;
+            if (args.data.DUEDATE_FLAG === '1')
+                tSubTitle = `${args.data.S_DUE_DATE} ~ ${args.data.E_DUE_DATE} 현황 (오더납기기준)`;
+            if (args.data.SHIPDATE_FLAG === '1')
+                tSubTitle = `${args.data.S_DUE_DATE} ~ ${args.data.E_DUE_DATE} 현황 (제품선적기준)`;
+            var tUnitTitle = `${moment(tRetDate1, 'YYYYMMDD').format('YYYY-MM-DD')} 단위($)`;
+
+            var tFunc = new S0213_QRY_COMM();
+            var tFlag = await tFunc.makeListData2(args.data, contextValue);
+
+            let sqlStr0 = `
+                select
+                    header01,
+                    header02,
+                    header03,
+                    header04,
+                    header05,
+                    header06,
+                    header07,
+                    header08,
+                    header09,
+                    header10,
+                    header11,
+                    header12,
+                    header13,
+                    header14
+                from
+                    ksv_order_temp21
+                where
+                    user_id = '${tUserInfo.USER_ID}'
+            `;
+            var tRetHeader = await prisma.$queryRaw(Prisma.raw(sqlStr0));
+
+            var tTotOrdSum = new Array(13);
+            var tTotUseSum = new Array(13);
+
+            var tIdx = 0;
+            for (tIdx = 0; tIdx < 13; tIdx++) {
+                tTotOrdSum[tIdx] = 0;
+                tTotUseSum[tIdx] = 0;
+            }
+
+            let sqlStr1 = `
+                select
+                    buyer,
+                    tot_ord,
+                    tot_use,
+                    m01_ord,
+                    m01_use,
+                    m02_ord,
+                    m02_use,
+                    m03_ord,
+                    m03_use,
+                    m04_ord,
+                    m04_use,
+                    m05_ord,
+                    m05_use,
+                    m06_ord,
+                    m06_use,
+                    m07_ord,
+                    m07_use,
+                    m08_ord,
+                    m08_use,
+                    m09_ord,
+                    m09_use,
+                    m10_ord,
+                    m10_use,
+                    m11_ord,
+                    m11_use,
+                    m12_ord,
+                    m12_use
+                from
+                    ksv_order_temp22
+                where
+                    user_id = '${tUserInfo.USER_ID}'
+                order by
+                    (tot_ord - tot_use) desc
+            `;
+            var tRet = await prisma.$queryRaw(Prisma.raw(sqlStr1));
+
+            try {
+                var tSQL = '';
+
+                // Excel Read
+                var tPath0 = '';
+                var tCols0 = __dirname.split('/');
+                var tFlag0 = 0;
+                tCols0.forEach((col, i) => {
+                    if (col !== '') {
+                        if (col === 'src') {
+                            tPath0 += '/upload/excel_template';
+                            tFlag0 = 1;
+                        }
+                        if (tFlag0 === 0) {
+                            tPath0 += '/' + col;
+                        }
+                    }
+                });
+
+
+                // Query 다시 
+                // Buyer별 - 신티에스 : SHINTS
+                tSQL = '';
+                var sqlStr = `
+                    select
+                        a.buyer as title,
+                        isnull(sum(a.ship_cnt), 0) as ship_cnt,
+                        isnull(sum(a.ord_amt), 0) as ord_amt,
+                        isnull(sum(a.matl_amt), 0) as matl_amt,
+                        isnull(sum(a.bvt_local), 0) as bvt_local,
+                        isnull(sum(a.fc_amt), 0) as fc_amt,
+                        isnull(sum(a.etc_amt), 0) as etc_amt,
+                        isnull(sum(a.comm_amt), 0) as comm_amt,
+                        isnull(sum(a.tot_amt), 0) as tot_amt,
+                        c.cd_name as buyer_team
+                    from
+                        ksv_order_temp a,
+                        kcd_buyer b
+                        left join kcd_code c on c.cd_code = b.buyer_team
+                        and c.cd_group = 'BUYER_TEAM'
+                    where
+                        a.user_id = '${tUserInfo.USER_ID}'
+                        and b.glove_flag = '0'
+                        and b.buyer_name = a.buyer 
+                        and b.buyer_cd like '%${args.data.BUYER_CD}%'
+                    group by
+                        a.buyer,
+                        c.cd_name
+                    order by
+                        a.buyer
+                `;
+                var tRetSumBuyer = await prisma.$queryRaw(Prisma.raw(sqlStr));
+                var tSumArrayBuyer = [];
+    
+                var s_ship_cnt = 0;
+                var s_ord_amt = 0;
+                var s_matl_amt = 0;
+                var s_bvt_local = 0;
+                var s_fc_amt = 0;
+                var s_etc_amt = 0;
+                var s_comm_amt = 0;
+                var s_tot_amt = 0;
+                var s_diff = 0;
+    
+                tRetSumBuyer.forEach((col, i) => {
+                    var tObj = {
+                        ...col,
+                    };
+                    var tTotAmt0 = parseFloat(tObj.matl_amt) + 
+                              parseFloat(tObj.bvt_local) + 
+                              parseFloat(tObj.fc_amt) + 
+                              parseFloat(tObj.etc_amt) + 
+                              parseFloat(tObj.comm_amt); 
+                    tObj.tot_amt = tTotAmt0;
+                    var tDiff0 = parseFloat(tObj.ord_amt) - parseFloat(tObj.tot_amt);
+                    tObj.diff = tDiff0;
+                    if (tObj.ord_amt > 0)
+                        tObj.rate = (tObj.diff / tObj.ord_amt) * 100.0;
+                    else tObj.rate = 0.0;
+                    tSumArrayBuyer.push(tObj);
+    
+                    s_ship_cnt += tObj.ship_cnt;
+                    s_ord_amt += tObj.ord_amt;
+                    s_matl_amt += tObj.matl_amt;
+                    s_bvt_local += tObj.bvt_local;
+                    s_fc_amt += tObj.fc_amt;
+                    s_etc_amt += tObj.etc_amt;
+                    s_comm_amt += tObj.comm_amt;
+                    s_tot_amt += tObj.tot_amt;
+                    s_diff += tObj.diff;
+                });
+
+
+                var tTemplateExcel = `${tPath0}/영업_바이어별손익현황.xlsx`;
+
+                const wb = new Excel.Workbook();
+                await wb.xlsx.readFile(tTemplateExcel);
+
+                var tSheetName = `Sheet1`;
+                const sheet = wb.getWorksheet(tSheetName);
+                sheet.name = '영업_바이어별손익현황';
+
+                sheet.getCell(1, 1).value = tTitle;
+                sheet.getCell(2, 1).value = tSubTitle;
+                sheet.getCell('G2').value = tUnitTitle;
+
+                var tRowIdx = 3;
+                tRetHeader.forEach((col, i) => {
+                    sheet.getCell(tRowIdx, 1).value = col.header01;
+                    sheet.getCell(tRowIdx, 2).value = col.header02;
+                    sheet.getCell(tRowIdx, 3).value = col.header03;
+                    sheet.getCell(tRowIdx, 4).value = col.header04;
+                    sheet.getCell(tRowIdx, 5).value = col.header05;
+                    sheet.getCell(tRowIdx, 6).value = col.header06;
+                    sheet.getCell(tRowIdx, 7).value = col.header07;
+                    sheet.getCell(tRowIdx, 8).value = col.header08;
+                    sheet.getCell(tRowIdx, 9).value = col.header09;
+                    sheet.getCell(tRowIdx, 10).value = col.header10;
+                    sheet.getCell(tRowIdx, 11).value = col.header11;
+                    sheet.getCell(tRowIdx, 12).value = col.header12;
+                    sheet.getCell(tRowIdx, 13).value = col.header13;
+                    sheet.getCell(tRowIdx, 14).value = col.header14;
+                    tRowIdx += 1;
+                });
+
+                var tIdx2 = 0;
+                for (tIdx2 =0; tIdx2 < tSumArrayBuyer.length; tIdx2++) {
+                    var col = { ...tSumArrayBuyer[tIdx2] };
+                    sheet.getCell(tRowIdx, 1).value = col.title;
+                    sheet.getCell(tRowIdx, 2).value = Number(parseFloat(col.diff).toFixed(0));
+
+                    var tIdx3 = 0;
+                    for (tIdx3 = 0; tIdx3 < 12; tIdx3 ++) {
+                        sheet.getCell(tRowIdx, 3+tIdx3).value = Number('0');
+                    }
+
+                    var sqlStr2 = `
+                        select
+                            a.buyer as title,
+                            left(a.ship_date, 6) as ship_date,
+                            isnull(sum(a.ship_cnt), 0) as ship_cnt,
+                            isnull(sum(a.ord_amt), 0) as ord_amt,
+                            isnull(sum(a.matl_amt), 0) as matl_amt,
+                            isnull(sum(a.bvt_local), 0) as bvt_local,
+                            isnull(sum(a.fc_amt), 0) as fc_amt,
+                            isnull(sum(a.etc_amt), 0) as etc_amt,
+                            isnull(sum(a.comm_amt), 0) as comm_amt,
+                            isnull(sum(a.tot_amt), 0) as tot_amt,
+                            c.cd_name as buyer_team
+                        from
+                            ksv_order_temp a,
+                            kcd_buyer b
+                            left join kcd_code c on c.cd_code = b.buyer_team
+                            and c.cd_group = 'BUYER_TEAM'
+                        where
+                            a.user_id = '${tUserInfo.USER_ID}'
+                            and b.glove_flag = '0'
+                            and b.buyer_name = a.buyer 
+                            and b.buyer_cd like '%${args.data.BUYER_CD}%'
+                            and a.buyer = '${col.title}'
+                        group by
+                            a.buyer,
+                            left(a.ship_date, 6),
+                            c.cd_name
+                        order by
+                            a.buyer, 
+                            a.ship_date
+                    `;
+                    var tRetSumBuyer2 = await prisma.$queryRaw(Prisma.raw(sqlStr2));
+
+                    var tSum0 = 0;
+                    tRetSumBuyer2.forEach((col2, i2) => {
+                        var tObj = {
+                            ...col2,
+                        };
+                        var tTotAmt0 = parseFloat(tObj.matl_amt) + 
+                              parseFloat(tObj.bvt_local) + 
+                              parseFloat(tObj.fc_amt) + 
+                              parseFloat(tObj.etc_amt) + 
+                              parseFloat(tObj.comm_amt); 
+                        tObj.tot_amt = tTotAmt0;
+                        var tDiff0 = parseFloat(tObj.ord_amt) - parseFloat(tObj.tot_amt);
+                        tObj.diff = tDiff0;
+                        if (tObj.ord_amt > 0)
+                            tObj.rate = (tObj.diff / tObj.ord_amt) * 100.0;
+                        else tObj.rate = 0.0;
+
+                        if (tObj.ship_date.substring(4, 6) === '01') sheet.getCell(tRowIdx, 3).value = Number(parseFloat(tObj.diff).toFixed(0));
+                        if (tObj.ship_date.substring(4, 6) === '02') sheet.getCell(tRowIdx, 4).value = Number(parseFloat(tObj.diff).toFixed(0));
+                        if (tObj.ship_date.substring(4, 6) === '03') sheet.getCell(tRowIdx, 5).value = Number(parseFloat(tObj.diff).toFixed(0));
+                        if (tObj.ship_date.substring(4, 6) === '04') sheet.getCell(tRowIdx, 6).value = Number(parseFloat(tObj.diff).toFixed(0));
+                        if (tObj.ship_date.substring(4, 6) === '05') sheet.getCell(tRowIdx, 7).value = Number(parseFloat(tObj.diff).toFixed(0));
+                        if (tObj.ship_date.substring(4, 6) === '06') sheet.getCell(tRowIdx, 8).value = Number(parseFloat(tObj.diff).toFixed(0));
+                        if (tObj.ship_date.substring(4, 6) === '07') sheet.getCell(tRowIdx, 9).value = Number(parseFloat(tObj.diff).toFixed(0));
+                        if (tObj.ship_date.substring(4, 6) === '08') sheet.getCell(tRowIdx, 10).value = Number(parseFloat(tObj.diff).toFixed(0));
+                        if (tObj.ship_date.substring(4, 6) === '09') sheet.getCell(tRowIdx, 11).value = Number(parseFloat(tObj.diff).toFixed(0));
+                        if (tObj.ship_date.substring(4, 6) === '10') sheet.getCell(tRowIdx, 12).value = Number(parseFloat(tObj.diff).toFixed(0));
+                        if (tObj.ship_date.substring(4, 6) === '11') sheet.getCell(tRowIdx, 13).value = Number(parseFloat(tObj.diff).toFixed(0));
+                        if (tObj.ship_date.substring(4, 6) === '12') sheet.getCell(tRowIdx, 14).value = Number(parseFloat(tObj.diff).toFixed(0));
+                        tSum0 += Number(parseFloat(tObj.diff).toFixed(0));
+                    });
+                    // sheet.getCell(tRowIdx, 15).value = Number(tSum0);
+
+                    tRowIdx += 1;
+                }
+
+                /*
+                tRet.forEach((col, i) => {
+                    sheet.getCell(tRowIdx, 1).value = col.buyer;
+                    sheet.getCell(tRowIdx, 2).value = col.tot_ord - col.tot_use;
+                    sheet.getCell(tRowIdx, 3).value = col.m01_ord - col.m01_use;
+                    sheet.getCell(tRowIdx, 4).value = col.m02_ord - col.m02_use;
+                    sheet.getCell(tRowIdx, 5).value = col.m03_ord - col.m03_use;
+                    sheet.getCell(tRowIdx, 6).value = col.m04_ord - col.m04_use;
+                    sheet.getCell(tRowIdx, 7).value = col.m05_ord - col.m05_use;
+                    sheet.getCell(tRowIdx, 8).value = col.m06_ord - col.m06_use;
+                    sheet.getCell(tRowIdx, 9).value = col.m07_ord - col.m07_use;
+                    sheet.getCell(tRowIdx, 10).value =
+                        col.m08_ord - col.m08_use;
+                    sheet.getCell(tRowIdx, 11).value =
+                        col.m09_ord - col.m09_use;
+                    sheet.getCell(tRowIdx, 12).value =
+                        col.m10_ord - col.m10_use;
+                    sheet.getCell(tRowIdx, 13).value =
+                        col.m11_ord - col.m11_use;
+                    sheet.getCell(tRowIdx, 14).value =
+                        col.m12_ord - col.m12_use;
+                    tRowIdx += 1;
+                });
+                */
+
+                return await upload(`${tWExcelFile}.xlsx`, wb);
+            } catch (error) {
+                var tRetArray = [];
+                var tObj = {};
+                tObj.id = 0;
+                tObj.CODE = 'ERROR: ' + error.message;
+                tRetArray.push(tObj);
+                return tRetArray;
+            }
+        },
+
+        mgrQuery_S0213_EXCEL_REPORT8: async (_, args, contextValue) => {
+            var tRetDate = AFLib.getCurrTime();
+            var tRetDate1 = tRetDate.substring(0, 8);
+            var tUserInfo = AFLib.getUserInfo(contextValue);
+
+            var tFunc = new S0213_QRY_COMM();
+            var tFlag = await tFunc.makeListData2(args.data, contextValue);
+
+            var tWExcelFile = `종합월보고파일-${tUserInfo.USER_ID}-${tRetDate1}`;
+
+            var tTitle = '';
+            var tSubTitle1 = `년도 별 ${args.data.E_DUE_DATE.substring(4, 6)}월까지 증감비교한 것(TOTAL)`;
+            var tSubTitle2 = `년도 별 ${args.data.E_DUE_DATE.substring(4, 6)}월까지 증감비교한 것(BVT)`;
+            var tSubTitle3 = `년도 별 ${args.data.E_DUE_DATE.substring(4, 6)}월까지 증감비교한 것(ETP)`;
+            var tSubTitle4 = `년도 별 ${args.data.E_DUE_DATE.substring(4, 6)}월까지 증감비교한 것(INTERNAL)`;
+
+            var tYY = parseInt(args.data.S_DUE_DATE.substring(0, 4));
+            var tMM1 = parseInt(args.data.S_DUE_DATE.substring(4, 6));
+            var tMM2 = parseInt(args.data.E_DUE_DATE.substring(4, 6));
+            var tMM1Str = '';
+            if (tMM1 < 10) tMM1Str = `0${tMM1}`;
+            else tMM1Str = String(tMM1);
+            var tMM2Str = '';
+            if (tMM2 < 10) tMM2Str = `0${tMM2}`;
+            else tMM2Str = String(tMM2);
+
+            var tYYArray = new Array(7);
+            var tIdx = 0;
+            for (tIdx = 0; tIdx < 7; tIdx++) {
+                tYYArray[6 - tIdx] = tYY - tIdx;
+            }
+
+            try {
+                // Excel Read
+                var tPath0 = '';
+                var tCols0 = __dirname.split('/');
+                var tFlag0 = 0;
+                tCols0.forEach((col, i) => {
+                    if (col !== '') {
+                        if (col === 'src') {
+                            tPath0 += '/upload/excel_template';
+                            tFlag0 = 1;
+                        }
+                        if (tFlag0 === 0) {
+                            tPath0 += '/' + col;
+                        }
+                    }
+                });
+
+                var tTemplateExcel = `${tPath0}/종합월보고파일.xlsx`;
+
+                const wb = new Excel.Workbook();
+                await wb.xlsx.readFile(tTemplateExcel);
+
+                var tSheetName = `Summary(2번)`;
+                const sheet = wb.getWorksheet(tSheetName);
+
+                sheet.getCell(2, 2).value = tSubTitle1;
+                sheet.getCell(2, 11).value = tRetDate1;
+                sheet.getCell(17, 2).value = tSubTitle2;
+                sheet.getCell(32, 2).value = tSubTitle3;
+                sheet.getCell(47, 2).value = tSubTitle4;
+
+                tYYArray.forEach((col, i) => {
+                    sheet.getCell(3, 3 + i).value = `${col}년`;
+                    sheet.getCell(18, 3 + i).value = `${col}년`;
+                    sheet.getCell(33, 3 + i).value = `${col}년`;
+                    sheet.getCell(48, 3 + i).value = `${col}년`;
+                });
+
+                // Total
+                var tSql = `
+                    select
+                        sum(a.ship_cnt) as ship_cnt,
+                        sum(a.ord_amt) as ord_amt,
+                        sum(a.matl_amt) as matl_amt,
+                        sum(a.bvt_local) as bvt_local_amt,
+                        sum(a.fc_amt) as fc_amt,
+                        sum(a.etc_amt) as etc_amt,
+                        sum(a.comm_amt) as comm_amt,
+                        (
+                            sum(a.matl_amt) + sum(a.bvt_local) + sum(a.fc_amt) + sum(a.etc_amt) + sum(a.comm_amt)
+                        ) as tot_amt,
+                        (sum(a.ord_amt) - (sum(a.matl_amt) + sum(a.bvt_local) + sum(a.fc_amt) + sum(a.etc_amt) + sum(a.comm_amt))) as diff
+                    from
+                        ksv_order_temp a
+                    where
+                        user_id = '${tUserInfo.USER_ID}'
+                `;
+                var tRet = await prisma.$queryRaw(Prisma.raw(tSql));
+                var col = {
+                    ...tRet[0],
+                };
+                var tRow = 4;
+                sheet.getCell(tRow + 0, 9).value = col.ship_cnt;
+                sheet.getCell(tRow + 1, 9).value = col.ord_amt;
+                sheet.getCell(tRow + 2, 9).value = parseFloat(col.matl_amt) + parseFloat(col.bvt_local_amt);
+                sheet.getCell(tRow + 3, 9).value = col.fc_amt;
+                sheet.getCell(tRow + 4, 9).value = col.etc_amt;
+                sheet.getCell(tRow + 5, 9).value = col.comm_amt;
+                sheet.getCell(tRow + 6, 9).value = col.tot_amt;
+                sheet.getCell(tRow + 7, 9).value = col.diff;
+
+                for (tIdx = 0; tIdx < 6; tIdx++) {
+                    tSql = `
+                        select
+                            sum(a.ship_cnt) as ship_cnt,
+                            sum(a.ord_amt) as ord_amt,
+                            sum(a.matl_amt) as matl_amt,
+                            sum(a.fc_amt) as fc_amt,
+                            sum(a.etc_amt) as etc_amt,
+                            sum(a.comm_amt) as comm_amt,
+                            (
+                                sum(a.matl_amt) + sum(a.fc_amt) + sum(a.etc_amt) + sum(a.comm_amt)
+                            ) as tot_amt,
+                            (sum(a.ord_amt) - (sum(a.matl_amt) + sum(a.fc_amt) + sum(a.etc_amt) + sum(a.comm_amt))) as diff
+                        from
+                            ksv_order_temp a
+                        where
+                            user_id = 'old'
+                            and left(a.ship_date, 6) between '${tYYArray[tIdx]}${tMM1Str}' and '${tYYArray[tIdx]}${tMM2Str}'
+                    `;
+                    tRet = await prisma.$queryRaw(Prisma.raw(tSql));
+
+                    col = {
+                        ...tRet[0],
+                    };
+                    sheet.getCell(tRow + 0, 3 + tIdx).value = col.ship_cnt;
+                    sheet.getCell(tRow + 1, 3 + tIdx).value = col.ord_amt;
+                    sheet.getCell(tRow + 2, 3 + tIdx).value = col.matl_amt;
+                    sheet.getCell(tRow + 3, 3 + tIdx).value = col.fc_amt;
+                    sheet.getCell(tRow + 4, 3 + tIdx).value = col.etc_amt;
+                    sheet.getCell(tRow + 5, 3 + tIdx).value = col.comm_amt;
+                    sheet.getCell(tRow + 6, 3 + tIdx).value = col.tot_amt;
+                    sheet.getCell(tRow + 7, 3 + tIdx).value = col.diff;
+                }
+
+                //  BVT
+                tSql = `
+                    select
+                        sum(a.ship_cnt) as ship_cnt,
+                        sum(a.ord_amt) as ord_amt,
+                        sum(a.matl_amt) as matl_amt,
+                        sum(a.bvt_local) as bvt_local_amt,
+                        sum(a.fc_amt) as fc_amt,
+                        sum(a.etc_amt) as etc_amt,
+                        sum(a.comm_amt) as comm_amt,
+                        (
+                            sum(a.matl_amt) + sum(a.bvt_local) + sum(a.fc_amt) + sum(a.etc_amt) + sum(a.comm_amt)
+                        ) as tot_amt,
+                        (sum(a.ord_amt) - (sum(a.matl_amt) + sum(a.bvt_local) + sum(a.fc_amt) + sum(a.etc_amt) + sum(a.comm_amt))) as diff
+                    from
+                        ksv_order_temp a
+                    where
+                        user_id = '${tUserInfo.USER_ID}'
+                        and factory = 'SHINTS BVT CO., LTD'
+                `;
+                tRet = await prisma.$queryRaw(Prisma.raw(tSql));
+                col = {
+                    ...tRet[0],
+                };
+                tRow = 19;
+                sheet.getCell(tRow + 0, 9).value = col.ship_cnt;
+                sheet.getCell(tRow + 1, 9).value = col.ord_amt;
+                sheet.getCell(tRow + 2, 9).value = parseFloat(col.matl_amt) + parseFloat(col.bvt_local_amt);
+                sheet.getCell(tRow + 3, 9).value = col.fc_amt;
+                sheet.getCell(tRow + 4, 9).value = col.etc_amt;
+                sheet.getCell(tRow + 5, 9).value = col.comm_amt;
+                sheet.getCell(tRow + 6, 9).value = col.tot_amt;
+                sheet.getCell(tRow + 7, 9).value = col.diff;
+
+                for (tIdx = 0; tIdx < 6; tIdx++) {
+                    tSql = `
+                        select
+                            sum(a.ship_cnt) as ship_cnt,
+                            sum(a.ord_amt) as ord_amt,
+                            sum(a.matl_amt) as matl_amt,
+                            sum(a.fc_amt) as fc_amt,
+                            sum(a.etc_amt) as etc_amt,
+                            sum(a.comm_amt) as comm_amt,
+                            (
+                                sum(a.matl_amt) + sum(a.fc_amt) + sum(a.etc_amt) + sum(a.comm_amt)
+                            ) as tot_amt,
+                            (sum(a.ord_amt) - (sum(a.matl_amt) + sum(a.fc_amt) + sum(a.etc_amt) + sum(a.comm_amt))) as diff
+                        from
+                            ksv_order_temp a
+                        where
+                            user_id = 'old'
+                            and factory = 'SHINTS BVT CO., LTD'
+                            and left(a.ship_date, 6) between '${tYYArray[tIdx]}${tMM1Str}' and '${tYYArray[tIdx]}${tMM2Str}'
+                    `;
+                    tRet = await prisma.$queryRaw(Prisma.raw(tSql));
+
+                    col = {
+                        ...tRet[0],
+                    };
+                    sheet.getCell(tRow + 0, 3 + tIdx).value = col.ship_cnt;
+                    sheet.getCell(tRow + 1, 3 + tIdx).value = col.ord_amt;
+                    sheet.getCell(tRow + 2, 3 + tIdx).value = col.matl_amt;
+                    sheet.getCell(tRow + 3, 3 + tIdx).value = col.fc_amt;
+                    sheet.getCell(tRow + 4, 3 + tIdx).value = col.etc_amt;
+                    sheet.getCell(tRow + 5, 3 + tIdx).value = col.comm_amt;
+                    sheet.getCell(tRow + 6, 3 + tIdx).value = col.tot_amt;
+                    sheet.getCell(tRow + 7, 3 + tIdx).value = col.diff;
+                }
+
+                //  ETP
+                tSql = `
+                    select
+                        sum(a.ship_cnt) as ship_cnt,
+                        sum(a.ord_amt) as ord_amt,
+                        sum(a.matl_amt) as matl_amt,
+                        sum(a.bvt_local) as bvt_local_amt,
+                        sum(a.fc_amt) as fc_amt,
+                        sum(a.etc_amt) as etc_amt,
+                        sum(a.comm_amt) as comm_amt,
+                        (
+                            sum(a.matl_amt) + sum(a.bvt_local) + sum(a.fc_amt) + sum(a.etc_amt) + sum(a.comm_amt)
+                        ) as tot_amt,
+                        (sum(a.ord_amt) - (sum(a.matl_amt) + sum(a.bvt_local) + sum(a.fc_amt) + sum(a.etc_amt) + sum(a.comm_amt))) as diff
+                    from
+                        ksv_order_temp a
+                    where
+                        user_id = '${tUserInfo.USER_ID}'
+                        and factory = 'SHINTS ETP GARMENT PLC'
+                `;
+                tRet = await prisma.$queryRaw(Prisma.raw(tSql));
+                col = {
+                    ...tRet[0],
+                };
+                tRow = 34;
+                sheet.getCell(tRow + 0, 9).value = col.ship_cnt;
+                sheet.getCell(tRow + 1, 9).value = col.ord_amt;
+                sheet.getCell(tRow + 2, 9).value = parseFloat(col.matl_amt) + parseFloat(col.bvt_local_amt);
+                sheet.getCell(tRow + 3, 9).value = col.fc_amt;
+                sheet.getCell(tRow + 4, 9).value = col.etc_amt;
+                sheet.getCell(tRow + 5, 9).value = col.comm_amt;
+                sheet.getCell(tRow + 6, 9).value = col.tot_amt;
+                sheet.getCell(tRow + 7, 9).value = col.diff;
+
+                for (tIdx = 0; tIdx < 6; tIdx++) {
+                    tSql = `
+                        select
+                            sum(a.ship_cnt) as ship_cnt,
+                            sum(a.ord_amt) as ord_amt,
+                            sum(a.matl_amt) as matl_amt,
+                            sum(a.fc_amt) as fc_amt,
+                            sum(a.etc_amt) as etc_amt,
+                            sum(a.comm_amt) as comm_amt,
+                            (
+                                sum(a.matl_amt) + sum(a.fc_amt) + sum(a.etc_amt) + sum(a.comm_amt)
+                            ) as tot_amt,
+                            (sum(a.ord_amt) - (sum(a.matl_amt) + sum(a.fc_amt) + sum(a.etc_amt) + sum(a.comm_amt))) as diff
+                        from
+                            ksv_order_temp a
+                        where
+                            user_id = 'old'
+                            and factory = 'SHINTS ETP GARMENT PLC'
+                            and left(a.ship_date, 6) between '${tYYArray[tIdx]}${tMM1Str}' and '${tYYArray[tIdx]}${tMM2Str}'
+                    `;
+                    tRet = await prisma.$queryRaw(Prisma.raw(tSql));
+
+                    col = {
+                        ...tRet[0],
+                    };
+                    sheet.getCell(tRow + 0, 3 + tIdx).value = col.ship_cnt;
+                    sheet.getCell(tRow + 1, 3 + tIdx).value = col.ord_amt;
+                    sheet.getCell(tRow + 2, 3 + tIdx).value = col.matl_amt;
+                    sheet.getCell(tRow + 3, 3 + tIdx).value = col.fc_amt;
+                    sheet.getCell(tRow + 4, 3 + tIdx).value = col.etc_amt;
+                    sheet.getCell(tRow + 5, 3 + tIdx).value = col.comm_amt;
+                    sheet.getCell(tRow + 6, 3 + tIdx).value = col.tot_amt;
+                    sheet.getCell(tRow + 7, 3 + tIdx).value = col.diff;
+                }
+
+                //  INTERNAL
+                tSql = `
+                    select
+                        sum(a.ship_cnt) as ship_cnt,
+                        sum(a.ord_amt) as ord_amt,
+                        sum(a.matl_amt) as matl_amt,
+                        sum(a.bvt_local) as bvt_local_amt,
+                        sum(a.fc_amt) as fc_amt,
+                        sum(a.etc_amt) as etc_amt,
+                        sum(a.comm_amt) as comm_amt,
+                        (
+                            sum(a.matl_amt) + sum(a.bvt_local) + sum(a.fc_amt) + sum(a.etc_amt) + sum(a.comm_amt)
+                        ) as tot_amt,
+                        (sum(a.ord_amt) - (sum(a.matl_amt) + sum(a.bvt_local) + sum(a.fc_amt) + sum(a.etc_amt) + sum(a.comm_amt))) as diff
+                    from
+                        ksv_order_temp a
+                    where
+                        user_id = '${tUserInfo.USER_ID}'
+                        and factory not in ('SHINTS ETP GARMENT PLC', 'SHINTS BVT CO., LTD')
+                `;
+                tRet = await prisma.$queryRaw(Prisma.raw(tSql));
+                col = {
+                    ...tRet[0],
+                };
+                tRow = 49;
+                sheet.getCell(tRow + 0, 9).value = col.ship_cnt;
+                sheet.getCell(tRow + 1, 9).value = col.ord_amt;
+                sheet.getCell(tRow + 2, 9).value = parseFloat(col.matl_amt) + parseFloat(col.bvt_local_amt);
+                sheet.getCell(tRow + 3, 9).value = col.fc_amt;
+                sheet.getCell(tRow + 4, 9).value = col.etc_amt;
+                sheet.getCell(tRow + 5, 9).value = col.comm_amt;
+                sheet.getCell(tRow + 6, 9).value = col.tot_amt;
+                sheet.getCell(tRow + 7, 9).value = col.diff;
+
+                for (tIdx = 0; tIdx < 6; tIdx++) {
+                    tSql = `
+                        select
+                            sum(a.ship_cnt) as ship_cnt,
+                            sum(a.ord_amt) as ord_amt,
+                            sum(a.matl_amt) as matl_amt,
+                            sum(a.fc_amt) as fc_amt,
+                            sum(a.etc_amt) as etc_amt,
+                            sum(a.comm_amt) as comm_amt,
+                            (
+                                sum(a.matl_amt) + sum(a.fc_amt) + sum(a.etc_amt) + sum(a.comm_amt)
+                            ) as tot_amt,
+                            (sum(a.ord_amt) - (sum(a.matl_amt) + sum(a.fc_amt) + sum(a.etc_amt) + sum(a.comm_amt))) as diff
+                        from
+                            ksv_order_temp a
+                        where
+                            user_id = 'old'
+                            and factory not in ('SHINTS ETP GARMENT PLC', 'SHINTS BVT CO., LTD')
+                            and left(a.ship_date, 6) between '${tYYArray[tIdx]}${tMM1Str}' and '${tYYArray[tIdx]}${tMM2Str}'
+                    `;
+                    tRet = await prisma.$queryRaw(Prisma.raw(tSql));
+
+                    col = {
+                        ...tRet[0],
+                    };
+                    sheet.getCell(tRow + 0, 3 + tIdx).value = col.ship_cnt;
+                    sheet.getCell(tRow + 1, 3 + tIdx).value = col.ord_amt;
+                    sheet.getCell(tRow + 2, 3 + tIdx).value = col.matl_amt;
+                    sheet.getCell(tRow + 3, 3 + tIdx).value = col.fc_amt;
+                    sheet.getCell(tRow + 4, 3 + tIdx).value = col.etc_amt;
+                    sheet.getCell(tRow + 5, 3 + tIdx).value = col.comm_amt;
+                    sheet.getCell(tRow + 6, 3 + tIdx).value = col.tot_amt;
+                    sheet.getCell(tRow + 7, 3 + tIdx).value = col.diff;
+                }
+                return await upload(`${tWExcelFile}.xlsx`, wb);
+            } catch (error) {
+                var tRetArray = [];
+                var tObj = {};
+                tObj.id = 0;
+                tObj.CODE = 'ERROR: ' + error.message;
+                tRetArray.push(tObj);
+                return tRetArray;
+            }
+        },
+
+        mgrQuery_S0213_EXCEL_REPORT9: async (_, args, contextValue) => {
+            var tRetDate = AFLib.getCurrTime();
+            var tRetDate1 = tRetDate.substring(0, 8);
+            var tUserInfo = AFLib.getUserInfo(contextValue);
+
+            var tFunc = new S0213_QRY_COMM();
+            var tFlag = await tFunc.makeListData2(args.data, contextValue);
+
+            var tWExcelFile = `영업_오더현황(팀별)-${tUserInfo.USER_ID}-${tRetDate1}`;
+            if (args.data.FACTORY_CD === '') {
+                if (args.data.BUYER_CD === '')
+                    tWExcelFile = `영업_오더현황(팀별)-${tUserInfo.USER_ID}-${tRetDate1}`;
+                else
+                    tWExcelFile = `영업_오더현황(${args.data.BUYER_CD})-${tUserInfo.USER_ID}-${tRetDate1}`;
+            } else if (args.data.FACTORY_CD === 'FC034') {
+                if (args.data.BUYER_CD === '')
+                    tWExcelFile = `BVT-영업_오더현황(팁별)-${tUserInfo.USER_ID}-${tRetDate1}`;
+                else
+                    tWExcelFile = `BVT-영업_오더현황(${args.data.BUYER_CD})-${tUserInfo.USER_ID}-${tRetDate1}`;
+            } else if (args.data.FACTORY_CD === 'FC044') {
+                if (args.data.BUYER_CD === '')
+                    tWExcelFile = `ETP-영업_오더현황(팁별)-${tUserInfo.USER_ID}-${tRetDate1}`;
+                else
+                    tWExcelFile = `ETP-영업_오더현황(${args.data.BUYER_CD})-${tUserInfo.USER_ID}-${tRetDate1}`;
+            }
+
+            try {
+                // Excel Read
+                var tPath0 = '';
+                var tCols0 = __dirname.split('/');
+                var tFlag0 = 0;
+                tCols0.forEach((col, i) => {
+                    if (col !== '') {
+                        if (col === 'src') {
+                            tPath0 += '/upload/excel_template';
+                            tFlag0 = 1;
+                        }
+                        if (tFlag0 === 0) {
+                            tPath0 += '/' + col;
+                        }
+                    }
+                });
+
+                var tTemplateExcel = `${tPath0}/list.xlsx`;
+
+                const wb = new Excel.Workbook();
+                await wb.xlsx.readFile(tTemplateExcel);
+
+                var tSheetName = `Sheet1`;
+                const sheet = wb.getWorksheet(tSheetName);
+                sheet.name = '종합';
+
+                sheet.getCell(2, 1).value = '팀';
+                sheet.getCell(2, 2).value = 'Buyer';
+                sheet.getCell(2, 3).value = '매출수량';
+                sheet.getCell(2, 4).value = '매출금액(A)';
+                sheet.getCell(2, 5).value = '임가공비(A)';
+                sheet.getCell(2, 6).value = '자재비[사용](C)';
+                sheet.getCell(2, 7).value = '정상손익(D)=(A)-(B)-(C)';
+                sheet.getCell(2, 8).value = '정상손익률(%)_사용(D/A)';
+                sheet.getCell(2, 9).value = '자재비[구매](E)';
+                sheet.getCell(2, 10).value = '실제손익(F)=(A)-(B)-(E)';
+                sheet.getCell(2, 11).value = '실제손익률(%)_구매(F/A)';
+                sheet.getCell(2, 12).value = '기타비용(G)';
+                sheet.getCell(2, 13).value = '최종손익(H)=(F)-(G)';
+                sheet.getCell(2, 14).value = '최종손익율_ETC포함(H/A)';
+                sheet.getCell(2, 15).value = '(E)-(C)';
+
+                // Total
+                var tSql = `
+                    SELECT distinct
+                        c.cd_name as buyer_team_n,
+                        a.buyer,
+                        a.buyer_team,
+                        left(a.order_cd, 2) as buyer_cd
+                    FROM
+                        KSV_ORDER_TEMP a,
+                        KCD_CODE c
+                    WHERE
+                        c.CD_GROUP = 'BUYER_TEAM'
+                        and a.BUYER_TEAM = c.CD_CODE
+                        and a.user_id = '${tUserInfo.USER_ID}'
+                        and a.buyer_team not in ('dev', 'sm', 'mm')
+                    order by
+                        1,
+                        4
+                `;
+                var tRet = await prisma.$queryRaw(Prisma.raw(tSql));
+
+                var tIdx = 0;
+                var tData = new Array(15);
+                var tSum = new Array(15);
+
+                for (tIdx = 0; tIdx < 15; tIdx++) {
+                    tData[tIdx] = 0;
+                    tSum[tIdx] = 0;
+                }
+
+                var tRowIdx = 3;
+                var save_buyer_cd = '';
+
+                var tIdx1 = 0;
+                for (tIdx1 = 0; tIdx1 < tRet.length; tIdx1++) {
+                    var tTeam = {
+                        ...tRet[tIdx1],
+                    };
+                    var tSql1 = `
+                        select
+                            isnull(sum(a.ship_cnt), 0) as ship_cnt,
+                            isnull(sum(a.ord_amt), 0) as ord_amt,
+                            isnull(sum(a.fc_amt), 0) as fc_amt,
+                            isnull(sum(a.po_matl_amt), 0) as po_matl_amt,
+                            '',
+                            '',
+                            isnull(sum(a.matl_amt) + sum(a.bvt_local), 0) as matl_amt,
+                            '',
+                            '',
+                            isnull(sum(a.etc_amt), 0) as etc_amt,
+                            '',
+                            ''
+                        from
+                            ksv_order_temp a
+                        where
+                            a.user_id = '${tUserInfo.USER_ID}'
+                            and left(a.order_cd, 2) = '${tTeam.buyer_cd}'
+                            and a.buyer_team = '${tTeam.buyer_team}'
+                    `;
+                    var tRet1 = await prisma.$queryRaw(Prisma.raw(tSql1));
+                    var tOne = tRet1[0];
+
+                    if (tIdx1 > 0 && tTeam.buyer_team !== save_buyer_cd) {
+                        tSum.forEach((col, i) => {
+                            sheet.getCell(tRowIdx, i + 1).value = col;
+                        });
+                        tRowIdx += 2;
+                        for (tIdx = 0; tIdx < 15; tIdx++) {
+                            tSum[tIdx] = 0;
+                        }
+                    }
+
+                    tData[0] = tTeam.buyer_team_n; // A
+                    tData[1] = tTeam.buyer; // B
+                    tData[2] = tOne.ship_cnt; //C
+                    tData[3] = tOne.ord_amt; // D
+                    tData[4] = tOne.fc_amt; // E
+                    tData[5] = tOne.po_matl_amt; //F
+                    tData[6] = tOne.ord_amt - tOne.fc_amt - tOne.po_matl_amt; //G
+                    tData[7] = 0;
+                    if (tOne.ord_amt > 0) tData[7] = tData[6] / tOne.ord_amt; //H
+                    tData[8] = tOne.matl_amt; //I
+                    tData[9] = tOne.ord_amt - tOne.fc_amt - tData[8]; //J
+                    tData[10] = 0;
+                    if (tOne.ord_amt > 0) tData[10] = tData[9] / tOne.ord_amt; //K
+                    tData[11] = tOne.etc_amt; //L
+                    tData[12] = tData[9] - tData[11]; //M
+                    tData[13] = 0;
+                    if (tOne.ord_amt > 0) tData[13] = tData[12] / tOne.ord_amt; //N
+                    tData[14] = tData[8] - tOne.po_matl_amt; //O
+
+                    tData.forEach((col, i) => {
+                        if (i > 1) sheet.getCell(tRowIdx, i + 1).value = Number(parseFloat(col).toFixed(2));
+                        else  sheet.getCell(tRowIdx, i + 1).value = col;
+                        tSum[0] = '';
+                        tSum[1] = 'TOTAL';
+                        if (i >= 2) {
+                            tSum[i] += col;
+                        }
+                    });
+
+                    tRowIdx += 1;
+                    save_buyer_cd = tTeam.buyer_team;
+                }
+
+                if (tIdx > 0 && tTeam.buyer_cd !== save_buyer_cd) {
+                    tSum.forEach((col, i) => {
+                        sheet.getCell(tRowIdx, i + 1).value = Number(parseFloat(col).toFixed(2));
+                    });
+
+                    tRowIdx += 1;
+
+                    for (tIdx = 0; tIdx < 15; tIdx++) {
+                        tSum[tIdx] = 0;
+                    }
+                }
+
+                // 테두리 스타일 정의
+                const borderStyle = {
+                    top: {
+                        style: 'thin',
+                    },
+                    left: {
+                        style: 'thin',
+                    },
+                    bottom: {
+                        style: 'thin',
+                    },
+                    right: {
+                        style: 'thin',
+                    },
+                };
+
+                // 전체 행을 탐색하여 조건 적용
+                sheet.eachRow((row, rowNumber) => {
+                    // B열 값이 'TOTAL'이면 연한 회색 배경 적용
+                    if (row.getCell(2).value === 'TOTAL') {
+                        row.eachCell((cell) => {
+                            cell.fill = {
+                                type: 'pattern',
+                                pattern: 'solid',
+                                fgColor: {
+                                    argb: 'D3D3D3',
+                                }, // 연한 회색
+                            };
+
+                            cell.font = {
+                                bold: true,
+                            };
+                        });
+                    }
+
+                    // 3번째 행부터 마지막 행까지 테두리 적용
+                    if (rowNumber >= 3) {
+                        row.eachCell((cell) => {
+                            cell.border = borderStyle;
+                        });
+                    }
+                });
+
+                return await upload(`${tWExcelFile}.xlsx`, wb);
+            } catch (error) {
+                var tRetArray = [];
+                var tObj = {};
+                tObj.id = 0;
+                tObj.CODE = 'ERROR: ' + error.message;
+                tRetArray.push(tObj);
+                return tRetArray;
+            }
+        },
+
+        mgrQuery_S0213_EXCEL_REPORT10: async (_, args, contextValue) => {
+            // ETC_LIST
+            var tRetDate = AFLib.getCurrTime();
+            var tRetDate1 = tRetDate.substring(0, 8);
+            var tUserInfo = AFLib.getUserInfo(contextValue);
+
+            var tFunc = new S0213_QRY_COMM();
+            var argData = { ...args.data };
+            argData.BUYER_CD = '';
+            var tFlag = await tFunc.makeListData2(args.data, contextValue);
+
+            var tWExcelFile = `ETC_Amt_List-${tUserInfo.USER_ID}-${tRetDate1}`;
+            if (args.data.BUYER_CD !== '')
+                tWExcelFile = `ETC_Amt_List(${args.data.BUYER_CD})-${tUserInfo.USER_ID}-${tRetDate1}`;
+
+            try {
+                // Excel Read
+                var tPath0 = '';
+                var tCols0 = __dirname.split('/');
+                var tFlag0 = 0;
+                tCols0.forEach((col, i) => {
+                    if (col !== '') {
+                        if (col === 'src') {
+                            tPath0 += '/upload/excel_template';
+                            tFlag0 = 1;
+                        }
+                        if (tFlag0 === 0) {
+                            tPath0 += '/' + col;
+                        }
+                    }
+                });
+
+                var tTemplateExcel = `${tPath0}/list_etc.xlsx`;
+
+                const wb = new Excel.Workbook();
+                await wb.xlsx.readFile(tTemplateExcel);
+
+                var tSheetName = `Sheet1`;
+                const sheet = wb.getWorksheet(tSheetName);
+                sheet.name = 'ETC';
+
+                sheet.getCell(2, 1).value = 'Type';
+                sheet.getCell(2, 2).value = 'Order Cd';
+                sheet.getCell(2, 3).value = 'Buyer';
+                sheet.getCell(2, 4).value = 'Style';
+                sheet.getCell(2, 5).value = 'Factory';
+                sheet.getCell(2, 6).value = 'Due Date';
+                sheet.getCell(2, 7).value = 'Ship Date';
+                sheet.getCell(2, 8).value = 'Tot Cnt';
+                sheet.getCell(2, 9).value = 'Ship Cnt';
+                sheet.getCell(2, 10).value = 'Usd Price';
+                sheet.getCell(2, 11).value = 'Ord Amt';
+                sheet.getCell(2, 12).value = 'Fc Amt';
+                sheet.getCell(2, 13).value = 'Matl Amt';
+                sheet.getCell(2, 14).value = 'Etc Amt';
+                sheet.getCell(2, 15).value = 'Tot Amt';
+                sheet.getCell(2, 16).value = 'Team';
+
+                var tSql = `
+                    select
+                        a.type,
+                        a.order_cd,
+                        a.buyer,
+                        a.style,
+                        a.factory,
+                        a.due_date,
+                        a.ship_date,
+                        a.tot_cnt,
+                        a.ship_cnt,
+                        a.usd_price,
+                        a.ord_amt,
+                        a.fc_amt,
+                        a.matl_amt,
+                        a.etc_amt,
+                        a.tot_amt,
+                        c.cd_name as team_n
+                    from
+                        ksv_order_temp a
+                        left join kcd_code c on c.cd_code = a.buyer_team
+                                            and c.cd_group = 'BUYER_TEAM'
+                        inner join kcd_buyer b on b.buyer_name = a.buyer
+                    where
+                        a.etc_amt <> 0
+                        and a.user_id = '${tUserInfo.USER_ID}'
+                        and b.buyer_cd like '%${args.data.BUYER_CD}%'
+                        -- and left(a.order_cd, 2) like '%${args.data.BUYER_CD}%'
+                        and left(a.order_cd, 2) not in ('z9')
+                    order by a.type
+                `;
+                var tRet = await prisma.$queryRaw(Prisma.raw(tSql));
+
+                var tRowIdx = 3;
+
+                tRet.forEach((col, i) => {
+                    sheet.getCell(tRowIdx, 1).value = col.type;
+                    sheet.getCell(tRowIdx, 2).value = col.order_cd;
+                    sheet.getCell(tRowIdx, 3).value = col.buyer;
+                    sheet.getCell(tRowIdx, 4).value = col.style;
+                    sheet.getCell(tRowIdx, 5).value = col.factory;
+                    sheet.getCell(tRowIdx, 6).value = col.due_date;
+                    sheet.getCell(tRowIdx, 7).value = col.ship_date;
+                    sheet.getCell(tRowIdx, 8).value = Number(col.tot_cnt);
+                    sheet.getCell(tRowIdx, 9).value = Number(col.ship_cnt);
+                    sheet.getCell(tRowIdx, 10).value = Number(col.usd_price);
+                    sheet.getCell(tRowIdx, 11).value = Number(col.ord_amt);
+                    sheet.getCell(tRowIdx, 12).value = Number(col.fc_amt);
+                    sheet.getCell(tRowIdx, 13).value = Number(col.matl_amt);
+                    sheet.getCell(tRowIdx, 14).value = Number(col.etc_amt);
+                    sheet.getCell(tRowIdx, 15).value = Number(col.tot_amt);
+                    sheet.getCell(tRowIdx, 16).value = col.team_n;
+                    tRowIdx += 1;
+                });
+
+                // 테두리 스타일 정의
+                const borderStyle = {
+                    top: {
+                        style: 'thin',
+                    },
+                    left: {
+                        style: 'thin',
+                    },
+                    bottom: {
+                        style: 'thin',
+                    },
+                    right: {
+                        style: 'thin',
+                    },
+                };
+
+                // 3번째 행부터 마지막 행까지 테두리 적용
+                sheet.eachRow((row, rowNumber) => {
+                    if (rowNumber >= 3) {
+                        row.eachCell((cell) => {
+                            cell.border = borderStyle;
+                        });
+                    }
+                });
+
+                return await upload(`${tWExcelFile}.xlsx`, wb);
+            } catch (error) {
+                var tRetArray = [];
+                var tObj = {};
+                tObj.id = 0;
+                tObj.CODE = 'ERROR: ' + error.message;
+                tRetArray.push(tObj);
+                return tRetArray;
+            }
+        },
+
+        mgrQuery_S0213_UPDATE_MATLAMT: async (_, args, contextValue) => {
+            var tRetDate = AFLib.getCurrTime();
+            var tRetDate1 = tRetDate.substring(0, 8);
+            var tUserInfo = AFLib.getUserInfo(contextValue);
+
+            let sql0 = `
+                select
+                    *
+                from
+                    kcd_jobmonitor
+                where
+                    user_id = '${tUserInfo.USER_ID}'
+                    and kind = 'S0213_UPDATE_MATLAMT'
+            `;
+            var tRet0 = await prisma.$queryRaw(Prisma.raw(sql0));
+            if (tRet0.length > 0) {
+                if (tRet0[0].STATUS_CD === '1') {
+                    var tRetArray = [];
+                    var tObj = {};
+                    tObj.id = 1;
+                    tObj.CODE = `SUCCESS:${tRet0[0].RESULT}`;
+                    tRetArray.push(tObj);
+
+                    let sql0 = `
+                        delete from kcd_jobmonitor
+                        where
+                            user_id = '${tUserInfo.USER_ID}'
+                            and kind = 'S0213_UPDATE_MATLAMT'
+                    `;
+                    var tRet0 = await prisma.$queryRaw(Prisma.raw(sql0));
+                    return tRetArray;
+                } else {
+                    var tRetArray = [];
+                    var tObj = {};
+                    tObj.id = 1;
+                    tObj.CODE = `ERROR:이미 작업중인 내용이 있습니다. 몇분후에 다시 조회하십시요`;
+                    tRetArray.push(tObj);
+                    return tRetArray;
+                }
+            }
+
+            var tFunc = new S0213_QRY_COMM();
+            // var tFileName = await tFunc.makeReport(args.data, contextValue, tRetArray);
+            var tRetArray = [];
+            var tFileName = tFunc.updateMatlAmt(
+                args.data,
+                contextValue,
+                tRetArray,
+            );
+
+            var tObj = {};
+            tObj.id = 1;
+            tObj.CODE = `ERROR:배치 작업으로 요청하였습니다. 다시 몇분후 조회하시면 완료시 엑셀이 다운로드 됩니다`;
+            tRetArray.push(tObj);
+            return tRetArray;
+        },
+
+        mgrQuery_S0213_QRY_STYLE_BY_BUYER: async (_, args) => {
+            let sqlStr = `
+                SELECT
+                    *
+                FROM
+                    kcd_style
+                where
+                    buyer_cd like '%${args.data.BUYER_CD}%'
+            `;
+            let tRet0 = await prisma.$queryRaw(Prisma.raw(sqlStr));
+            let tRet = [];
+            tRet0.forEach((col, i) => {
+                var tObj = {
+                    ...col,
+                };
+                tObj.STYLE_NAME = `(${col.STYLE_CD})${col.STYLE_NAME}`;
+                tRet.push(tObj);
+            });
+            return tRet;
+        },
+
+        mgrQuery_S0213_QRY_STYLE_BY_NAME: async (_, args) => {
+            let sqlStr = `
+                SELECT
+                    *
+                FROM
+                    kcd_style
+                where
+                    (
+                        style_cd like '%${args.data.STYLE_CD}%'
+                        or style_cd like '%${args.data.STYLE_CD}%'
+                    )
+            `;
+            let tRet0 = await prisma.$queryRaw(Prisma.raw(sqlStr));
+            let tRet = [];
+            tRet0.forEach((col, i) => {
+                var tObj = {
+                    ...col,
+                };
+                tObj.STYLE_NAME = `(${col.STYLE_CD})${col.STYLE_NAME}`;
+                tRet.push(tObj);
+            });
+            return tRet;
+        },
+
+        mgrQuery_S0213_ORDER_REPORT_CODE: async (_, args) => {
+            var tWRet = {};
+
+            var tSQL = '';
+
+            let sqlStr = `
+                SELECT
+                    *
+                FROM
+                    KCD_FACTORY
+                where
+                    factory_cd in ('FC034', 'FC044', 'FC010')
+            `;
+            let tRet = await prisma.$queryRaw(Prisma.raw(sqlStr));
+
+            var tObj = {};
+            tObj.FACTORY_CD = ' ';
+            tObj.FACTORY_NAME = ' ';
+            tRet.unshift(tObj);
+
+            tWRet.FACTORY_CD = tRet;
+
+            let sqlStr = `
+                SELECT
+                    *
+                FROM
+                    KCD_BUYER
+            `;
+            let tRet0 = await prisma.$queryRaw(Prisma.raw(sqlStr));
+            let tRet = [];
+            tRet0.forEach((col, i) => {
+                var tObj0 = {
+                    ...col,
+                };
+                tObj0.BUYER_NAME = `(${col.BUYER_CD})${col.BUYER_NAME}`;
+                tRet.push(tObj0);
+            });
+
+            var tObj = {};
+            tObj.BUYER_CD = ' ';
+            tObj.BUYER_NAME = ' ';
+            tRet.unshift(tObj);
+
+            tWRet.BUYER_CD = tRet;
+
+            /*
+                   let sqlStr = `
+                       SELECT
+                           top 1000 *
+                       FROM
+                           KCD_STYLE
+                       order by
+                           yy desc
+                           -- offset 0 rows fetch next 1000 rows only
+                   `;
+                   let tRet  =  await prisma.$queryRaw(Prisma.raw(sqlStr));
+            */
+            let tRet = [];
+
+            var tObj = {};
+            tObj.STYLE_CD = ' ';
+            tObj.STYLE_NAME = ' ';
+            tRet.unshift(tObj);
+
+            tWRet.STYLE_CD = tRet;
+
+            let sqlStr = `
+                SELECT
+                    SYS_VAL
+                FROM
+                    KCD_SYSTEM 
+                where
+                    SYS_CD  = 'MatlAmtUpdateDate'
+            `;
+            let tRet = await prisma.$queryRaw(Prisma.raw(sqlStr));
+
+            tWRet.MATL_UPDATE = '';
+            if (tRet.length > 0) {
+                var tVal = tRet[0].SYS_VAL.replace(/\//gi, '');
+                tWRet.MATL_UPDATE = tVal.substring(0, 8); 
+            }
+
+            console.log(tWRet);
+
+            return tWRet;
+        },
+
+        mgrQuery_S0213_ORDER_REPORT_TBL_KSV_ORDER_MST: async (
+            _,
+            args,
+            contextValue,
+        ) => {
+            // 조회 버튼
+
+            var tRetDate = AFLib.getCurrTime();
+            var tRetDate1 = tRetDate.substring(0, 8);
+            var tUserInfo = AFLib.getUserInfo(contextValue);
+
+            var tFunc = new S0213_QRY_COMM();
+            var tFlag = await tFunc.makeListData2(args.data, contextValue);
+
+            var tSQL = '';
+            let sqlStr = `
+                select
+                    isnull(sum(a.ship_cnt), 0) as ship_cnt,
+                    isnull(sum(a.ord_amt), 0) as ord_amt,
+                    isnull(sum(a.matl_amt), 0) as matl_amt,
+                    isnull(sum(a.bvt_local), 0) as bvt_local,
+                    isnull(sum(a.fc_amt), 0) as fc_amt,
+                    isnull(sum(a.etc_amt), 0) as etc_amt,
+                    isnull(sum(a.comm_amt), 0) as comm_amt,
+                    isnull(sum(a.tot_amt), 0) as tot_amt
+                from
+                    ksv_order_temp a
+                where
+                    user_id = '${tUserInfo.USER_ID}'
+                    and left(order_cd, 2) like '%${args.data.BUYER_CD}%'
+            `;
+            var tRetSum = await prisma.$queryRaw(Prisma.raw(sqlStr));
+
+            let sqlStr1 = `
+                select
+                    a.ORDER_CD,
+                    a.STYLE as STYLE_NAME,
+                    a.DUE_DATE,
+                    a.TOT_CNT,
+                    a.SHIP_DATE,
+                    a.SHIP_CNT,
+                    a.USD_PRICE as AVR_PRICE,
+                    a.ORD_AMT as ORDER_AMT,
+                    a.MATL_AMT,
+                    a.BVT_LOCAL,
+                    a.FC_AMT,
+                    a.ETC_AMT,
+                    a.COMM_AMT,
+                    a.TOT_AMT,
+                    a.USD_PRICE as TOT_PRICE,
+                    '0' as DIFF,
+                    '0' as RATE,
+                    a.SHIP_CNT as SHIP_TOT,
+                    '0' as SHIP_RATE,
+                    a.FACTORY,
+                    a.BUYER,
+                    c.CD_NAME as ORDER_STATUS
+                from
+                    ksv_order_temp a,
+                    ksv_order_mst b
+                    left join kcd_code c on c.cd_code = b.order_status
+                    and c.cd_group = 'order_status'
+                where
+                    a.user_id = '${tUserInfo.USER_ID}'
+                    and left(a.order_cd, 2) like '%${args.data.BUYER_CD}%'
+                    and a.order_cd = b.order_cd
+                order by
+                    a.order_cd
+            `;
+            var tRet1 = await prisma.$queryRaw(Prisma.raw(sqlStr1));
+            console.log(`Record0: ${tRet1.length}`);
+
+            var tRetArray = [];
+            tRet1.forEach((col, i) => {
+                var tObj = { ...col };
+                var tDiff =
+                    parseFloat(tObj.ORDER_AMT) - parseFloat(tObj.TOT_AMT);
+                var tRate =
+                    (parseFloat(tDiff) / parseFloat(tObj.ORDER_AMT)) * 100.0;
+                tObj.DIFF = parseFloat(tDiff.toFixed(0));
+                tObj.RATE = parseFloat(tRate.toFixed(2));
+                tRetArray.push(tObj);
+            });
+
+            var tTotal = {};
+            tTotal.ORDER_CD = 'TOTAL';
+            tTotal.SHIP_CNT = tRetSum[0].ship_cnt;
+            tTotal.ORDER_AMT = tRetSum[0].ord_amt;
+            tTotal.MATL_AMT = tRetSum[0].matl_amt;
+            tTotal.BVT_LOCAL = tRetSum[0].bvt_local;
+            tTotal.FC_AMT = tRetSum[0].fc_amt;
+            tTotal.ETC_AMT = tRetSum[0].etc_amt;
+            tTotal.COMM_AMT = tRetSum[0].comm_amt;
+            tTotal.TOT_AMT = tRetSum[0].tot_amt;
+            tRetArray.push(tTotal);
+
+            console.log(`Record: ${tRetArray.length}`);
+
+            return tRetArray;
+        },
+
+        mgrQuery_S0213_ORDER_REPORT_TBL_KSV_ORDER_MST_bak: async (_, args) => {
+            // 조회 버튼
+            var tSQL = '';
+
+            var tRetDate = AFLib.getCurrTime();
+
+            var s_date = tRetDate.substring(0, 4) + '0101';
+            var e_date = tRetDate.substring(0, 8);
+
+            s_date = args.data.S_DUE_DATE;
+            if (args.data.E_DUE_DATE !== '') e_date = args.data.E_DUE_DATE;
+
+            var sql_duedate_1 = '';
+            if (
+                args.data.FACTORY_CD === '' ||
+                args.data.FACTORY_CD === 'FC010'
+            ) {
+                sql_duedate_1 = `
+                    union
+                    select
+                        a.order_cd,
+                        c.style_name,
+                        a.due_date,
+                        a.due_date as ship_date,
+                        0 as act_ship_cnt,
+                        isnull(a.tot_cnt, 0) as tot_cnt,
+                        (isnull(a.avr_price, 0) * g.usd_rate) as avr_price,
+                        isnull(a.matl_amt, 0) as matl_amt,
+                        isnull(a.fc_price, 0) as fc_price,
+                        isnull(a.etc_amt, 0) as etc_amt,
+                        isnull(a.over_amt, 0) as over_amt,
+                        isnull(a.commission, 0) as comm_amt,
+                        0 as ship_cnt,
+                        e.factory_name,
+                        f.buyer_name,
+                        a.order_status,
+                        -- isnull(g.usd_rate, 0) as usd_rate
+                        isnull(g.won_amt2, 0) as usd_rate,
+                        a.curr_cd
+                    from
+                        ksv_order_mst a
+                        left join kcd_currency g on g.curr_cd = a.curr_cd
+                        and g.start_date = (
+                            select
+                                max(start_date)
+                            from
+                                kcd_currency
+                            where
+                                curr_cd = a.curr_cd
+                        ),
+                        --left join kcd_currency g on g.curr_cd = a.curr_cd and g.start_date = a.order_date, 
+                        kcd_style c,
+                        kcd_factory e,
+                        kcd_buyer f
+                    where
+                        a.due_date between '${s_date}' and '${e_date}'
+                        and left(a.order_cd, 2) like '%${args.data.BUYER_CD}%'
+                        and a.order_cd like '%${args.data.ORDER_CD}%'
+                        and a.style_cd like '%${args.data.STYLE_CD}%'
+                        and a.factory_cd = 'fc010'
+                        and a.order_type in ('0', '1')
+                        and c.style_cd = a.style_cd
+                        and e.factory_cd = a.factory_cd
+                        and f.buyer_cd = left(a.order_cd, 2)
+                `;
+            }
+
+            let sql_duedate_2 = `
+                union
+                select
+                    (a.order_cd + '*') as order_cd,
+                    c.style_name,
+                    a.due_date,
+                    a.due_date as ship_date,
+                    0 as act_ship_cnt,
+                    isnull(a.tot_cnt, 0) as tot_cnt,
+                    (isnull(a.avr_price, 0) * g.usd_rate) as avr_price,
+                    isnull(a.matl_amt, 0) as matl_amt,
+                    isnull(a.fc_price, 0) as fc_price,
+                    isnull(a.etc_amt, 0) as etc_amt,
+                    isnull(a.over_amt, 0) as over_amt,
+                    isnull(a.commission, 0) as comm_amt,
+                    0 as ship_cnt,
+                    e.factory_name,
+                    f.buyer_name,
+                    a.order_status,
+                    isnull(g.won_amt2, 0) as usd_rate,
+                    a.curr_cd
+                from
+                    ksv_order_mst a
+                    left join kcd_currency g on g.curr_cd = a.curr_cd
+                    and g.start_date = (
+                        select
+                            max(start_date)
+                        from
+                            kcd_currency
+                        where
+                            curr_cd = a.curr_cd
+                    ),
+                    -- left join kcd_currency g on g.curr_cd = a.curr_cd and g.start_date = a.order_date,
+                    kcd_style c,
+                    kcd_factory e,
+                    kcd_buyer f
+                where
+                    a.due_date between '${s_date}' and '${e_date}'
+                    and left(a.order_cd, 2) like '%${args.data.BUYER_CD}%'
+                    and a.order_cd like '%${args.data.ORDER_CD}%'
+                    and a.order_status = '4'
+                    and a.style_cd like '%${args.data.STYLE_CD}%'
+                    and a.factory_cd like '%${args.data.FACTORY_CD}%'
+                    and a.order_type in ('0', '1')
+                    and c.style_cd = a.style_cd
+                    and e.factory_cd = a.factory_cd
+                    and f.buyer_cd = left(a.order_cd, 2)
+            `;
+
+            let sql_duedate_0_1 = `
+                select
+                    a.order_cd,
+                    c.style_name,
+                    a.due_date,
+                    isnull(b.ship_date, '') as ship_date,
+                    isnull(sum(b.ship_cnt), 0) as act_ship_cnt,
+                    isnull(a.tot_cnt, 0) as tot_cnt,
+                    (isnull(a.avr_price, 0) * g.usd_rate) as avr_price,
+                    isnull(a.matl_amt, 0) as matl_amt,
+                    isnull(a.fc_price, 0) as fc_price,
+                    isnull(a.etc_amt, 0) as etc_amt,
+                    isnull(a.over_amt, 0) as over_amt,
+                    isnull(a.commission, 0) as comm_amt,
+                    isnull(d.ship_cnt, 0) as ship_cnt,
+                    e.factory_name,
+                    f.buyer_name,
+                    a.order_status
+                    -- isnull(g.won_amt2, 0) as usd_rate,
+                    -- a.curr_cd
+                from
+                    ksv_order_mst a
+                    left join kcd_currency g on g.curr_cd = a.curr_cd
+                    and g.start_date = (
+                        select
+                            min(start_date)
+                        from
+                            kcd_currency
+                        where
+                            curr_cd = a.curr_cd
+                    )
+                    left join ksv_order_ship b on b.order_cd = a.order_cd
+                    and b.ship_ptype in ('0', '5')
+                    left join (
+                        select
+                            order_cd,
+                            sum(ship_cnt) as ship_cnt
+                        from
+                            ksv_order_ship
+                        where
+                            ship_ptype in ('0', '5')
+                        group by
+                            order_cd
+                    ) d on d.order_cd = a.order_cd,
+                    kcd_style c,
+                    kcd_factory e,
+                    kcd_buyer f
+                where
+                    a.due_date between '${s_date}' and '${e_date}'
+                    and left(a.order_cd, 2) like '%${args.data.BUYER_CD}%'
+                    and a.order_cd like '%${args.data.ORDER_CD}%'
+                    and a.style_cd like '%${args.data.STYLE_CD}%'
+                    and a.factory_cd like '%${args.data.FACTORY_CD}%'
+                    and a.order_type in ('0', '1')
+                    and c.style_cd = a.style_cd
+                    and e.factory_cd = a.factory_cd
+                    and f.buyer_cd = left(a.order_cd, 2)
+                group by
+                    a.order_cd,
+                    c.style_name,
+                    a.due_date,
+                    b.ship_date,
+                    isnull(a.tot_cnt, 0),
+                    isnull(a.avr_price, 0),
+                    isnull(a.matl_amt, 0),
+                    isnull(a.fc_price, 0),
+                    isnull(a.etc_amt, 0),
+                    isnull(a.over_amt, 0),
+                    isnull(a.commission, 0),
+                    d.ship_cnt,
+                    e.factory_name,
+                    f.buyer_name,
+                    a.order_status,
+                    g.usd_rate,
+                    a.curr_cd
+                union
+                select
+                    a.order_cd,
+                    c.style_name,
+                    a.due_date,
+                    a.due_date as ship_date,
+                    0 as act_ship_cnt,
+                    isnull(a.tot_cnt, 0) as tot_cnt,
+                    isnull(a.avr_price, 0) * g.usd_rate as avr_price,
+                    isnull(a.matl_amt, 0) as matl_amt,
+                    isnull(a.fc_price, 0) as fc_price,
+                    isnull(a.etc_amt, 0) as etc_amt,
+                    isnull(a.over_amt, 0) as over_amt,
+                    isnull(a.commission, 0) as comm_amt,
+                    0 as ship_cnt,
+                    e.factory_name,
+                    f.buyer_name,
+                    a.order_status
+                from
+                    ksv_order_mst a,
+                    kcd_style c,
+                    kcd_factory e,
+                    kcd_buyer f,
+                    kcd_currency g
+                where
+                    a.due_date between '${s_date}' and '${e_date}'
+                    and left(a.order_cd, 2) like '%${args.data.BUYER_CD}%'
+                    and a.order_cd like '%${args.data.ORDER_CD}%'
+                    and a.style_cd = '00-0000'
+                    and a.style_cd like '%${args.data.STYLE_CD}%'
+                    and a.factory_cd like '%${args.data.FACTORY_CD}%'
+                    and a.order_type in ('0', '1')
+                    and c.style_cd = a.style_cd
+                    and e.factory_cd = a.factory_cd
+                    and f.buyer_cd = left(a.order_cd, 2)
+                    and g.curr_cd = a.curr_cd
+                    and g.start_date = a.order_date
+            `;
+
+            let sql_duedate_0_2 = `
+                union
+                select
+                    a.order_cd,
+                    c.style_name,
+                    a.due_date,
+                    a.due_date as ship_date,
+                    0 as act_ship_cnt,
+                    isnull(a.tot_cnt, 0) as tot_cnt,
+                    (isnull(a.avr_price, 0) * g.usd_rate) as avr_price,
+                    isnull(a.matl_amt, 0) as matl_amt,
+                    isnull(a.fc_price, 0) as fc_price,
+                    isnull(a.etc_amt, 0) as etc_amt,
+                    isnull(a.over_amt, 0) as over_amt,
+                    isnull(a.commission, 0) as comm_amt,
+                    0 as ship_cnt,
+                    e.factory_name,
+                    f.buyer_name,
+                    a.order_status,
+                    isnull(g.won_amt2, 0) as usd_rate,
+                    a.curr_cd
+                from
+                    ksv_order_mst a
+                    left join kcd_currency g on g.curr_cd = a.curr_cd
+                    and g.start_date = (
+                        select
+                            max(start_date)
+                        from
+                            kcd_currency
+                        where
+                            curr_cd = a.curr_cd
+                    ),
+                    -- left join kcd_currency g on  g.curr_cd = a.curr_cd and g.start_date = a.order_date ,
+                    kcd_style c,
+                    kcd_factory e,
+                    kcd_buyer f
+                where
+                    a.due_date between '${s_date}' and '${e_date}'
+                    and left(a.order_cd, 2) like '%${args.data.BUYER_CD}%'
+                    and a.order_cd like '%${args.data.ORDER_CD}%'
+                    and a.style_cd = '00-0000'
+                    and a.style_cd like '%${args.data.STYLE_CD}%'
+                    and a.factory_cd like '%${args.data.FACTORY_CD}%'
+                    and a.order_type in ('0', '1')
+                    and c.style_cd = a.style_cd
+                    and e.factory_cd = a.factory_cd
+                    and f.buyer_cd = left(a.order_cd, 2)
+            `;
+
+            ///
+
+            var sql_shipdate_1 = '';
+            let sql_shipdate_2 = '';
+
+            let sql_shipdate_0_1 = `
+                select
+                    a.order_cd,
+                    c.style_name,
+                    a.due_date,
+                    isnull(b.ship_date, '') as ship_date,
+                    isnull(sum(b.ship_cnt), 0) as act_ship_cnt,
+                    isnull(a.tot_cnt, 0) as tot_cnt,
+                    (isnull(a.avr_price, 0) * g.usd_rate) as avr_price,
+                    isnull(a.matl_amt, 0) as matl_amt,
+                    isnull(a.fc_price, 0) as fc_price,
+                    isnull(a.etc_amt, 0) as etc_amt,
+                    isnull(a.over_amt, 0) as over_amt,
+                    isnull(a.commission, 0) as comm_amt,
+                    isnull(d.ship_cnt, 0) as ship_cnt,
+                    e.factory_name,
+                    f.buyer_name,
+                    a.order_status,
+                    isnull(g.usd_rate, 0) as usd_rate,
+                    a.curr_cd
+                from
+                    ksv_order_mst a,
+                    kcd_currency g,
+                    kcd_style c,
+                    kcd_factory e,
+                    kcd_buyer f,
+                    ksv_order_ship b,
+                    (
+                        select
+                            order_cd,
+                            sum(ship_cnt) as ship_cnt
+                        from
+                            ksv_order_ship
+                        where
+                            ship_ptype in ('0', '5')
+                        group by
+                            order_cd
+                    ) d
+                where
+                    b.ship_date between '${s_date}' and '${e_date}'
+                    and b.order_cd = a.order_cd
+                    and b.ship_ptype in ('0', '5')
+                    and d.order_cd = a.order_cd
+                    and left(a.order_cd, 2) like '%${args.data.BUYER_CD}%'
+                    and a.order_cd like '%${args.data.ORDER_CD}%'
+                    and a.style_cd like '%${args.data.STYLE_CD}%'
+                    and a.factory_cd like '%${args.data.FACTORY_CD}%'
+                    and a.order_type in ('0', '1')
+                    and c.style_cd = a.style_cd
+                    and e.factory_cd = a.factory_cd
+                    and f.buyer_cd = left(a.order_cd, 2)
+                    and g.curr_cd = a.curr_cd
+                    and g.start_date = (
+                        select
+                            min(ship_date)
+                        from
+                            ksv_order_ship
+                        where
+                            order_cd = a.order_cd
+                    )
+                group by
+                    a.order_cd,
+                    c.style_name,
+                    a.due_date,
+                    b.ship_date,
+                    isnull(a.tot_cnt, 0),
+                    isnull(a.avr_price, 0),
+                    isnull(a.matl_amt, 0),
+                    isnull(a.fc_price, 0),
+                    isnull(a.etc_amt, 0),
+                    isnull(a.over_amt, 0),
+                    isnull(a.commission, 0),
+                    d.ship_cnt,
+                    e.factory_name,
+                    f.buyer_name,
+                    a.order_status,
+                    g.usd_rate,
+                    a.curr_cd
+            `;
+
+            let sql_shipdate_0_2 = `
+                select
+                    a.order_cd,
+                    c.style_name,
+                    a.due_date,
+                    a.due_date,
+                    0 as act_ship_cnt,
+                    isnull(a.tot_cnt, 0) as tot_cnt,
+                    isnull(a.avr_price, 0) * g.usd_rate as avr_price,
+                    isnull(a.matl_amt, 0) as matl_amt,
+                    isnull(a.fc_price, 0) as fc_price,
+                    isnull(a.etc_amt, 0) as etc_amt,
+                    isnull(a.over_amt, 0) as over_amt,
+                    isnull(a.commission, 0) as comm_amt,
+                    0 as ship_cnt,
+                    e.factory_name,
+                    f.buyer_name,
+                    a.order_status
+                from
+                    ksv_order_mst a,
+                    kcd_style c,
+                    kcd_factory e,
+                    kcd_buyer f,
+                    kcd_currency g
+                where
+                    a.due_date between '${s_date}' and '${e_date}'
+                    and left(a.order_cd, 2) like '%${args.data.BUYER_CD}%'
+                    and a.order_cd like '%${args.data.ORDER_CD}%'
+                    and a.style_cd = '00-0000'
+                    and a.order_status <> '4'
+                    and a.style_cd like '%${args.data.STYLE_CD}%'
+                    and a.factory_cd like '%${args.data.FACTORY_CD}%'
+                    and a.order_type in ('0', '1')
+                    and c.style_cd = a.style_cd
+                    and e.factory_cd = a.factory_cd
+                    and f.buyer_cd = left(a.order_cd, 2)
+                    and g.curr_cd = a.curr_cd
+                    and g.start_date = a.order_date
+                union
+                select
+                    a.order_cd + '*' as order_cd,
+                    c.style_name,
+                    a.due_date,
+                    a.due_date,
+                    0 as act_ship_cnt,
+                    isnull(a.tot_cnt, 0) as tot_cnt,
+                    isnull(a.avr_price, 0) * g.usd_rate as avr_price,
+                    isnull(a.matl_amt, 0) as matl_amt,
+                    isnull(a.fc_price, 0) as fc_price,
+                    isnull(a.etc_amt, 0) as etc_amt,
+                    isnull(a.over_amt, 0) as over_amt,
+                    isnull(a.commission, 0) as comm_amt,
+                    0 as ship_cnt,
+                    e.factory_name,
+                    f.buyer_name,
+                    a.order_status
+                from
+                    ksv_order_mst a,
+                    kcd_style c,
+                    kcd_factory e,
+                    kcd_buyer f,
+                    kcd_currency g
+                where
+                    a.due_date between '${s_date}' and '${e_date}'
+                    and left(a.order_cd, 2) like '%${args.data.BUYER_CD}%'
+                    and a.order_cd like '%${args.data.ORDER_CD}%'
+                    and a.order_status = '4'
+                    and a.style_cd like '%${args.data.STYLE_CD}%'
+                    and a.factory_cd like '%${args.data.FACTORY_CD}%'
+                    and a.order_type in ('0', '1')
+                    and c.style_cd = a.style_cd
+                    and e.factory_cd = a.factory_cd
+                    and f.buyer_cd = left(a.order_cd, 2)
+                    and g.curr_cd = a.curr_cd
+                    and g.start_date = a.order_date
+                order by
+                    a.order_cd,
+                    c.style_name
+            `;
+
+            ///
+
+            let sql99 = '';
+            /*
+            sql99 = `
+                ${sql_shipdate_0_1}
+                ${sql_duedate_0_2}
+                ${sql_duedate_2}
+                `;
+            */
+            var sql10 = `
+           ${sql_shipdate_0_1}
+           `;
+            var ret10 = await prisma.$queryRaw(Prisma.raw(sql10));
+
+            var sql11 = `
+           ${sql_shipdate_0_2}
+           `;
+            var ret11 = await prisma.$queryRaw(Prisma.raw(sql11));
+
+            var tRet = [];
+            ret10.forEach((col, i) => {
+                var tObj = {
+                    ...col,
+                };
+                tRet.push(tObj);
+            });
+            ret11.forEach((col, i) => {
+                var tObj = {
+                    ...col,
+                };
+                tRet.push(tObj);
+            });
+
+            var s_ord_amt = 0;
+            var s_matl_amt = 0;
+            var s_fc_amt = 0;
+            var s_etc_amt = 0;
+            var s_comm_amt = 0;
+            var s_tot_amt = 0;
+            var tRetArray = [];
+
+            var saveObj = {};
+            tRet.forEach((col, i) => {
+                var tObj = {
+                    ...col,
+                };
+
+                var tShipCnt = 0;
+                var tShipTot = 0;
+                if (parseInt(tObj.act_ship_cnt) <= 0) {
+                    if (tObj.order_status === '4') {
+                        if (tObj.factory_name === 'SHINTS-DEV') {
+                            tShipCnt = tObj.tot_cnt;
+                            tShipTot = tObj.tot_cnt;
+                        } else {
+                            tShipCnt = tObj.act_ship_cnt;
+                            tShipTot = tObj.act_ship_cnt;
+                        }
+                    } else {
+                        tShipCnt = tObj.tot_cnt;
+                        tShipTot = tObj.tot_cnt;
+                    }
+                } else {
+                    if (parseFloat(tObj.order_status) >= 7) {
+                        tShipCnt = tObj.act_ship_cnt;
+                        tShipTot = tObj.act_ship_cnt;
+                    } else {
+                        tShipCnt = tObj.act_ship_cnt;
+                        tShipTot = tObj.tot_cnt;
+                    }
+                }
+
+                var tCntRate = 0.0;
+                if (parseFloat(tShipTot) > 0) {
+                    tCntRate = parseFloat(tShipCnt) / parseFloat(tShipTot);
+                }
+
+                var tObj1 = {};
+                tObj1.ORDER_CD = tObj.order_cd;
+                tObj1.STYLE_NAME = tObj.style_name;
+                tObj1.DUE_DATE = tObj.due_date;
+                tObj1.TOT_CNT = tObj.tot_cnt;
+                tObj1.SHIP_DATE = tObj.ship_date;
+                tObj1.SHIP_CNT = tObj.act_ship_cnt;
+                tObj1.AVR_PRICE = tObj.avr_price;
+                if (
+                    tObj.order_cd.substring(0, 2) === 'SG' ||
+                    tObj.order_cd.substring(0, 2) === 'NP' ||
+                    tObj.order_cd.substring(0, 2) === 'NU' ||
+                    tObj.order_cd.substring(0, 2) === 'WF' ||
+                    tObj.order_cd.substring(0, 2) === 'NS' ||
+                    tObj.order_cd.substring(0, 2) === 'WI' ||
+                    tObj.order_cd.substring(0, 2) === 'NN' ||
+                    tObj.order_cd.substring(0, 2) === 'A1' ||
+                    tObj.order_cd.substring(0, 2) === 'WW' ||
+                    tObj.order_cd.substring(0, 2) === 'WR'
+                )
+                    tObj1.AVR_PRICE = '0';
+
+                tObj1.ORDER_AMT =
+                    parseFloat(tObj.avr_price) * parseFloat(tObj.act_ship_cnt);
+                /*
+                tObj1.MATL_AMT =  tObj.matl_amt;
+                if (tObj.order_status === '4') tObj1.MATL_AMT = tObj.matl_amt * tCntRate;
+                */
+                tObj1.MATL_AMT = tObj.matl_amt * tCntRate;
+                tObj1.FC_AMT = parseFloat(tObj.fc_price) * parseFloat(tShipCnt);
+                tObj1.ETC_AMT =
+                    parseFloat(tObj.etc_amt) * tCntRate +
+                    parseFloat(tObj.over_amt) * tCntRate;
+                tObj1.COMM_AMT = parseFloat(tObj.comm_amt) * tCntRate;
+                tObj1.TOT_AMT =
+                    parseFloat(tObj1.MATL_AMT) +
+                    parseFloat(tObj1.FC_AMT) +
+                    parseFloat(tObj1.ETC_AMT) +
+                    parseFloat(tObj1.COMM_AMT);
+                if (parseFloat(tShipCnt) === 0) tObj1.TOT_PRICE = '0';
+                else
+                    tObj1.TOT_PRICE =
+                        parseFloat(tObj1.TOT_AMT) / parseFloat(tShipCnt);
+                tObj1.DIFF =
+                    parseFloat(tObj1.ORDER_AMT) - parseFloat(tObj1.TOT_AMT);
+                if (parseFloat(tObj1.ORDER_AMT) === 0) tObj1.RATE = '0';
+                else
+                    tObj1.RATE =
+                        (parseFloat(tObj1.DIFF) / parseFloat(tObj1.ORDER_AMT)) *
+                        100.0;
+                tObj1.SHIP_TOT = tShipTot;
+                tObj1.SHIP_RATE = tCntRate;
+                tObj1.FACTORY = tObj.factory_name;
+                tObj1.BUYER = tObj.buyer_name;
+                tObj1.ORDER_STATUS = tObj.order_status;
+
+                if (i > 0 && tObj.order_cd === saveObj.order_cd)
+                    tObj1.TOT_CNT = '0';
+
+                if (i === 0) console.log(JSON.stringify(tObj1));
+                tRetArray.push(tObj1);
+                saveObj = {
+                    ...tObj,
+                };
+
+                s_ord_amt += parseFloat(tObj1.ORDER_AMT);
+                s_matl_amt += parseFloat(tObj1.MATL_AMT);
+                s_fc_amt += parseFloat(tObj1.FC_AMT);
+                s_etc_amt += parseFloat(tObj1.ETC_AMT);
+                s_comm_amt += parseFloat(tObj1.COMM_AMT);
+                s_tot_amt += parseFloat(tObj1.TOT_AMT);
+            });
+
+            var tIdx = 0;
+            console.log('record;' + tRetArray.length);
+            return tRetArray;
+        },
+    },
+};
+
+export default moduleQuery_S0213_ORDER_REPORT_TBL_KSV_ORDER_MST;

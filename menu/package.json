@@ -1,0 +1,62 @@
+{
+    "name": "sakai-react",
+    "version": "7.0.3-SNAPSHOT",
+    "homepage": ".",
+    "private": false,
+    "repository": {
+        "type": "git",
+        "url": "https://github.com/primefaces/sakai-react.git"
+    },
+    "license": "MIT",
+    "dependencies": {
+        "@apollo/client": "^3.6.9",
+        "@fortawesome/fontawesome-free": "^7.2.0",
+        "@fullcalendar/core": "^5.7.2",
+        "@fullcalendar/daygrid": "^5.7.2",
+        "@fullcalendar/interaction": "^5.7.2",
+        "@fullcalendar/react": "^5.7.0",
+        "@fullcalendar/timegrid": "^5.7.2",
+        "@lottiefiles/dotlottie-react": "^0.12.1",
+        "@lottiefiles/dotlottie-web": "^0.39.0",
+        "axios": "^0.19.2",
+        "chart.js": "3.3.2",
+        "classnames": "^2.5.1",
+        "cookie-parser": "^1.4.7",
+        "graphql": "^16.5.0",
+        "graphql-tag": "^2.12.6",
+        "graphql-tools": "^8.3.0",
+        "jquery": "^3.7.1",
+        "mssql": "^11.0.1",
+        "primeflex": "3.1.0",
+        "primeicons": "^5.0.0",
+        "primereact": "7.2.0",
+        "prismjs": "1.9.0",
+        "react": "^17.0.1",
+        "react-app-polyfill": "^1.0.6",
+        "react-dom": "^17.0.1",
+        "react-iframe": "^1.8.0",
+        "react-rnd": "^10.5.2",
+        "react-router-dom": "^5.2.0",
+        "react-scripts": "5.0.0",
+        "react-transition-group": "^4.4.1",
+        "sass": "^1.32.8",
+        "sweetalert2": "^11.17.2"
+    },
+    "scripts": {
+        "start": "react-scripts start",
+        "build": "react-scripts build",
+        "test": "react-scripts test",
+        "eject": "react-scripts eject"
+    },
+    "eslintConfig": {
+        "extends": [
+            "react-app"
+        ]
+    },
+    "browserslist": [
+        ">0.2%",
+        "not dead",
+        "not ie <= 11",
+        "not op_mini all"
+    ]
+}

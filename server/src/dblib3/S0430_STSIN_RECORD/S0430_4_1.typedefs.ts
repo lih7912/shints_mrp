@@ -1,0 +1,93 @@
+// MGR_S0430_4_1.typeDefs.js
+
+// 데이터 형식(typeDefs) 지정하기 위한 gql 불러오기
+import { gql } from 'apollo-server';
+
+// export default 활용해 gql typeDefs 내보내기
+const moduleTypedefs_S0430_4_1 = gql`
+    type T_S0430_4_1 {
+        PU_CD: String
+        PO_CD: String
+        PO_SEQ: String
+        ORDER_CD: String
+        MATL_CD: String
+        MRP_SEQ: String
+        MATL_SEQ: String
+        MATL_NAME: String
+        COLOR: String
+        SPEC: String
+        UNIT: String
+        MRP_QTY: Float
+        MOQ_QTY: Float
+        LEFTOVER_QTY: Float
+        PO_QTY: Float
+        STSIN_QTY: Float
+        BAL_QTY: Float
+        IN_QTY: Float
+        FOC_QTY: Float
+        SHIP_QTY: Float
+        CURR_CD: String
+        MASTER_PRICE: Float
+        MOQ_AMT: Float
+        MOQ_PRICE: Float
+        FREIGHT_AMT: Float
+        FREIGHT_PRICE: Float
+        OTHER_AMT: Float
+        OTHER_PRICE: Float
+        SURCHAGE_REMARK: String
+        PO_PRICE: Float
+        PAY_TYPE: String
+        PAY_DATE: String
+    }
+
+    input I_S0430_4_1 {
+        PO_CD: String
+        BUYER_CD: String
+        VENDOR_CD: String
+        MATL_TYPE: String
+    }
+
+    type T_S0430_4_2_0 {
+        PU_CD: String
+        VENDOR_CD: String
+        BUYER_CD: String
+        FACTORY_CD: String
+        PU_DATE: String
+        REG_USER: String
+        REG_DATETIME: String
+        PU_STATUS: String
+        MATL_TYPE: String
+        BILL_TO: String
+        SHIP_TO: String
+        CURR_CD: String
+        DEPOSIT_AMT: Float
+        DEPOSIT_FIX: String
+        NORMI: String
+        TRADE_TERM: String
+        ORDER_DATE: String
+        DELIVERY_DATE: String
+        FORWARD: String
+        PI_NO: String
+        PI_FILE: String
+        SHIP_MODE: String
+        PO_CD2: String
+        TARGET_ETA: String
+        PU_TYPE: String
+    }
+
+    type T_S0430_4_2 {
+        PU_MST: [T_S0430_4_2_0!]!
+        STOCK_MEM: [T_S0430_4_1!]!
+    }
+
+    input I_S0430_4_2 {
+        PU_CD: String
+    }
+
+    type Query {
+        mgrQueryS0430_4_1(data: I_S0430_4_1!): [T_S0430_4_1!]!
+        mgrQueryS0430_4_2(data: I_S0430_4_2!): [T_S0430_4_1!]!
+    }
+`;
+
+export default moduleTypedefs_S0430_4_1;

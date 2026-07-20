@@ -1,0 +1,2786 @@
+// MGR_@@TNAME@@.mutations.js
+
+import * as fs from 'fs';
+import { Prisma } from '@prisma/client';
+import prisma from '../../db'; //PrismaClient 사용하기 위해 불러오기
+import AFLib from '../../commlib'; //PrismaClient 사용하기 위해 불러오기
+
+/*
+                STD_FLAG: String 
+                NET: String 
+                LOSS: String 
+                USE_SIZE: String 
+                REMARK: String 
+
+*/
+
+/* 
+    26/05/15 . Won.  Use Stock, Cancel Stock은 재고에 영향을 많이 끼치므로 
+                     정확한 로직 인수인계시까지 이 화일은 수정하지 마세요. 
+*/
+
+// export default로 Mutation 내용 내보내기
+const moduleMutation_S030503_3 = {
+    Mutation: {
+        mgrAutoUseStock_S030503_3: async (_, args, contextValue) => {
+            var tRetDate = AFLib.getCurrTime();
+            var tRetDate1 = tRetDate.substring(0, 8);
+            var tUserInfo = AFLib.getUserInfo(contextValue);
+
+            var tSQLArray = [];
+
+            var tSQL0 = `
+                select
+                    isnull(max(mrp_seq), 0) + 1 as new_seq
+                from
+                    ksv_po_mrp
+                where
+                    po_cd = '${args.datas.PO_CD}'
+            `;
+            var nRet0 = await prisma.$queryRaw(Prisma.raw(tSQL0));
+            var tNewMrpSeq = nRet0[0].new_seq;
+
+            var m_PO_CD = args.datas.PO_CD;
+            var m_PO_SEQ = args.datas.PO_SEQ;
+            var m_USER_ID = tUserInfo.USER_ID;
+
+            if (parseFloat(m_PO_SEQ) <= 0 || parseFloat(m_PO_SEQ) >= 97) {
+                var tRetArray = [];
+                var tObj = {};
+                tObj.CODE = 'ERROR:Po Seq는 0보다 크고 97보다 작아야 합니다.';
+                tObj.id = 0;
+                tRetArray.push(tObj);
+                return tRetArray;
+            }
+
+            var sql100 = `
+                select
+                    *
+                from
+                    ksv_po_mst
+                where
+                    po_cd = '${m_PO_CD}'
+                    and po_seq = '${m_PO_SEQ}'
+            `;
+            var nRet100 = await prisma.$queryRaw(Prisma.raw(sql100));
+            if (nRet100.length > 0) {
+                /*
+          if (parseFloat(nRet100[0].PO_STATUS) > 2) {
+              var tRetArray = [];
+              var tObj = {};
+              tObj.CODE = 'ERROR:해당 Po Seq는 이미 Auto Stock을 진행했습니다.';
+              tObj.id = 0;
+              tRetArray.push(tObj);
+              return tRetArray;
+          }
+          */
+            }
+
+            var tSQL0_1 = `
+                select
+                    a.order_cd,
+                    b.factory_cd
+                from
+                    ksv_po_mem a,
+                    ksv_order_mst b
+                where
+                    a.po_cd = '${m_PO_CD}'
+                    and a.order_cd = b.order_cd
+            `;
+            var nRet0_1 = await prisma.$queryRaw(Prisma.raw(tSQL0_1));
+
+            var m_FACTORY_CD = nRet0_1[0].factory_cd;
+            var m_BUYER_CD = nRet0_1[0].order_cd.substring(0, 2);
+            var m_BUYER_CD_SQL = '';
+
+            if (
+                m_BUYER_CD === 'MG' ||
+                m_BUYER_CD === 'MK' ||
+                m_BUYER_CD === 'ME'
+            ) {
+                m_BUYER_CD_SQL = "left(order_cd,2) in ('MG','MK','ME')";
+            } else if (m_BUYER_CD === 'SP') {
+                m_BUYER_CD_SQL = "left(order_cd,2) in ('SF','SP')";
+            } else if (m_BUYER_CD === 'SK') {
+                m_BUYER_CD_SQL = "left(order_cd,2) in ('SF','SK')";
+            } else {
+                m_BUYER_CD_SQL = `order_cd like '${m_BUYER_CD}%'`;
+            }
+
+            let tSQL99 = `
+                update ksv_po_mrp
+                set
+                    stock_chk = ''
+                where
+                    po_cd = '${m_PO_CD}'
+                    and po_seq = '${m_PO_SEQ}'
+            `;
+            const tSQL99_1 = prisma.$queryRaw(Prisma.raw(tSQL99));
+            tSQLArray.push(tSQL99_1);
+
+            let tSQL99 = `
+                delete from kcd_matl_cd_rep
+                where
+                    reg_user = '${m_USER_ID}'
+            `;
+            const tSQL99_1 = prisma.$queryRaw(Prisma.raw(tSQL99));
+            tSQLArray.push(tSQL99_1);
+
+            let tSQL99 = `
+                insert into
+                    kcd_matl_cd_rep
+                select distinct
+                    a.matl_cd,
+                    case
+                        when b.rep_matl_cd = '' then a.matl_cd
+                        else b.rep_matl_cd
+                    end,
+                    '${m_USER_ID}'
+                from
+                    ksv_po_mrp a,
+                    kcd_matl_mst b
+                where
+                    a.matl_cd = b.matl_cd
+                    and a.po_cd = '${m_PO_CD}'
+                    and a.po_seq = '${m_PO_SEQ}'
+            `;
+            const tSQL99_1 = prisma.$queryRaw(Prisma.raw(tSQL99));
+            tSQLArray.push(tSQL99_1);
+
+            let tSQL99 = `
+                delete from ksv_po_log
+                where
+                    po_cd = '${m_PO_CD}'
+                    and po_seq = '1'
+                    and fix_flag = '0'
+            `;
+            const tSQL99_1 = prisma.$queryRaw(Prisma.raw(tSQL99));
+            tSQLArray.push(tSQL99_1);
+
+            let tSQL99 = `
+                insert into
+                    ksv_po_log (po_cd, po_seq, reg_user, reg_datetime, fix_flag)
+                values
+                    (
+                        '${m_PO_CD}',
+                        '1',
+                        '${m_USER_ID}',
+                        '${tRetDate}',
+                        '0'
+                    )
+            `;
+            const tSQL99_1 = prisma.$queryRaw(Prisma.raw(tSQL99));
+            tSQLArray.push(tSQL99_1);
+
+            try {
+                global.currentTransactionInfo = {
+                    contextValue: contextValue,
+                    functionName: AFLib.getFunctionName(),
+                };
+                await prisma.$transaction(tSQLArray);
+                delete global.currentTransactionInfo;
+            } catch (e) {
+                var tRetArray = [];
+                var tObj = {};
+                tObj.CODE = 'ERROR:STOCK_CHECK_STEP-1';
+                tObj.id = 0;
+                tRetArray.push(tObj);
+                return tRetArray;
+            }
+
+            tSQLArray = [];
+
+            if (m_FACTORY_CD === 'FC044') {
+                let tSQL99 = `
+                    update ksv_po_mrp
+                    set
+                        stock_chk = '*'
+                    where
+                        po_cd = '${m_PO_CD}'
+                        and po_seq = '${m_PO_SEQ}'
+                        and matl_cd in (
+                            select
+                                matl_cd
+                            from
+                                ksv_stock_matl
+                            where
+                                factory_cd in ('${m_FACTORY_CD}')
+                                and matl_cd = ksv_po_mrp.matl_cd
+                                and stock_status in ('3','5','M','R','Y','P','C','A','N','W','O')
+                                and remain_qty > 0.999
+                                and ${m_BUYER_CD_SQL}
+                        )
+                `;
+                const tSQL99_1 = prisma.$queryRaw(Prisma.raw(tSQL99));
+                tSQLArray.push(tSQL99_1);
+
+                let tSQL99 = `
+                    update ksv_po_mrp
+                    set
+                        stock_chk = '*'
+                    where
+                        po_cd = '${m_PO_CD}'
+                        and po_seq = '${m_PO_SEQ}'
+                        and matl_cd in (
+                            select
+                                matl_cd
+                            from
+                                kcd_matl_mst
+                            where
+                                rep_matl_cd in (
+                                    select
+                                        matl_cd
+                                    from
+                                        ksv_stock_matl
+                                    where
+                                        factory_cd in ('${m_FACTORY_CD}')
+                                        and matl_cd = kcd_matl_mst.rep_matl_cd
+                                        and stock_status in ('3','5','M','R','Y','P','C','A','N','W','O')
+                                        and remain_qty > 0.999
+                                        and ${m_BUYER_CD_SQL}
+                                )
+                        )
+                `;
+                const tSQL99_1 = prisma.$queryRaw(Prisma.raw(tSQL99));
+                tSQLArray.push(tSQL99_1);
+            } else {
+                let tSQL99 = `
+                    update ksv_po_mrp
+                    set
+                        stock_chk = '*'
+                    where
+                        po_cd = '${m_PO_CD}'
+                        and po_seq = '${m_PO_SEQ}'
+                        and matl_cd in (
+                            select
+                                matl_cd
+                            from
+                                ksv_stock_matl
+                            where
+                                factory_cd in ('${m_FACTORY_CD}')
+                                and matl_cd = ksv_po_mrp.matl_cd
+                                and stock_status in ('3','5','M','R','Y','P','C','A','N','W','O')
+                                and remain_qty > 0.999
+                                and ${m_BUYER_CD_SQL}
+                        )
+                `;
+                const tSQL99_1 = prisma.$queryRaw(Prisma.raw(tSQL99));
+                tSQLArray.push(tSQL99_1);
+
+                let tSQL99 = `
+                    update ksv_po_mrp
+                    set
+                        stock_chk = '*'
+                    where
+                        po_cd = '${m_PO_CD}'
+                        and po_seq = '${m_PO_SEQ}'
+                        and matl_cd in (
+                            select
+                                b.rep_matl_cd
+                            from
+                                ksv_stock_matl a,
+                                kcd_matl_cd_rep b
+                            where
+                                a.matl_cd = b.matl_cd
+                                and a.factory_cd in ('${m_FACTORY_CD}')
+                                and a.stock_status in ('3','5','M','R','Y','P','C','A','N','W','O')
+                                and a.remain_qty > 0.999
+                                and ${m_BUYER_CD_SQL}
+                                and b.reg_user = '${m_USER_ID}'
+                        )
+                `;
+                const tSQL99_1 = prisma.$queryRaw(Prisma.raw(tSQL99));
+                tSQLArray.push(tSQL99_1);
+            }
+
+            try {
+                global.currentTransactionInfo = {
+                    contextValue: contextValue,
+                    functionName: AFLib.getFunctionName(),
+                };
+                await prisma.$transaction(tSQLArray);
+                delete global.currentTransactionInfo;
+            } catch (e) {
+                var tRetArray = [];
+                var tObj = {};
+                tObj.CODE = 'ERROR:AutoStock:STOCK_CHECK_STEP-2';
+                tObj.id = 0;
+                tRetArray.push(tObj);
+                return tRetArray;
+            }
+
+            var tSQL1 = `
+                select
+                    a.order_cd,
+                    a.matl_cd,
+                    a.mrp_seq,
+                    a.po_qty,
+                    a.matl_seq,
+                    b.rep_matl_cd
+                from
+                    ksv_po_mrp a,
+                    kcd_matl_mst b
+                where
+                    a.po_cd = '${m_PO_CD}'
+                    and a.po_seq = '${m_PO_SEQ}'
+                    and a.use_po_type = '1'
+                    and a.diff_po_type in ('0', '3')
+                    and a.stock_chk = '*'
+                    and a.po_qty > 0
+                    and b.matl_cd = a.matl_cd
+                order by
+                    6
+            `;
+            var nRet1 = await prisma.$queryRaw(Prisma.raw(tSQL1));
+
+            var tIdx1 = 0;
+            var m_nSecSeq = 0;
+
+            for (tIdx1 = 0; tIdx1 < nRet1.length; tIdx1++) {
+                var tOne1 = { ...nRet1[tIdx1] };
+
+                tSQLArray = [];
+                var nUseQty = parseFloat(tOne1.po_qty);
+                var nUseSum = 0;
+
+                var tSQL2 = '';
+                if (m_FACTORY_CD === 'FC044') {
+                    tSQL2 = `
+                        select
+                            a.po_cd,
+                            a.po_seq,
+                            a.order_cd,
+                            a.matl_cd,
+                            a.mrp_seq,
+                            a.matl_seq,
+                            a.stock_idx,
+                            a.remain_qty,
+                            d.matl_price,
+                            d.curr_cd
+                        from
+                            ksv_stock_matl a,
+                            kcd_matl_mem d
+                        where
+                            a.factory_cd in ('${m_FACTORY_CD}')
+                            and a.matl_cd in ('${tOne1.matl_cd}', '${tOne1.rep_matl_cd}')
+                            and a.stock_status in ('3','5','M','R','Y','P','C','A','N','W','O')
+                            and a.remain_qty >= 1
+                            and ${m_BUYER_CD_SQL}
+                            and d.matl_cd = a.matl_cd
+                            and d.matl_seq = a.matl_seq
+                        order by
+                            7
+                    `;
+                } else {
+                    tSQL2 = `
+                        select
+                            a.po_cd,
+                            a.po_seq,
+                            a.order_cd,
+                            a.matl_cd,
+                            a.mrp_seq,
+                            a.matl_seq,
+                            a.stock_idx,
+                            a.remain_qty,
+                            d.matl_price,
+                            d.curr_cd
+                        from
+                            ksv_stock_matl a,
+                            kcd_matl_mem d,
+                            kcd_matl_cd_rep c
+                        where
+                            a.factory_cd in ('${m_FACTORY_CD}')
+                            and a.matl_cd in ('${tOne1.matl_cd}', '${tOne1.rep_matl_cd}')
+                            and a.stock_status in ('3','5','M','R','Y','P','C','A','N','W','O')
+                            and a.remain_qty >= 1
+                            and ${m_BUYER_CD_SQL}
+                            and d.matl_cd = a.matl_cd
+                            and d.matl_seq = a.matl_seq
+                            and c.reg_user = '${m_USER_ID}'
+                            and c.matl_cd = '${tOne1.matl_cd}'
+                        order by
+                            7
+                    `;
+                }
+
+                var nRet2 = await prisma.$queryRaw(Prisma.raw(tSQL2));
+
+                var tIdx2 = 0;
+                for (tIdx2 = 0; tIdx2 < nRet2.length; tIdx2++) {
+                    var tOne2 = nRet2[tIdx2];
+                    var nStockQty = parseFloat(tOne2.remain_qty);
+
+                    if (nUseQty <= 0) break;
+
+                    var nUpdateQty = 0;
+
+                    if (nStockQty >= nUseQty) {
+                        nUpdateQty = nUseQty;
+                        nUseQty -= nUseQty;
+                        nUseSum += nUpdateQty;
+                    } else {
+                        nUpdateQty = nStockQty;
+                        nUseQty -= nStockQty;
+                        nUseSum += nUpdateQty;
+                    }
+
+                    m_nSecSeq += 1;
+                    if (m_nSecSeq === 10000) m_nSecSeq = 0;
+
+                    let tSQL99 = `
+                        insert into
+                            ksv_po_mrp (
+                                po_cd,
+                                po_seq,
+                                order_cd,
+                                matl_cd,
+                                mrp_seq,
+                                matl_seq,
+                                matl_price,
+                                use_size,
+                                use_qty,
+                                po_qty,
+                                bef_po_qty,
+                                diff_qty,
+                                diff_po_type,
+                                change_reason,
+                                use_po_type,
+                                curr_cd,
+                                tot_amt,
+                                curr_date,
+                                usd_amt,
+                                status_cd,
+                                reg_user,
+                                reg_datetime,
+                                po_matl_cd,
+                                po_mrp_seq,
+                                stock_idx
+                            )
+                        values
+                            (
+                                '${m_PO_CD}',
+                                '${m_PO_SEQ}',
+                                '${tOne1.order_cd}',
+                                '${tOne2.matl_cd}',
+                                '${tNewMrpSeq}',
+                                '${tOne2.matl_seq}',
+                                '${tOne2.matl_price}',
+                                '',
+                                '${nUpdateQty}',
+                                '${nUpdateQty}',
+                                '0',
+                                '0',
+                                '0',
+                                '',
+                                '2',
+                                '${tOne2.curr_cd}',
+                                ' 0 ',
+                                '${tRetDate1}',
+                                '0',
+                                '0',
+                                '${m_USER_ID}',
+                                '${tRetDate}',
+                                '${tOne1.matl_cd}',
+                                '${tOne1.mrp_seq}',
+                                '${tOne2.stock_idx}'
+                            )
+                    `;
+                    const tSQL99_1 = prisma.$queryRaw(Prisma.raw(tSQL99));
+                    tSQLArray.push(tSQL99_1);
+
+                    let tSQL99 = `
+                        update ksv_stock_matl
+                        set
+                            remain_qty = remain_qty - ${nUpdateQty},
+                            use_qty = use_qty + ${nUpdateQty}
+                        where
+                            stock_idx = '${tOne2.stock_idx}'
+                    `;
+                    const tSQL99_1 = prisma.$queryRaw(Prisma.raw(tSQL99));
+                    tSQLArray.push(tSQL99_1);
+
+                    let tSQL99 = `
+                        insert into
+                            ksv_stock_use (
+                                stock_idx,
+                                use_datetime,
+                                use_qty,
+                                use_po_cd,
+                                use_po_seq,
+                                use_order_cd,
+                                use_matl_cd,
+                                use_mrp_seq,
+                                use_matl_seq,
+                                factory_cd,
+                                status_cd,
+                                reg_user,
+                                reg_datetime
+                            )
+                        values
+                            (
+                                '${tOne2.stock_idx}',
+                                '${tRetDate}',
+                                '${nUpdateQty}',
+                                '${m_PO_CD}',
+                                '${m_PO_SEQ}',
+                                '${tOne1.order_cd}',
+                                '${tOne2.matl_cd}',
+                                '${tNewMrpSeq}',
+                                '${tOne2.matl_seq}',
+                                '${m_FACTORY_CD}',
+                                '0',
+                                '${m_USER_ID}',
+                                '${tRetDate}'
+                            )
+                    `;
+                    const tSQL99_1 = prisma.$queryRaw(Prisma.raw(tSQL99));
+                    tSQLArray.push(tSQL99_1);
+
+                    tNewMrpSeq += 1;
+                }
+
+                if (nUseSum > 0) {
+                    let tSQL99 = `
+                        update ksv_po_mrp
+                        set
+                            use_qty = po_qty,
+                            po_qty = po_qty - ${nUseSum},
+                            po_matl_cd = '재고발주'
+                        where
+                            po_cd = '${m_PO_CD}'
+                            and po_seq = '${m_PO_SEQ}'
+                            and order_cd = '${tOne1.order_cd}'
+                            and matl_cd = '${tOne1.matl_cd}'
+                            and mrp_seq = '${tOne1.mrp_seq}'
+                    `;
+                    const tSQL99_1 = prisma.$queryRaw(Prisma.raw(tSQL99));
+                    tSQLArray.push(tSQL99_1);
+
+                    let tSQL99 = `
+                        update ksv_stock_mem
+                        set
+                            po_qty = po_qty - ${nUseSum}
+                        where
+                            po_cd = '${m_PO_CD}'
+                            and po_seq = '${m_PO_SEQ}'
+                            and order_cd = '${tOne1.order_cd}'
+                            and matl_cd = '${tOne1.matl_cd}'
+                            and mrp_seq = '${tOne1.mrp_seq}'
+                    `;
+                    const tSQL99_1 = prisma.$queryRaw(Prisma.raw(tSQL99));
+                    tSQLArray.push(tSQL99_1);
+                }
+
+                try {
+                    global.currentTransactionInfo = {
+                        contextValue: contextValue,
+                        functionName: AFLib.getFunctionName(),
+                    };
+                    await prisma.$transaction(tSQLArray);
+                    delete global.currentTransactionInfo;
+                } catch (e) {
+                    var tRetArray = [];
+                    var tObj = {};
+                    tObj.CODE = `ERROR:AutoStock:STEP-3:${e.message}`;
+                    tObj.id = 0;
+                    tRetArray.push(tObj);
+                    return tRetArray;
+                }
+            }
+
+            var tRetArray = [];
+            var tObj = {};
+            tObj.CODE = 'SUCCEED:AutoStock';
+            tObj.id = nRet1.count;
+            tRetArray.push(tObj);
+
+            return tRetArray;
+        },
+
+        mgrUseStock_S030503_3_N_1: async (_, args, contextValue) => {
+            // DEST (N),  SRC(1)
+            var tRetDate = AFLib.getCurrTime();
+            var tRetDate1 = tRetDate.substring(0, 8);
+            var tUserInfo = AFLib.getUserInfo(contextValue);
+
+            var tSQLArray = [];
+
+            var tSQL0 = `
+                select
+                    isnull(max(mrp_seq), 0) + 1 as new_seq
+                from
+                    ksv_po_mrp
+                where
+                    po_cd = '${args.datas.PO_CD}'
+            `;
+            var nRet0 = await prisma.$queryRaw(Prisma.raw(tSQL0));
+            var tNewMrpSeq = nRet0[0].new_seq;
+
+            var m_PO_CD = args.datas.PO_CD;
+            var m_PO_SEQ = args.datas.PO_SEQ;
+            var m_USER_ID = tUserInfo.USER_ID;
+
+            if (parseFloat(m_PO_SEQ) <= 0 || parseFloat(m_PO_SEQ) >= 97) {
+                var tRetArray = [];
+                var tObj = {};
+                tObj.CODE = 'ERROR:Po Seq는 0보다 크도 97보다 작아야 합니다.';
+                tObj.id = 0;
+                tRetArray.push(tObj);
+                return tRetArray;
+            }
+
+            var tUsedQty = 0;
+            var tIdx9 = 0;
+            var tSrcObj = { ...args.datas.SRC_DATA[0] };
+            var tRemainQty = tSrcObj.USE_QTY;
+            if (parseFloat(tSrcObj.USE_QTY) >= parseFloat(tSrcObj.REMAIN_QTY))
+                tRemainQty = parseFloat(tSrcObj.REMAIN_QTY);
+            for (tIdx9 = 0; tIdx9 < args.datas.DEST_DATA.length; tIdx9++) {
+                if (tRemainQty <= 0) continue;
+
+                var tDestObj = { ...args.datas.DEST_DATA[tIdx9] };
+
+                var tUseQty = 0;
+
+                if (parseFloat(tDestObj.PO_QTY) > tRemainQty) {
+                    tUseQty = tRemainQty;
+                    tRemainQty = 0;
+                } else {
+                    tUseQty = parseFloat(tDestObj.PO_QTY);
+                    tRemainQty -= tUseQty;
+                }
+
+                var tSQL1 = `
+                    update ksv_po_mrp
+                    set
+                        po_qty = po_qty - ${tUseQty},
+                        po_matl_cd = '재고발주'
+                    where
+                        po_cd = '${m_PO_CD}'
+                        and po_seq = ${tDestObj.PO_SEQ}
+                        and order_cd = '${tDestObj.ORDER_CD}'
+                        and matl_cd = '${tDestObj.MATL_CD}'
+                        and mrp_seq = ${tDestObj.MRP_SEQ}
+                `;
+                const tSQL99_1 = prisma.$queryRaw(Prisma.raw(tSQL1));
+                tSQLArray.push(tSQL99_1);
+
+                var tSQL2 = `
+                    update ksv_stock_mem
+                    set
+                        po_qty = po_qty - ${tUseQty}
+                    where
+                        po_cd = '${m_PO_CD}'
+                        and po_seq = ${tDestObj.PO_SEQ}
+                        and order_cd = '${tDestObj.ORDER_CD}'
+                        and matl_cd = '${tDestObj.MATL_CD}'
+                        and mrp_seq = ${tDestObj.MRP_SEQ}
+                `;
+                const tSQL99_1 = prisma.$queryRaw(Prisma.raw(tSQL2));
+                tSQLArray.push(tSQL99_1);
+
+                var tSQL3 = `
+                    insert into
+                        ksv_po_mrp (
+                            po_cd,
+                            po_seq,
+                            order_cd,
+                            matl_cd,
+                            mrp_seq,
+                            matl_seq,
+                            matl_price,
+                            use_qty,
+                            po_qty,
+                            bef_po_qty,
+                            diff_qty,
+                            diff_po_type,
+                            use_po_type,
+                            curr_cd,
+                            tot_amt,
+                            curr_date,
+                            usd_amt,
+                            status_cd,
+                            reg_user,
+                            reg_datetime,
+                            po_matl_cd,
+                            po_mrp_seq,
+                            stock_idx
+                        )
+                    values
+                        (
+                            '${m_PO_CD}',
+                            ${tDestObj.PO_SEQ},
+                            '${tDestObj.ORDER_CD}',
+                            '${tSrcObj.MATL_CD}',
+                            ${tNewMrpSeq},
+                            '${tSrcObj.MATL_SEQ}',
+                            ${tSrcObj.MATL_PRICE},
+                            ${tUseQty},
+                            ${tUseQty},
+                            0,
+                            0,
+                            '0',
+                            '2',
+                            '${tDestObj.CURR_CD}',
+                            0,
+                            '${tRetDate1}',
+                            0,
+                            '0',
+                            '${m_USER_ID}',
+                            '${tRetDate}',
+                            '${tDestObj.MATL_CD}',
+                            '${tDestObj.MRP_SEQ}',
+                            '${tSrcObj.STOCK_IDX}'
+                        );
+                `;
+                const tSQL99_1 = prisma.$queryRaw(Prisma.raw(tSQL3));
+                tSQLArray.push(tSQL99_1);
+
+                var tSQL5 = `
+                    insert into
+                        ksv_stock_use (
+                            stock_idx,
+                            use_datetime,
+                            use_qty,
+                            use_po_cd,
+                            use_po_seq,
+                            use_order_cd,
+                            use_matl_cd,
+                            use_mrp_seq,
+                            use_matl_seq,
+                            factory_cd,
+                            status_cd,
+                            reg_user,
+                            reg_datetime
+                        )
+                    values
+                        (
+                            '${tSrcObj.STOCK_IDX}',
+                            '${tRetDate}',
+                            ${tUseQty},
+                            '${m_PO_CD}',
+                            ${m_PO_SEQ},
+                            '${tDestObj.ORDER_CD}',
+                            '${tSrcObj.MATL_CD}',
+                            ${tNewMrpSeq},
+                            ${tSrcObj.MATL_SEQ},
+                            '${tSrcObj.FACTORY_CD}',
+                            '0',
+                            '${m_USER_ID}',
+                            '${tRetDate}'
+                        )
+                `;
+                const tSQL99_1 = prisma.$queryRaw(Prisma.raw(tSQL5));
+                tSQLArray.push(tSQL99_1);
+
+                tNewMrpSeq += 1;
+
+                tUsedQty += tUseQty;
+            }
+
+           
+            var tSQL4 = `
+                update ksv_stock_matl
+                set
+                    remain_qty = remain_qty - ${tUsedQty},
+                    use_qty = use_qty + ${tUsedQty}
+                where
+                    stock_idx = '${tSrcObj.STOCK_IDX}'
+            `;
+            const tSQL99_1 = prisma.$queryRaw(Prisma.raw(tSQL4));
+            tSQLArray.push(tSQL99_1);
+
+            try {
+                global.currentTransactionInfo = {
+                    contextValue: contextValue,
+                    functionName: AFLib.getFunctionName(),
+                };
+                await prisma.$transaction(tSQLArray);
+                delete global.currentTransactionInfo;
+                var tRetArray = [];
+                var tObj = {};
+                tObj.CODE = `SUCCESS:UseStock`;
+                tObj.id = 0;
+                tRetArray.push(tObj);
+                return tRetArray;
+            } catch (e) {
+                var tRetArray = [];
+                var tObj = {};
+                tObj.CODE = `ERROR:UseStock:STEP-3:${e.message}`;
+                tObj.id = 0;
+                tRetArray.push(tObj);
+                return tRetArray;
+            }
+        },
+
+        mgrUseStock_S030503_3_1_N: async (_, args, contextValue) => {
+            // DEST (1),  SRC(N)
+
+            var tRetDate = AFLib.getCurrTime();
+            var tRetDate1 = tRetDate.substring(0, 8);
+            var tUserInfo = AFLib.getUserInfo(contextValue);
+
+            var tSQLArray = [];
+
+            var tSQL0 = `
+                select
+                    isnull(max(mrp_seq), 0) + 1 as new_seq
+                from
+                    ksv_po_mrp
+                where
+                    po_cd = '${args.datas.PO_CD}'
+            `;
+            var nRet0 = await prisma.$queryRaw(Prisma.raw(tSQL0));
+            var tNewMrpSeq = nRet0[0].new_seq;
+
+            var m_PO_CD = args.datas.PO_CD;
+            var m_PO_SEQ = args.datas.PO_SEQ;
+            var m_USER_ID = tUserInfo.USER_ID;
+
+            if (parseFloat(m_PO_SEQ) <= 0 || parseFloat(m_PO_SEQ) >= 97) {
+                var tRetArray = [];
+                var tObj = {};
+                tObj.CODE = 'ERROR:Po Seq는 0보다 크도 97보다 작아야 합니다.';
+                tObj.id = 0;
+                tRetArray.push(tObj);
+                return tRetArray;
+            }
+
+            var tIdx9 = 0;
+            var tDestObj = { ...args.datas.DEST_DATA[0] };
+            var tRemainPoQty = parseFloat(tDestObj.PO_QTY);
+            for (tIdx9 = 0; tIdx9 < args.datas.SRC_DATA.length; tIdx9++) {
+                var tSrcObj = { ...args.datas.SRC_DATA[tIdx9] };
+                var tRemainQty = tSrcObj.USE_QTY;
+                if (
+                    parseFloat(tSrcObj.USE_QTY) >=
+                    parseFloat(tSrcObj.REMAIN_QTY)
+                )
+                    tRemainQty = parseFloat(tSrcObj.REMAIN_QTY);
+
+                var tUseQty = 0;
+                if (tRemainPoQty > tRemainQty) {
+                    tUseQty = tRemainQty;
+                    tRemainPoQty -= tRemainQty;
+                } else {
+                    tUseQty = tRemainPoQty;
+                    tRemainPoQty = 0;
+                }
+
+                var tSQL3 = `
+                    insert into
+                        ksv_po_mrp (
+                            po_cd,
+                            po_seq,
+                            order_cd,
+                            matl_cd,
+                            mrp_seq,
+                            matl_seq,
+                            matl_price,
+                            use_qty,
+                            po_qty,
+                            bef_po_qty,
+                            diff_qty,
+                            diff_po_type,
+                            use_po_type,
+                            curr_cd,
+                            tot_amt,
+                            curr_date,
+                            usd_amt,
+                            status_cd,
+                            reg_user,
+                            reg_datetime,
+                            po_matl_cd,
+                            po_mrp_seq,
+                            stock_idx
+                        )
+                    values
+                        (
+                            '${m_PO_CD}',
+                            ${tDestObj.PO_SEQ},
+                            '${tDestObj.ORDER_CD}',
+                            '${tSrcObj.MATL_CD}',
+                            ${tNewMrpSeq},
+                            '${tSrcObj.MATL_SEQ}',
+                            ${tSrcObj.MATL_PRICE},
+                            ${tUseQty},
+                            ${tUseQty},
+                            0,
+                            0,
+                            '0',
+                            '2',
+                            '${tDestObj.CURR_CD}',
+                            0,
+                            '${tRetDate1}',
+                            0,
+                            '0',
+                            '${m_USER_ID}',
+                            '${tRetDate}',
+                            '${tDestObj.MATL_CD}',
+                            '${tDestObj.MRP_SEQ}',
+                            '${tSrcObj.STOCK_IDX}'
+                        );
+                `;
+                const tSQL99_1 = prisma.$queryRaw(Prisma.raw(tSQL3));
+                tSQLArray.push(tSQL99_1);
+
+                var tSQL5 = `
+                    insert into
+                        ksv_stock_use (
+                            stock_idx,
+                            use_datetime,
+                            use_qty,
+                            use_po_cd,
+                            use_po_seq,
+                            use_order_cd,
+                            use_matl_cd,
+                            use_mrp_seq,
+                            use_matl_seq,
+                            factory_cd,
+                            status_cd,
+                            reg_user,
+                            reg_datetime
+                        )
+                    values
+                        (
+                            '${tSrcObj.STOCK_IDX}',
+                            '${tRetDate}',
+                            ${tUseQty},
+                            '${m_PO_CD}',
+                            ${tDestObj.PO_SEQ},
+                            '${tDestObj.ORDER_CD}',
+                            '${tSrcObj.MATL_CD}',
+                            ${tNewMrpSeq},
+                            ${tSrcObj.MATL_SEQ},
+                            '${tSrcObj.FACTORY_CD}',
+                            '0',
+                            '${m_USER_ID}',
+                            '${tRetDate}'
+                        )
+                `;
+                const tSQL99_1 = prisma.$queryRaw(Prisma.raw(tSQL5));
+                tSQLArray.push(tSQL99_1);
+
+                var tSQL4 = `
+                    update ksv_stock_matl
+                    set
+                        remain_qty = remain_qty - ${tUseQty},
+                        use_qty = use_qty + ${tUseQty}
+                    where
+                        stock_idx = '${tSrcObj.STOCK_IDX}'
+                `;
+                const tSQL99_1 = prisma.$queryRaw(Prisma.raw(tSQL4));
+                tSQLArray.push(tSQL99_1);
+
+                tNewMrpSeq += 1;
+            }
+
+            var tUsePoQty = parseFloat(tDestObj.PO_QTY) - tRemainPoQty;
+            var tSQL1 = `
+                update ksv_po_mrp
+                set
+                    po_qty = po_qty - ${tUsePoQty},
+                    po_matl_cd = '재고발주'
+                where
+                    po_cd = '${m_PO_CD}'
+                    and po_seq = ${tDestObj.PO_SEQ}
+                    and order_cd = '${tDestObj.ORDER_CD}'
+                    and matl_cd = '${tDestObj.MATL_CD}'
+                    and mrp_seq = ${tDestObj.MRP_SEQ}
+            `;
+            const tSQL99_1 = prisma.$queryRaw(Prisma.raw(tSQL1));
+            tSQLArray.push(tSQL99_1);
+
+            var tSQL2 = `
+                update ksv_stock_mem
+                set
+                    po_qty = po_qty - ${tUsePoQty}
+                where
+                    po_cd = '${m_PO_CD}'
+                    and po_seq = ${tDestObj.PO_SEQ}
+                    and order_cd = '${tDestObj.ORDER_CD}'
+                    and matl_cd = '${tDestObj.MATL_CD}'
+                    and mrp_seq = ${tDestObj.MRP_SEQ}
+            `;
+            const tSQL99_1 = prisma.$queryRaw(Prisma.raw(tSQL2));
+            tSQLArray.push(tSQL99_1);
+
+            try {
+                global.currentTransactionInfo = {
+                    contextValue: contextValue,
+                    functionName: AFLib.getFunctionName(),
+                };
+                await prisma.$transaction(tSQLArray);
+                delete global.currentTransactionInfo;
+                var tRetArray = [];
+                var tObj = {};
+                tObj.CODE = `SUCCESS:UseStock`;
+                tObj.id = 0;
+                tRetArray.push(tObj);
+                return tRetArray;
+            } catch (e) {
+                var tRetArray = [];
+                var tObj = {};
+                tObj.CODE = `ERROR:UseStock:STEP-3:${e.message}`;
+                tObj.id = 0;
+                tRetArray.push(tObj);
+                return tRetArray;
+            }
+        },
+
+        mgrUseStock_S030503_3_N_N: async (_, args, contextValue) => {
+            // Purchase Info에서 올라오는 Stock Apply
+            // DEST (N),  SRC(N)
+
+            var tRetDate = AFLib.getCurrTime();
+            var tRetDate1 = tRetDate.substring(0, 8);
+            var tUserInfo = AFLib.getUserInfo(contextValue);
+
+            var tRemainPoQty = 0;
+            args.datas.SRC_DATA.forEach((col, i) => {
+                tRemainPoQty += parseFloat(col.USE_QTY);
+            });
+
+            var tCols = args.datas.PO_CD.split('/');
+            var tPoArray = [];
+            var sqlPoCd = '';
+            tCols.forEach((col, i) => {
+                if (col) {
+                    tPoArray.push(col);
+                    if (sqlPoCd === '') sqlPoCd = `'${col}'`;
+                    else sqlPoCd += `,'${col}'`;
+                }
+            });
+
+            var wSrcObj = {};
+            var wDestObj = {};
+
+            var tSQL0 = `
+                select
+                    *
+                from
+                    ksv_po_mrp
+                where
+                    po_cd in (${sqlPoCd})
+                    and matl_cd = '${args.datas.DEST_DATA[0].MATL_CD}'
+                    and po_qty > 0
+                    and use_qty > 0
+                order by
+                    po_cd
+            `;
+            var tWorkArray0 = await prisma.$queryRaw(Prisma.raw(tSQL0));
+            if (tWorkArray0.length <= 0) {
+                var tRetArray = [];
+                var tObj = {};
+                tObj.CODE =
+                    'ERROR:Stock적용할 데이타가 없습니다. 확인해 주세요.';
+                tObj.id = 0;
+                tRetArray.push(tObj);
+                return tRetArray;
+            }
+
+            var tWorkArray = [];
+            var tIdx0 = 0;
+            for (tIdx0 = 0; tIdx0 < tWorkArray0.length; tIdx0++) {
+                var tObj1 = { ...tWorkArray0[tIdx0] };
+                var tSQL0 = `
+                    select
+                        isnull(max(mrp_seq), 0) + 1 as new_seq
+                    from
+                        ksv_po_mrp
+                    where
+                        po_cd = '${tObj1.PO_CD}'
+                `;
+                var nRet0 = await prisma.$queryRaw(Prisma.raw(tSQL0));
+                var tNewMrpSeq = nRet0[0].new_seq;
+                tObj1.NEW_MRP_SEQ = tNewMrpSeq;
+                tWorkArray.push(tObj1);
+            }
+
+            var tSQLArray = [];
+
+            var tDestIdx = 0;
+            var tSrcIdx = 0;
+
+            var tSrcObj = {};
+            var tDestObj = {};
+
+            tSrcObj = { ...args.datas.SRC_DATA[tSrcIdx] };
+            tDestObj = { ...tWorkArray[tDestIdx] };
+
+            var saveSrcObj = {};
+            var saveDestObj = {};
+
+            var tSeq = 1;
+
+            while (tRemainPoQty > 0) {
+                tRetDate = AFLib.getCurrTime();
+                tRetDate1 = tRetDate.substring(0, 8);
+
+                var tRetDate_9 = String(parseFloat(tRetDate) + tSeq);
+                tSeq += 1;
+                tRetDate = tRetDate_9;
+
+                var tUseQty = 0;
+                if (parseFloat(tSrcObj.USE_QTY) > parseFloat(tDestObj.PO_QTY)) {
+                    tUseQty = parseFloat(tDestObj.PO_QTY);
+                    tSrcObj.USE_QTY = parseFloat(tSrcObj.USE_QTY) - tUseQty;
+                    tDestObj.PO_QTY = '0';
+                    tDestIdx += 1;
+                    // tDestObj = { ...tWorkArray[tDestIdx] };
+                    saveDestObj = { ...tWorkArray[tDestIdx] };
+                    saveSrcObj = { ...tSrcObj };
+                } else {
+                    tUseQty = parseFloat(tSrcObj.USE_QTY);
+                    tSrcObj.USE_QTY = '0';
+                    tDestObj.PO_QTY = parseFloat(tDestObj.PO_QTY) - tUseQty;
+                    tSrcIdx += 1;
+                    // tSrcObj = { ...args.datas.SRC_DATA[tSrcIdx] };
+                    saveDestObj = { ...tDestObj };
+                    saveSrcObj = { ...args.datas.SRC_DATA[tSrcIdx] };
+                }
+
+                tRemainPoQty -= tUseQty;
+
+                var wMrpSeq = parseFloat(tDestObj.NEW_MRP_SEQ) + 1;
+                tDestObj.NEW_MRP_SEQ = wMrpSeq;
+                saveDestObj.NEW_MRP_SEQ = wMrpSeq;
+
+                var tSQL3 = `
+                    insert into
+                        ksv_po_mrp (
+                            po_cd,
+                            po_seq,
+                            order_cd,
+                            matl_cd,
+                            mrp_seq,
+                            matl_seq,
+                            matl_price,
+                            use_qty,
+                            po_qty,
+                            bef_po_qty,
+                            diff_qty,
+                            diff_po_type,
+                            use_po_type,
+                            curr_cd,
+                            tot_amt,
+                            curr_date,
+                            usd_amt,
+                            status_cd,
+                            reg_user,
+                            reg_datetime,
+                            po_matl_cd,
+                            po_mrp_seq,
+                            stock_idx
+                        )
+                    values
+                        (
+                            '${tDestObj.PO_CD}',
+                            ${tDestObj.PO_SEQ},
+                            '${tDestObj.ORDER_CD}',
+                            '${tSrcObj.MATL_CD}',
+                            ${wMrpSeq},
+                            '${tDestObj.MATL_SEQ}',
+                            ${tSrcObj.MATL_PRICE},
+                            ${tUseQty},
+                            ${tUseQty},
+                            0,
+                            0,
+                            '0',
+                            '2',
+                            '${tDestObj.CURR_CD}',
+                            0,
+                            '${tRetDate1}',
+                            0,
+                            '0',
+                            '${tUserInfo.USER_ID}',
+                            '${tRetDate}',
+                            '${tDestObj.MATL_CD}',
+                            '${tDestObj.MRP_SEQ}',
+                            '${tSrcObj.STOCK_IDX}'
+                        );
+                `;
+                const tSQL99_1 = prisma.$queryRaw(Prisma.raw(tSQL3));
+                tSQLArray.push(tSQL99_1);
+
+                var tSQL5 = `
+                    insert into
+                        ksv_stock_use (
+                            stock_idx,
+                            use_datetime,
+                            use_qty,
+                            use_po_cd,
+                            use_po_seq,
+                            use_order_cd,
+                            use_matl_cd,
+                            use_mrp_seq,
+                            use_matl_seq,
+                            factory_cd,
+                            status_cd,
+                            reg_user,
+                            reg_datetime
+                        )
+                    values
+                        (
+                            '${tSrcObj.STOCK_IDX}',
+                            '${tRetDate}',
+                            ${tUseQty},
+                            '${tDestObj.PO_CD}',
+                            ${tDestObj.PO_SEQ},
+                            '${tDestObj.ORDER_CD}',
+                            '${tSrcObj.MATL_CD}',
+                            ${wMrpSeq},
+                            ${tSrcObj.MATL_SEQ},
+                            '${tSrcObj.FACTORY_CD}',
+                            '0',
+                            '${tUserInfo.USER_ID}',
+                            '${tRetDate}'
+                        )
+                `;
+                const tSQL99_1 = prisma.$queryRaw(Prisma.raw(tSQL5));
+                tSQLArray.push(tSQL99_1);
+
+                var tSQL4 = `
+                    update ksv_stock_matl
+                    set
+                        remain_qty = remain_qty - ${tUseQty},
+                        use_qty = use_qty + ${tUseQty}
+                    where
+                        stock_idx = '${tSrcObj.STOCK_IDX}'
+                `;
+                const tSQL99_1 = prisma.$queryRaw(Prisma.raw(tSQL4));
+                tSQLArray.push(tSQL99_1);
+
+                var tSQL1 = `
+                    update ksv_po_mrp
+                    set
+                        po_qty = po_qty - ${tUseQty},
+                        po_matl_cd = '재고발주'
+                    where
+                        po_cd = '${tDestObj.PO_CD}'
+                        and po_seq = ${tDestObj.PO_SEQ}
+                        and order_cd = '${tDestObj.ORDER_CD}'
+                        and matl_cd = '${tDestObj.MATL_CD}'
+                        and mrp_seq = ${tDestObj.MRP_SEQ}
+                `;
+                const tSQL99_1 = prisma.$queryRaw(Prisma.raw(tSQL1));
+                tSQLArray.push(tSQL99_1);
+
+                var tSQL2 = `
+                    update ksv_stock_mem
+                    set
+                        po_qty = po_qty - ${tUseQty}
+                    where
+                        po_cd = '${tDestObj.PO_CD}'
+                        and po_seq = ${tDestObj.PO_SEQ}
+                        and order_cd = '${tDestObj.ORDER_CD}'
+                        and matl_cd = '${tDestObj.MATL_CD}'
+                        and mrp_seq = ${tDestObj.MRP_SEQ}
+                `;
+                const tSQL99_1 = prisma.$queryRaw(Prisma.raw(tSQL2));
+                tSQLArray.push(tSQL99_1);
+
+                tSrcObj = { ...saveSrcObj };
+                tDestObj = { ...saveDestObj };
+            }
+
+            try {
+                global.currentTransactionInfo = {
+                    contextValue: contextValue,
+                    functionName: AFLib.getFunctionName(),
+                };
+                await prisma.$transaction(tSQLArray);
+                delete global.currentTransactionInfo;
+                var tRetArray = [];
+                var tObj = {};
+                tObj.CODE = `SUCCESS:UseStock`;
+                tObj.id = 0;
+                tRetArray.push(tObj);
+                return tRetArray;
+            } catch (e) {
+                var tRetArray = [];
+                var tObj = {};
+                tObj.CODE = `ERROR:UseStock:STEP-3:${e.message}`;
+                tObj.id = 0;
+                tRetArray.push(tObj);
+                return tRetArray;
+            }
+        },
+
+        mgrConfirmUseStock_S030503_3: async (_, args, contextValue) => {
+            var tRetDate = AFLib.getCurrTime();
+            var tRetDate1 = tRetDate.substring(0, 8);
+            var tUserInfo = AFLib.getUserInfo(contextValue);
+
+            var tSQLArray = [];
+            var tRetArray = [];
+
+            /*  나중에 업무 협의후 사용: 20241107 : Won
+      var tSQL10 = `
+          select
+              isnull(count(*), 0) as cnt
+          from
+              ksv_stock_use
+          where
+              use_po_cd = '${args.datas.PO_CD}'
+              and use_po_seq = '${args.datas.PO_SEQ}'
+              and conf_flag <> '1'
+      `;
+      var nRet10 = await prisma.$queryRaw(Prisma.raw(tSQL10));
+      if (nRet10.length > 0) {
+          if (nRet10[0].cnt > 0) {
+              var tObj = {};
+              tObj.CODE = 'ERROR:Fix Stock Check:confirm안된 use stock이 있습니다. stock check을 해주세요';
+              tObj.id = 0; 
+              tRetArray.push(tObj);
+              return (tRetArray);
+          }
+      }
+      */
+
+            var tSQL100 = `
+                select
+                    po_status
+                from
+                    ksv_po_mst
+                where
+                    po_cd = '${args.datas.PO_CD}'
+                    and po_seq = '1'
+            `;
+            var nRet100 = await prisma.$queryRaw(Prisma.raw(tSQL100));
+            var tPoStatus = '';
+            if (nRet100.length > 0) tPoStatus = nRet100[0].po_status;
+
+            var tSQL99 = `
+          exec kspPoMatlListStock '${args.datas.PO_CD}', '${tUserInfo.USER_ID}' 
+          `;
+            var tSQL99_1 = prisma.$queryRaw(Prisma.raw(tSQL99));
+            tSQLArray.push(tSQL99_1);
+
+            var tSQL0 = `
+                select
+                    count(po_cd) as cnt
+                from
+                    ksv_po_log
+                where
+                    po_cd = '${args.datas.PO_CD}'
+                    and fix_flag = '1'
+                    and po_seq = ${args.datas.PO_SEQ}
+            `;
+            var nRet0 = await prisma.$queryRaw(Prisma.raw(tSQL0));
+            var tFix_1_Cnt = nRet0[0].cnt;
+
+            var tSQL1 = `
+                select
+                    count(po_cd) as cnt
+                from
+                    ksv_po_log
+                where
+                    po_cd = '${args.datas.PO_CD}'
+                    and fix_flag = '0'
+                    and po_seq = ${args.datas.PO_SEQ}
+            `;
+            var nRet1 = await prisma.$queryRaw(Prisma.raw(tSQL1));
+            var tFix_0_Cnt = nRet1[0].cnt;
+
+            var tUpdateSql1 = `
+                UPDATE KSV_PO_MST
+                SET
+                    PO_STATUS = '3'
+                WHERE
+                    PO_CD = '${args.datas.PO_CD}'
+                    AND PO_STATUS = '2'
+            `;
+            const tSQL99_1 = prisma.$queryRaw(Prisma.raw(tUpdateSql1));
+            tSQLArray.push(tSQL99_1);
+
+            var tUpdateSql2 = `
+                delete from ksv_po_log
+                where
+                    po_cd = '${args.datas.PO_CD}'
+                    and fix_flag = '1'
+                    and po_seq = ${args.datas.PO_SEQ}
+            `;
+            const tSQL99_1 = prisma.$queryRaw(Prisma.raw(tUpdateSql2));
+            tSQLArray.push(tSQL99_1);
+
+            var tUpdateSql3 = `
+                insert into
+                    ksv_po_log (
+                        po_cd,
+                        po_seq,
+                        reg_user,
+                        reg_datetime,
+                        fix_flag,
+                        po_log_type
+                    )
+                values
+                    (
+                        '${args.datas.PO_CD}',
+                        '${args.datas.PO_SEQ}',
+                        '${tUserInfo.USER_ID}',
+                        '${tRetDate}',
+                        '1',
+                        '${args.datas.PO_LOG_TYPE}'
+                    )
+            `;
+            const tSQL99_1 = prisma.$queryRaw(Prisma.raw(tUpdateSql3));
+            tSQLArray.push(tSQL99_1);
+
+            var tUpdateOrderStatus = tPoStatus;
+            if (parseInt(tPoStatus) >= 4) {
+                tUpdateOrderStatus = '3';
+            } else {
+                tUpdateOrderStatus = '6';
+            }
+
+            var tUpdateSql4 = `
+                update ksv_order_mst
+                set
+                    order_status = '${tUpdateOrderStatus}'
+                where
+                    order_cd in (
+                        select
+                            order_cd
+                        from
+                            ksv_po_mem
+                        where
+                            po_cd = '${args.datas.PO_CD}'
+                            and po_seq = '1'
+                    )
+                    and order_status <> '4'
+            `;
+            const tSQL99_1 = prisma.$queryRaw(Prisma.raw(tUpdateSql4));
+            tSQLArray.push(tSQL99_1);
+
+            var tRetArray = [];
+            try {
+                global.currentTransactionInfo = {
+                    contextValue: contextValue,
+                    functionName: AFLib.getFunctionName(),
+                };
+                await prisma.$transaction(tSQLArray);
+                delete global.currentTransactionInfo;
+                var tObj = {};
+                tObj.CODE = `SUCCESS:Fix Stock Check`;
+                tObj.id = nRet1.count;
+                tRetArray.push(tObj);
+            } catch (e) {
+                var tObj = {};
+                tObj.CODE = 'ERROR:Fix Stock Check';
+                tObj.id = 0;
+                tRetArray.push(tObj);
+            }
+            return tRetArray;
+        },
+        mgrStockCancel_S030503_3: async (_, args, contextValue) => {
+            /* 260515. Won. 인수인계시까지  Stock Cancel 로직은 수정하지 마세요 */
+            /* 이 로직은 mrp manager-> Stock Cancel 와 purchase info-> stock cancel 공동 사용 */
+            /* mrp manager -> stock cancel시는 cancel qty없이 po_qty로 cancel qty 결정 */
+            /* purchase info -> stock cancel시는 cancel qty에 cancel Qty 입력됨  */
+            var tRetDate = AFLib.getCurrTime();
+            var tRetDate1 = tRetDate.substring(0, 8);
+            var tUserInfo = AFLib.getUserInfo(contextValue);
+
+            var tSQLArray = [];
+            var tInput = { ...args.datas };
+
+            var tWorkArray = [];
+            var tInput = { ...args.datas };
+
+            var sqlPo = `
+                select * from ksv_po_mst where po_cd = '${tInput.PO_CD}' 
+                `;
+            var retPo = await prisma.$queryRaw(Prisma.raw(sqlPo));
+            var tPoFactoryCd = retPo[0].FACTORY_CD;
+            tInput.FACTORY_CD = tPoFactoryCd;
+
+            var tIdx = 0;
+            var tChk = 0; // 0:  Stock Factory , 1:  Po Factory, 2: Error
+            for (tIdx = 0; tIdx < args.datas.DEST_DATA.length; tIdx++) {
+                var tObj = { ...args.datas.DEST_DATA[tIdx] };
+
+                if (tInput.FACTORY_CD !== tObj.FACTORY_CD) {
+                    if (!tObj.NEW_FACTORY_CD) tChk = 2;
+                    else {
+                       if (tObj.NEW_FACTORY_CD === tInput.FACTORY_CD) tChk = 1;  // Po Factory 귀속 
+                       else if (tObj.NEW_FACTORY_CD === tObj.FACTORY_CD) tChk = 0;  // Stock Factory 귀속 
+                    }
+                }
+
+                var tSQL0 = `
+                    select
+                        *
+                    from
+                        ksv_po_mrp
+                    where
+                        po_cd = '${tInput.PO_CD}'
+                        and po_seq = '${tObj.PO_SEQ}'
+                        and matl_cd = '${tObj.MATL_CD}'
+                        and order_cd = '${tObj.ORDER_CD}'
+                        and mrp_seq = '${tObj.MRP_SEQ}'
+                        and stock_idx = '${tObj.STOCK_IDX}'
+                        and use_po_type = '2'
+                        and diff_po_type in ('0')
+                `;
+                var nRet0 = await prisma.$queryRaw(Prisma.raw(tSQL0));
+                if (nRet0.length > 0) {
+                    var tObj1 = { ...nRet0[0] };
+                    if (!tObj.CANCEL_QTY) tObj1.CANCEL_QTY = tObj.PO_QTY;
+                    else tObj1.CANCEL_QTY = tObj.CANCEL_QTY;
+                    tObj1.NEW_FACTORY_CD = tObj.NEW_FACTORY_CD;
+                    if (!tObj.CANCEL_REASON) tObj1.CANCEL_REASON = '';
+                    else tObj1.CANCEL_REASON = tObj.CANCEL_REASON;
+                    tWorkArray.push(tObj1);
+                }
+            }
+
+            if (tChk > 1) {
+                var tRetArray = [];
+                var tObj = {};
+                tObj.CODE = 'ERROR:Po Factory와 Stock Factory가 다른 경우 재고 귀속 Factory을 지정해야 합니다';
+                tObj.id = 0;
+                tRetArray.push(tObj);
+                return tRetArray;
+            }
+
+            var tIdx = 0;
+            for (tIdx = 0; tIdx < tWorkArray.length; tIdx++) {
+                tSQLArray = [];
+
+                var tInput1 = { ...tWorkArray[tIdx] };
+                tInput1.STOCK_IDX = tInput1.stock_idx;
+
+                if (!tInput1.CANCEL_REASON) tInput1.CANCEL_REASON = '';
+                if (tInput1.CANCEL_REASON === 'N') tInput1.CANCEL_REASON = '';
+
+                // StockMatlObj
+                var tSQL0_1 = `
+                    select
+                        *
+                    from
+                        ksv_stock_matl
+                    where
+                        stock_idx = '${tInput1.STOCK_IDX}'
+                `;
+                var nRet0_1 = await prisma.$queryRaw(Prisma.raw(tSQL0_1));
+                var stockMatlObj = {};
+                if (nRet0_1.length > 0) {
+                    stockMatlObj = { ...nRet0_1[0] };
+                }
+
+                // 원재고 데이터 찾기
+                var tSQL0 = `
+                    select
+                        *
+                    from
+                        ksv_stock_use
+                    where
+                        stock_idx = '${tInput1.STOCK_IDX}'
+                        and use_po_cd = '${tInput1.PO_CD}'
+                        and use_po_seq = '${tInput1.PO_SEQ}'
+                        and use_order_cd = '${tInput1.ORDER_CD}'
+                        and use_matl_cd = '${tInput1.MATL_CD}'
+                        and use_mrp_seq = '${tInput1.MRP_SEQ}'
+                        and use_datetime = '${tInput1.REG_DATETIME}'
+                `;
+                var nRet0 = await prisma.$queryRaw(Prisma.raw(tSQL0));
+                console.log(`Ste-1: ${tInput1.STOCK_IDX},${tInput1.PO_CD},${tInput1.ORDER_CD},${tInput1.MATL_CD},${tInput1.MRP_SEQ},${tInput1.REG_DATETIME}=> ${nRet0.length}`);
+                if (nRet0.length <= 0) {
+                    tSQL0 = `
+                        select
+                            *
+                        from
+                            ksv_stock_use
+                        where
+                            stock_idx = '${tInput1.STOCK_IDX}'
+                            and use_po_cd = '${tInput1.PO_CD}'
+                            and use_po_seq = '${tInput1.PO_SEQ}'
+                            and use_order_cd = '${tInput1.ORDER_CD}'
+                            and use_matl_cd = '${tInput1.MATL_CD}'
+                            and use_mrp_seq = '${tInput1.MRP_SEQ}'
+                            -- and use_datetime = '${tInput1.REG_DATETIME}'
+                    `;
+                    nRet0 = await prisma.$queryRaw(Prisma.raw(tSQL0));
+
+                    if (nRet0.length <= 0) {
+                        var tRetArray = [];
+                        var tObj = {};
+                        tObj.CODE = 'ERROR:원재고 데이터를 찾을수 없습니다';
+                        tObj.id = 0;
+                        tRetArray.push(tObj);
+                        return tRetArray;
+                    }
+                    console.log(`Ste-1-1: ${tInput1.STOCK_IDX},${tInput1.PO_CD},${tInput1.ORDER_CD},${tInput1.MATL_CD},${tInput1.MRP_SEQ},${tInput1.REG_DATETIME}=> ${nRet0.length}`);
+                }
+
+                var tUsePoCd = nRet0[0].USE_PO_CD;
+                var stockUseObj = { ...nRet0[0] };
+
+                var tSQL1 = `
+                    select
+                        a.factory_cd,
+                        b.factory_name2
+                    from
+                        ksv_po_mst a,
+                        kcd_factory b
+                    where
+                        a.po_cd = '${tUsePoCd}'
+                        and a.po_seq = 1
+                        and b.factory_cd = a.factory_cd
+                `;
+                var nRet1 = await prisma.$queryRaw(Prisma.raw(tSQL1));
+                var tPoFactoryCd = '';
+                var tPoFactoryName = '';
+                if (nRet1.length > 0) {
+                    tPoFactoryCd = nRet1[0].factory_cd;
+                    tPoFactoryName = nRet1[0].factory_name;
+                }
+
+                var tSQL2 = `
+                    select
+                        a.factory_cd,
+                        b.factory_name2
+                    from
+                        ksv_stock_matl a,
+                        kcd_factory b
+                    where
+                        a.stock_idx = '${tInput1.STOCK_IDX}'
+                        and b.factory_cd = a.factory_cd
+                `;
+                var nRet2 = await prisma.$queryRaw(Prisma.raw(tSQL2));
+                var tStockFactoryCd = '';
+                var tStockFactoryName = '';
+                if (nRet2.length > 0) {
+                    tStockFactoryCd = nRet2[0].factory_cd;
+                    tStockFactoryName = nRet2[0].factory_name2;
+                }
+
+                // 임시로 막음: 20251028.  공장이 다른 재고 처리방법 적용이 필요
+                // 공장이 다른 경우  stock out 처리
+                /*
+                if (tStockFactoryCd === '' || tStockFactoryCd !== tPoFactoryCd) {
+                   var tRetArray = [];
+                   var tObj = {};
+                   tObj.CODE = 'ERROR:Factory Cd가 다르거나 없습니다';
+                   tObj.id = 0; 
+                   tRetArray.push(tObj);
+                   return (tRetArray);
+                }
+                */
+
+                //
+                // var tCancelQty = parseFloat(tInput1.PO_QTY);
+                var tCancelQty = parseFloat(tInput1.CANCEL_QTY);
+
+                var sqlPoMrp = `
+                    select
+                        *
+                    from
+                        ksv_po_mrp
+                    where
+                        po_cd = '${tInput1.PO_CD}'
+                        and po_seq = '${tInput1.PO_SEQ}'
+                        and order_cd = '${tInput1.ORDER_CD}'
+                        and matl_cd = '${tInput1.PO_MATL_CD}'
+                        and mrp_seq = '${tInput1.PO_MRP_SEQ}'
+                `;
+                var retPoMrp = await prisma.$queryRaw(Prisma.raw(sqlPoMrp));
+                if (retPoMrp.length <= 0) {
+                    var tRetArray = [];
+                    var tObj = {};
+                    tObj.CODE =
+                        'ERROR:PO_MRP 내역오류입니다. 전산팀(Afroba)에 문의하세요';
+                    tObj.id = 0;
+                    tRetArray.push(tObj);
+                    return tRetArray;
+                }
+
+                var compPoQty = parseFloat(retPoMrp[0].PO_QTY);
+                var compUseQty = parseFloat(retPoMrp[0].USE_QTY);
+                var upCancelQty = compUseQty - compPoQty;
+                if (upCancelQty < 0) {
+                    var tRetArray = [];
+                    var tObj = {};
+                    tObj.CODE =
+                        'ERROR:PO_MRP 내역오류입니다(Cancel Qty 오류). 전산팀(Afroba)에 문의하세요';
+                    tObj.id = 0;
+                    tRetArray.push(tObj);
+                    return tRetArray;
+                }
+                if (upCancelQty >= tCancelQty) upCancelQty = tCancelQty;
+                console.log(`Step-2: ${tInput1.PO_CD},${tInput1.PO_SEQ},${tInput1.ORDER_CD},${tInput1.PO_MATL_CD},${tInput1.PO_MRP_SEQ}=>${retPoMrp.length}/${upCancelQty}, ${tCancelQty}`);
+
+                var tSQL3 = '';
+                var tSQL3 = `
+                    update ksv_po_mrp
+                    set
+                        po_qty = po_qty + ${upCancelQty}
+                    where
+                        po_cd = '${tInput1.PO_CD}'
+                        and po_seq = '${tInput1.PO_SEQ}'
+                        and order_cd = '${tInput1.ORDER_CD}'
+                        and matl_cd = '${tInput1.PO_MATL_CD}'
+                        and mrp_seq = '${tInput1.PO_MRP_SEQ}'
+                `;
+                const tSQL99_1 = prisma.$queryRaw(Prisma.raw(tSQL3));
+                tSQLArray.push(tSQL99_1);
+
+                tSQL3 = `
+                    update ksv_po_mrp
+                    set
+                        po_matl_cd = ''
+                    where
+                        po_cd = '${tInput1.PO_CD}'
+                        and po_seq = '${tInput1.PO_SEQ}'
+                        and order_cd = '${tInput1.ORDER_CD}'
+                        and matl_cd = '${tInput1.PO_MATL_CD}'
+                        and mrp_seq = '${tInput1.PO_MRP_SEQ}'
+                        and use_qty = po_qty
+                `;
+                const tSQL99_1 = prisma.$queryRaw(Prisma.raw(tSQL3));
+                tSQLArray.push(tSQL99_1);
+
+                tSQL3 = `
+                    update ksv_stock_mem
+                    set
+                        po_qty = po_qty + ${upCancelQty}
+                    where
+                        po_cd = '${tInput1.PO_CD}'
+                        and po_seq = '${tInput1.PO_SEQ}'
+                        and order_cd = '${tInput1.ORDER_CD}'
+                        and matl_cd = '${tInput1.PO_MATL_CD}'
+                        and mrp_seq = '${tInput1.PO_MRP_SEQ}'
+                `;
+                const tSQL99_1 = prisma.$queryRaw(Prisma.raw(tSQL3));
+                tSQLArray.push(tSQL99_1);
+
+                // 적용된 재고의 KSV_PO_MRP 수정
+                var sql999 = `
+                    select
+                        *
+                    from
+                        ksv_po_mrp
+                    where
+                        po_cd = '${tInput1.PO_CD}'
+                        and po_seq = '${tInput1.PO_SEQ}'
+                        and order_cd = '${tInput1.ORDER_CD}'
+                        and matl_cd = '${tInput1.MATL_CD}'
+                        and mrp_seq = '${tInput1.MRP_SEQ}'
+                `;
+                var ret999 = await prisma.$queryRaw(Prisma.raw(sql999));
+                if (ret999.length > 0) {
+                    if (
+                        parseFloat(ret999[0].PO_QTY) === parseFloat(upCancelQty)
+                    ) {
+                        tSQL3 = `
+                            delete from ksv_po_mrp
+                            where
+                                po_cd = '${tInput1.PO_CD}'
+                                and po_seq = '${tInput1.PO_SEQ}'
+                                and order_cd = '${tInput1.ORDER_CD}'
+                                and matl_cd = '${tInput1.MATL_CD}'
+                                and mrp_seq = '${tInput1.MRP_SEQ}'
+                        `;
+                        const tSQL99_1 = prisma.$queryRaw(Prisma.raw(tSQL3));
+                        tSQLArray.push(tSQL99_1);
+                    } else if (
+                        parseFloat(ret999[0].PO_QTY) > parseFloat(upCancelQty)
+                    ) {
+                        tSQL3 = `
+                            update ksv_po_mrp
+                            set
+                                po_qty = po_qty - ${upCancelQty},
+                                use_qty = use_qty - ${upCancelQty}
+                            where
+                                po_cd = '${tInput1.PO_CD}'
+                                and po_seq = '${tInput1.PO_SEQ}'
+                                and order_cd = '${tInput1.ORDER_CD}'
+                                and matl_cd = '${tInput1.MATL_CD}'
+                                and mrp_seq = '${tInput1.MRP_SEQ}'
+                                and (po_qty - ${tCancelQty}) >= 0
+                                and (use_qty - ${tCancelQty}) >= 0
+                        `;
+                        const tSQL99_1 = prisma.$queryRaw(Prisma.raw(tSQL3));
+                        tSQLArray.push(tSQL99_1);
+                    }
+                }
+
+                if (
+                    parseFloat(stockUseObj.USE_QTY) === parseFloat(upCancelQty)
+                ) {
+                    tSQL3 = `
+                        delete from ksv_stock_use
+                        where
+                            stock_idx = '${stockUseObj.STOCK_IDX}'
+                            and use_po_cd = '${stockUseObj.USE_PO_CD}'
+                            and use_po_seq = '${stockUseObj.USE_PO_SEQ}'
+                            and use_order_cd = '${stockUseObj.USE_ORDER_CD}'
+                            and use_matl_cd = '${stockUseObj.USE_MATL_CD}'
+                            and use_mrp_seq = '${stockUseObj.USE_MRP_SEQ}'
+                            and use_datetime = '${stockUseObj.USE_DATETIME}'
+                    `;
+                    const tSQL99_1 = prisma.$queryRaw(Prisma.raw(tSQL3));
+                    tSQLArray.push(tSQL99_1);
+                } else if (
+                    parseFloat(stockUseObj.USE_QTY) > parseFloat(upCancelQty)
+                ) {
+                    tSQL3 = `
+                        update ksv_stock_use
+                        set
+                            use_qty = use_qty - ${upCancelQty}
+                        where
+                            stock_idx = '${stockUseObj.STOCK_IDX}'
+                            and use_po_cd = '${stockUseObj.USE_PO_CD}'
+                            and use_po_seq = '${stockUseObj.USE_PO_SEQ}'
+                            and use_order_cd = '${stockUseObj.USE_ORDER_CD}'
+                            and use_matl_cd = '${stockUseObj.USE_MATL_CD}'
+                            and use_mrp_seq = '${stockUseObj.USE_MRP_SEQ}'
+                            and use_datetime = '${stockUseObj.USE_DATETIME}'
+                            and (use_qty - ${tCancelQty}) >= 0
+                    `;
+                    const tSQL99_1 = prisma.$queryRaw(Prisma.raw(tSQL3));
+                    tSQLArray.push(tSQL99_1);
+                }
+
+                var sql999 = `
+                    select
+                        (max(mrp_seq) + 1) as new_mrp_seq,
+                        (max(po_seq) + 1) as new_po_seq
+                    from
+                        ksv_po_mrp
+                    where
+                        po_cd = '${tInput1.PO_CD}'
+                        and po_seq < 97
+                `;
+                var ret999 = await prisma.$queryRaw(Prisma.raw(sql999));
+                var tNewMrpSeq = 0;
+                var tNewPoSeq = 0;
+                if (ret999.length > 0) {
+                    tNewMrpSeq = parseFloat(ret999[0].new_mrp_seq);
+                    tNewPoSeq = parseFloat(ret999[0].new_po_seq);
+                }
+
+                let tSQL98_1 = `
+                    update ksv_stock_idx
+                    set
+                        idx = idx + 1
+                `;
+                let nSQL98_1 = await prisma.$queryRaw(Prisma.raw(tSQL98_1));
+
+                let tSQL98_2 = `
+                    select
+                        fac,
+                        idx
+                    from
+                        ksv_stock_idx
+                `;
+                let nRet98_2 = await prisma.$queryRaw(Prisma.raw(tSQL98_2));
+
+                var tStockIdx = nRet98_2[0].idx;
+                var t_Zero = '0000000000';
+                var tNewStockIdx =
+                    'S' +
+                    t_Zero.substring(0, 9 - String(tStockIdx).length) +
+                    String(tStockIdx);
+
+                if (!tInput1.CANCEL_REASON) {
+                    var sql887 = `
+                        select
+                            remain_qty,
+                            use_qty
+                        from
+                            ksv_stock_matl
+                        where
+                            stock_idx = '${tInput1.STOCK_IDX}'
+                    `;
+                    var ret887 = await prisma.$queryRaw(Prisma.raw(sql887));
+                    if (
+                        ret887.length > 0 &&
+                        parseFloat(ret887[0].remain_qty) + parseFloat(upCancelQty) >= 0 &&
+                        parseFloat(ret887[0].use_qty) - parseFloat(upCancelQty) >= 0
+                    ) {
+                        if (tChk <= 0) {  // Factory 같은 경우
+                            tSQL3 = `
+                                update ksv_stock_matl
+                                set
+                                    remain_qty = remain_qty + ${upCancelQty},
+                                    use_qty = use_qty - ${upCancelQty}
+                                where
+                                    stock_idx = '${tInput1.STOCK_IDX}'
+                            `;
+                            const tSQL99_1 = prisma.$queryRaw(Prisma.raw(tSQL3));
+                            tSQLArray.push(tSQL99_1);
+                        } else { // Factory 가 다른 경우
+                            // 기존 Factory의 수량은 그대로 놔두고 
+                            // 새로운 Factory 에 재고 생성
+
+                            tSQL3 = `
+                                 insert into
+                                     ksv_stock_matl (
+                                         po_cd,
+                                         po_seq,
+                                         order_cd,
+                                         matl_cd,
+                                         mrp_seq,
+                                         matl_seq,
+                                         stock_qty,
+                                         remain_qty,
+                                         use_qty,
+                                         factory_cd,
+                                         stock_status,
+                                         stock_status_2,
+                                         stock_date,
+                                         remark,
+                                         status_cd,
+                                         reg_user,
+                                         reg_datetime,
+                                         rack,
+                                         location,
+                                         org_stock_idx,
+                                         stock_idx,
+                                         root_idx, 
+                                         owner_ship,
+                                         reason_make,
+                                         AUTHORITY,
+                                         CONDITION,
+                                         MANAGER,
+                                         PURPOSE
+                                     )
+                                 select
+                                     '${tInput1.PO_CD}',
+                                     '${tInput1.PO_SEQ}',
+                                     '${tInput1.ORDER_CD}',
+                                     matl_cd,
+                                     mrp_seq,
+                                     matl_seq,
+                                     '${upCancelQty}',
+                                     '${upCancelQty}',
+                                     '0',
+                                     '${tInput1.NEW_FACTORY_CD}',
+                                     stock_status,
+                                     stock_status_2,
+                                     '${tRetDate1}',
+                                     remark,
+                                     '0',
+                                     '${tUserInfo.USER_ID}',
+                                     '${tRetDate}',
+                                     '',
+                                     '',
+                                     '${tInput1.STOCK_IDX}',
+                                     '${tNewStockIdx}',
+                                     root_idx,
+                                     owner_ship,
+                                     reason_make,
+                                     AUTHORITY,
+                                     CONDITION,
+                                     MANAGER,
+                                     PURPOSE
+                                 from
+                                     ksv_stock_matl
+                                 where
+                                     stock_idx = '${tInput1.STOCK_IDX}'
+                            `;
+                            const tSQL99_1 = prisma.$queryRaw(Prisma.raw(tSQL3));
+                            tSQLArray.push(tSQL99_1);
+                        }
+                    }
+                } else {
+                    var tCheck2 = 0;
+                    if (
+                        parseFloat(stockMatlObj.STOCK_QTY) - parseFloat(upCancelQty) >= 0
+                    )
+                        tCheck2 = 1;
+
+                    tCheck2 = 0; // 수정시까지 Stock Out 처리안함
+
+                    var sql887 = `
+                        select
+                            out_qty,
+                            stock_qty,
+                            use_qty
+                        from
+                            ksv_stock_matl
+                        where
+                            stock_idx = '${tInput1.STOCK_IDX}'
+                    `;
+                    var ret887 = await prisma.$queryRaw(Prisma.raw(sql887));
+                    if (
+                        ret887.length > 0 &&
+                        parseFloat(ret887[0].out_qty) + parseFloat(upCancelQty) >= 0 &&
+                        parseFloat(ret887[0].stock_qty) - parseFloat(upCancelQty) >= 0 &&
+                        parseFloat(ret887[0].use_qty) - parseFloat(upCancelQty) >= 0
+                    ) {
+                        tSQL3 = `
+                            update ksv_stock_matl
+                            set
+                                out_qty = out_qty + ${upCancelQty},
+                                use_qty = use_qty - ${upCancelQty},
+                                stock_qty = stock_qty - ${upCancelQty}
+                            where
+                                stock_idx = '${tInput1.STOCK_IDX}'
+                        `;
+                        const tSQL99_1 = prisma.$queryRaw(Prisma.raw(tSQL3));
+                        tSQLArray.push(tSQL99_1);
+                        tCheck2 += 1;
+                    }
+
+                    tSQL3 = `
+                        insert into
+                            ksv_stock_matl (
+                                po_cd,
+                                po_seq,
+                                order_cd,
+                                matl_cd,
+                                mrp_seq,
+                                matl_seq,
+                                stock_qty,
+                                remain_qty,
+                                use_qty,
+                                factory_cd,
+                                stock_status,
+                                stock_date,
+                                remark,
+                                status_cd,
+                                reg_user,
+                                reg_datetime,
+                                rack,
+                                location,
+                                org_stock_idx,
+                                stock_idx,
+                                root_idx
+                            )
+                        select
+                            po_cd,
+                            po_seq,
+                            order_cd,
+                            matl_cd,
+                            mrp_seq,
+                            matl_seq,
+                            '${upCancelQty}',
+                            '0',
+                            '${upCancelQty}',
+                            '${tPoFactoryCd}',
+                            '${tInput1.CANCEL_REASON}',
+                            '${tRetDate1}',
+                            remark,
+                            '0',
+                            '${tUserInfo.USER_ID}',
+                            '${tRetDate}',
+                            rack,
+                            location,
+                            '${tInput1.STOCK_IDX}',
+                            '${tNewStockIdx}',
+                            root_idx
+                        from
+                            ksv_stock_matl
+                        where
+                            stock_idx = '${tInput1.STOCK_IDX}'
+                    `;
+                    const tSQL99_1 = prisma.$queryRaw(Prisma.raw(tSQL3));
+                    if (tCheck2 > 0) tSQLArray.push(tSQL99_1);
+                }
+
+                try {
+                    global.currentTransactionInfo = {
+                        contextValue: contextValue,
+                        functionName: AFLib.getFunctionName(),
+                    };
+                    await prisma.$transaction(tSQLArray);
+                    delete global.currentTransactionInfo;
+                } catch (e) {
+                    var tRetArray = [];
+                    var tObj = {};
+                    tObj.CODE = `ERROR:Stock Cancel Error:${e.message}`;
+                    tObj.id = 0;
+                    tRetArray.push(tObj);
+                    return tRetArray;
+                }
+            }
+            var tRetArray = [];
+            var tObj = {};
+            tObj.CODE = 'SUCCESS:Stock Cancel ';
+            tObj.id = 0;
+            tRetArray.push(tObj);
+            return tRetArray;
+        },
+        mgrAutoUseStock_S030503_3_bak: async (_, args, contextValue) => {
+            var tRetDate = AFLib.getCurrTime();
+            var tRetDate1 = tRetDate.substring(0, 8);
+            var tUserInfo = AFLib.getUserInfo(contextValue);
+
+            var tSQLArray = [];
+
+            var tSQL0 = `
+                select
+                    isnull(max(mrp_seq), 0) + 1 as new_seq
+                from
+                    ksv_po_mrp
+                where
+                    po_cd = '${args.datas.PO_CD}'
+            `;
+            var nRet0 = await prisma.$queryRaw(Prisma.raw(tSQL0));
+            var tNewMrpSeq = nRet0[0].new_seq;
+
+            var m_PO_CD = args.datas.PO_CD;
+            var m_PO_SEQ = args.datas.PO_SEQ;
+            var m_USER_ID = tUserInfo.USER_ID;
+
+            if (parseFloat(m_PO_SEQ) <= 0 || parseFloat(m_PO_SEQ) >= 97) {
+                var tRetArray = [];
+                var tObj = {};
+                tObj.CODE = 'ERROR:Po Seq는 0보다 크도 97보다 작아야 합니다.';
+                tObj.id = 0;
+                tRetArray.push(tObj);
+                return tRetArray;
+            }
+
+            var sql100 = `
+                select
+                    *
+                from
+                    ksv_po_mst
+                where
+                    po_cd = '${m_PO_CD}'
+                    and po_seq = '${m_PO_SEQ}'
+            `;
+            var nRet100 = await prisma.$queryRaw(Prisma.raw(sql100));
+            if (nRet100.length > 0) {
+                /*
+          if (parseFloat(nRet100[0].PO_STATUS) > 2) {
+              var tRetArray = [];
+              var tObj = {};
+              tObj.CODE = 'ERROR:해당 Po Seq는 이미 Auto Stock을 진행했습니다.';
+              tObj.id = 0; 
+              tRetArray.push(tObj);
+              return (tRetArray);
+          }
+          */
+            }
+
+            var tSQL0_1 = `
+                select
+                    a.order_cd,
+                    b.factory_cd
+                from
+                    ksv_po_mem a,
+                    ksv_order_mst b
+                where
+                    a.po_cd = '${m_PO_CD}'
+                    and a.order_cd = b.order_cd
+            `;
+            var nRet0_1 = await prisma.$queryRaw(Prisma.raw(tSQL0_1));
+
+            var m_FACTORY_CD = nRet0_1[0].factory_cd;
+            var m_BUYER_CD = nRet0_1[0].order_cd.substring(0, 2);
+
+            let tSQL99 = `
+                update ksv_po_mrp
+                set
+                    stock_chk = ''
+                where
+                    po_cd = '${m_PO_CD}'
+                    and po_seq = '${m_PO_SEQ}'
+            `;
+            const tSQL99_1 = prisma.$queryRaw(Prisma.raw(tSQL99));
+            tSQLArray.push(tSQL99_1);
+
+            let tSQL99 = `
+                delete from kcd_matl_cd_rep
+                where
+                    reg_user = '${m_USER_ID}'
+            `;
+            const tSQL99_1 = prisma.$queryRaw(Prisma.raw(tSQL99));
+            tSQLArray.push(tSQL99_1);
+
+            let tSQL99 = `
+                insert into
+                    kcd_matl_cd_rep
+                select distinct
+                    a.matl_cd,
+                    case
+                        when b.rep_matl_cd = '' then a.matl_cd
+                        else b.rep_matl_cd
+                    end,
+                    '${m_USER_ID}'
+                from
+                    ksv_po_mrp a,
+                    kcd_matl_mst b
+                where
+                    a.matl_cd = b.matl_cd
+                    and a.po_cd = '${m_PO_CD}'
+                    and a.po_seq = '${m_PO_SEQ}'
+            `;
+            const tSQL99_1 = prisma.$queryRaw(Prisma.raw(tSQL99));
+            tSQLArray.push(tSQL99_1);
+
+            let tSQL99 = `
+                delete from ksv_po_log
+                where
+                    po_cd = '${m_PO_CD}'
+                    -- and po_seq = '1' 
+                    and po_seq = '${m_PO_SEQ}'
+                    -- and fix_flag='0'
+            `;
+            const tSQL99_1 = prisma.$queryRaw(Prisma.raw(tSQL99));
+            tSQLArray.push(tSQL99_1);
+
+            let tSQL99 = `
+                insert into
+                    ksv_po_log (po_cd, po_seq, reg_user, reg_datetime, fix_flag)
+                values
+                    (
+                        '${m_PO_CD}',
+                        '${m_PO_SEQ}',
+                        '${m_USER_ID}',
+                        '${tRetDate}',
+                        '0'
+                    )
+            `;
+            const tSQL99_1 = prisma.$queryRaw(Prisma.raw(tSQL99));
+            tSQLArray.push(tSQL99_1);
+
+            try {
+                global.currentTransactionInfo = {
+                    contextValue: contextValue,
+                    functionName: AFLib.getFunctionName(),
+                };
+                await prisma.$transaction(tSQLArray);
+                delete global.currentTransactionInfo;
+            } catch (e) {
+                var tRetArray = [];
+                var tObj = {};
+                tObj.CODE = 'ERROR:STOCK_CHECK_STEP-1';
+                tObj.id = 0;
+                tRetArray.push(tObj);
+                return tRetArray;
+            }
+
+            tSQLArray = [];
+
+            if (m_FACTORY_CD === 'FC044') {
+                let tSQL99 = `
+                    update ksv_po_mrp
+                    set
+                        stock_chk = '*'
+                    where
+                        po_cd = '${m_PO_CD}'
+                        and po_seq = '${m_PO_SEQ}'
+                        and matl_cd in (
+                            select
+                                matl_cd
+                            from
+                                ksv_stock_matl
+                            where
+                                factory_cd in ('${m_FACTORY_CD}')
+                                and matl_cd = ksv_po_mrp.matl_cd
+                                and stock_status in (
+                                    '3',
+                                    '5',
+                                    'M',
+                                    'R',
+                                    'Y',
+                                    'P',
+                                    'C',
+                                    'A',
+                                    'N',
+                                    'W',
+                                    'O'
+                                )
+                                and (
+                                    STOCK_STATUS_2 in ('S1', 'S2')
+                                    or (
+                                        STOCK_STATUS_2 = ''
+                                        and STOCK_STATUS in ('W')
+                                    )
+                                )
+                                and remain_qty > 0.999
+                                and order_cd like '${m_BUYER_CD}%'
+                        )
+                `;
+                const tSQL99_1 = prisma.$queryRaw(Prisma.raw(tSQL99));
+                // tSQLArray.push(tSQL99_1);
+
+                let tSQL99 = `
+                    update ksv_po_mrp
+                    set
+                        stock_chk = '*'
+                    where
+                        po_cd = '${m_PO_CD}'
+                        and po_seq = '${m_PO_SEQ}'
+                        and matl_cd in (
+                            select
+                                matl_cd
+                            from
+                                kcd_matl_mst
+                            where
+                                rep_matl_cd in (
+                                    select
+                                        matl_cd
+                                    from
+                                        ksv_stock_matl
+                                    where
+                                        factory_cd in ('${m_FACTORY_CD}')
+                                        and matl_cd = kcd_matl_mst.rep_matl_cd
+                                        and stock_status in (
+                                            '3',
+                                            '5',
+                                            'M',
+                                            'R',
+                                            'Y',
+                                            'P',
+                                            'C',
+                                            'A',
+                                            'N',
+                                            'W',
+                                            'O'
+                                        )
+                                        and (
+                                            STOCK_STATUS_2 in ('S1', 'S2')
+                                            or (
+                                                STOCK_STATUS_2 = ''
+                                                and STOCK_STATUS in ('W')
+                                            )
+                                        )
+                                        and remain_qty > 0.999
+                                        and order_cd like '${m_BUYER_CD}%'
+                                )
+                        )
+                `;
+                const tSQL99_1 = prisma.$queryRaw(Prisma.raw(tSQL99));
+                // tSQLArray.push(tSQL99_1);
+            } else {
+                let tSQL99 = `
+                    update ksv_po_mrp
+                    set
+                        stock_chk = '*'
+                    where
+                        po_cd = '${m_PO_CD}'
+                        and po_seq = '${m_PO_SEQ}'
+                        and matl_cd in (
+                            select
+                                matl_cd
+                            from
+                                ksv_stock_matl
+                            where
+                                factory_cd in ('${m_FACTORY_CD}')
+                                and matl_cd = ksv_po_mrp.matl_cd
+                                and stock_status in (
+                                    '3',
+                                    '5',
+                                    'M',
+                                    'R',
+                                    'Y',
+                                    'P',
+                                    'C',
+                                    'A',
+                                    'N',
+                                    'W',
+                                    'O'
+                                )
+                                and (
+                                    STOCK_STATUS_2 in ('S1', 'S2')
+                                    or (
+                                        STOCK_STATUS_2 = ''
+                                        and STOCK_STATUS in ('W')
+                                    )
+                                )
+                                and remain_qty > 0.999
+                                and order_cd like '${m_BUYER_CD}%'
+                        )
+                `;
+                const tSQL99_1 = prisma.$queryRaw(Prisma.raw(tSQL99));
+                // tSQLArray.push(tSQL99_1);
+
+                let tSQL99 = `
+                    update ksv_po_mrp
+                    set
+                        stock_chk = '*'
+                    where
+                        po_cd = '${m_PO_CD}'
+                        and po_seq = '${m_PO_SEQ}'
+                        and matl_cd in (
+                            select
+                                b.rep_matl_cd
+                            from
+                                ksv_stock_matl a,
+                                kcd_matl_cd_rep b
+                            where
+                                a.matl_cd = b.matl_cd
+                                and a.factory_cd in ('${m_FACTORY_CD}')
+                                and a.stock_status in (
+                                    '3',
+                                    '5',
+                                    'M',
+                                    'R',
+                                    'Y',
+                                    'P',
+                                    'C',
+                                    'A',
+                                    'N',
+                                    'W',
+                                    'O'
+                                )
+                                and (
+                                    a.STOCK_STATUS_2 in ('S1', 'S2')
+                                    or (
+                                        a.STOCK_STATUS_2 = ''
+                                        and a.STOCK_STATUS in ('W')
+                                    )
+                                )
+                                and a.remain_qty > 0.999
+                                and a.order_cd like '${m_BUYER_CD}%'
+                                and b.reg_user = '${m_USER_ID}'
+                        )
+                `;
+                const tSQL99_1 = prisma.$queryRaw(Prisma.raw(tSQL99));
+                // tSQLArray.push(tSQL99_1);
+            }
+            try {
+                global.currentTransactionInfo = {
+                    contextValue: contextValue,
+                    functionName: AFLib.getFunctionName(),
+                };
+                await prisma.$transaction(tSQLArray);
+                delete global.currentTransactionInfo;
+            } catch (e) {
+                var tRetArray = [];
+                var tObj = {};
+                tObj.CODE = 'ERROR:AutoStock:STOCK_CHECK_STEP-2';
+                tObj.id = 0;
+                tRetArray.push(tObj);
+                return tRetArray;
+            }
+
+            var tSQL1 = `
+                select
+                    a.order_cd,
+                    a.matl_cd,
+                    a.mrp_seq,
+                    a.po_qty,
+                    a.matl_seq,
+                    b.rep_matl_cd
+                from
+                    ksv_po_mrp a,
+                    kcd_matl_mst b
+                where
+                    a.po_cd = '${m_PO_CD}'
+                    and a.po_seq = '${m_PO_SEQ}'
+                    and a.use_po_type = '1'
+                    and a.diff_po_type in ('0', '3')
+                    and a.stock_chk = '*'
+                    and a.po_qty > 0
+                    and b.matl_cd = a.matl_cd
+                order by
+                    6
+            `;
+            var nRet1 = await prisma.$queryRaw(Prisma.raw(tSQL1));
+
+            var tIdx1 = 0;
+
+            var m_nSecSeq = 0;
+
+            for (tIdx1 = 0; tIdx1 < nRet1.length; tIdx1++) {
+                tSQLArray = [];
+
+                var tOne1 = nRet1[tIdx1];
+
+                var nUseQty = parseFloat(tOne1.po_qty);
+                var nUseSum = 0;
+
+                var tSQL2 = '';
+                if (m_FACTORY_CD === 'FC044') {
+                    var tSQL2 = `
+                        select
+                            a.po_cd,
+                            a.po_seq,
+                            a.order_cd,
+                            a.matl_cd,
+                            a.mrp_seq,
+                            a.matl_seq,
+                            a.stock_idx,
+                            a.remain_qty,
+                            d.matl_price,
+                            d.curr_cd
+                        from
+                            ksv_stock_matl a,
+                            kcd_matl_mem d
+                        where
+                            a.factory_cd in ('${m_FACTORY_CD}')
+                            and a.matl_cd in ('${tOne1.matl_cd}', '${tOne1.rep_matl_cd}')
+                            and a.stock_status in (
+                                '3',
+                                '5',
+                                'M',
+                                'R',
+                                'Y',
+                                'P',
+                                'C',
+                                'A',
+                                'N',
+                                'W',
+                                'O'
+                            )
+                            and (
+                                a.STOCK_STATUS_2 in ('S1', 'S2')
+                                or (
+                                    a.STOCK_STATUS_2 = ''
+                                    and a.STOCK_STATUS in ('W')
+                                )
+                            )
+                            and a.remain_qty >= 1
+                            and a.order_cd like '${m_BUYER_CD}%'
+                            and d.matl_cd = a.matl_cd
+                            and d.matl_seq = a.matl_seq
+                        order by
+                            7
+                    `;
+                } else {
+                    var tSQL2 = `
+                        select
+                            a.po_cd,
+                            a.po_seq,
+                            a.order_cd,
+                            a.matl_cd,
+                            a.mrp_seq,
+                            a.matl_seq,
+                            a.stock_idx,
+                            a.remain_qty,
+                            d.matl_price,
+                            d.curr_cd
+                        from
+                            ksv_stock_matl a,
+                            kcd_matl_mem d,
+                            kcd_matl_cd_rep c
+                        where
+                            a.factory_cd in ('${m_FACTORY_CD}')
+                            and a.matl_cd in ('${tOne1.matl_cd}', '${tOne1.rep_matl_cd}')
+                            and a.stock_status in (
+                                '3',
+                                '5',
+                                'M',
+                                'R',
+                                'Y',
+                                'P',
+                                'C',
+                                'A',
+                                'N',
+                                'W',
+                                'O'
+                            )
+                            and (
+                                a.STOCK_STATUS_2 in ('S1', 'S2')
+                                or (
+                                    a.STOCK_STATUS_2 = ''
+                                    and a.STOCK_STATUS in ('W')
+                                )
+                            )
+                            and a.remain_qty >= 1
+                            and a.order_cd like '${m_BUYER_CD}%'
+                            and d.matl_cd = a.matl_cd
+                            and d.matl_seq = a.matl_seq
+                            and c.reg_user = '${m_USER_ID}'
+                            and c.matl_cd = '${tOne1.matl_cd}'
+                        order by
+                            7
+                    `;
+                }
+
+                var nRet2 = await prisma.$queryRaw(Prisma.raw(tSQL2));
+
+                var tIdx2 = 0;
+                for (tIdx2 = 0; tIdx2 < nRet2.length; tIdx2++) {
+                    var tOne2 = nRet2[tIdx2];
+
+                    var nStockQty = parseFloat(tOne2.remain_qty);
+
+                    if (nUseQty <= 0) break;
+
+                    var nUpdateQty = 0;
+
+                    if (nStockQty >= nUseQty) {
+                        nUpdateQty = nUseQty;
+                        nUseQty -= nUseQty;
+                        nUseSum += nUpdateQty;
+                    } else {
+                        nUpdateQty = nStockQty;
+                        nUseQty -= nStockQty;
+                        nUseSum += nUpdateQty;
+                    }
+
+                    m_nSecSeq += 1;
+                    if (m_nSecSeq === 10000) m_nSecSeq = 0;
+
+                    let tSQL99 = `
+                        insert into
+                            ksv_po_mrp (
+                                po_cd,
+                                po_seq,
+                                order_cd,
+                                matl_cd,
+                                mrp_seq,
+                                matl_seq,
+                                matl_price,
+                                use_size,
+                                use_qty,
+                                po_qty,
+                                bef_po_qty,
+                                diff_qty,
+                                diff_po_type,
+                                change_reason,
+                                use_po_type,
+                                curr_cd,
+                                tot_amt,
+                                curr_date,
+                                usd_amt,
+                                status_cd,
+                                reg_user,
+                                reg_datetime,
+                                po_matl_cd,
+                                po_mrp_seq,
+                                stock_idx
+                            )
+                        values
+                            (
+                                '${m_PO_CD}',
+                                '${m_PO_SEQ}',
+                                '${tOne1.order_cd}',
+                                '${tOne2.matl_cd}',
+                                '${tNewMrpSeq}',
+                                '${tOne2.matl_seq}',
+                                '${tOne2.matl_price}',
+                                '',
+                                '${nUpdateQty}',
+                                '${nUpdateQty}',
+                                '0',
+                                '0',
+                                '0',
+                                '',
+                                '2',
+                                '${tOne2.curr_cd}',
+                                ' 0 ',
+                                '${tRetDate1}',
+                                '0',
+                                '0',
+                                '${m_USER_ID}',
+                                '${tRetDate}',
+                                '${tOne1.matl_cd}',
+                                '${tOne1.mrp_seq}',
+                                '${tOne2.stock_idx}'
+                            )
+                    `;
+                    const tSQL99_1 = prisma.$queryRaw(Prisma.raw(tSQL99));
+                    tSQLArray.push(tSQL99_1);
+
+                    let tSQL99 = `
+                        update ksv_stock_matl
+                        set
+                            remain_qty = remain_qty - ${nUpdateQty},
+                            use_qty = use_qty + ${nUpdateQty}
+                        where
+                            stock_idx = '${tOne2.stock_idx}'
+                    `;
+                    const tSQL99_1 = prisma.$queryRaw(Prisma.raw(tSQL99));
+                    tSQLArray.push(tSQL99_1);
+
+                    let tSQL99 = `
+                        insert into
+                            ksv_stock_use (
+                                stock_idx,
+                                use_datetime,
+                                use_qty,
+                                use_po_cd,
+                                use_po_seq,
+                                use_order_cd,
+                                use_matl_cd,
+                                use_mrp_seq,
+                                use_matl_seq,
+                                factory_cd,
+                                status_cd,
+                                reg_user,
+                                reg_datetime
+                            )
+                        values
+                            (
+                                '${tOne2.stock_idx}',
+                                '${tRetDate}',
+                                '${nUpdateQty}',
+                                '${m_PO_CD}',
+                                '${m_PO_SEQ}',
+                                '${tOne1.order_cd}',
+                                '${tOne2.matl_cd}',
+                                '${tNewMrpSeq}',
+                                '${tOne2.matl_seq}',
+                                '${m_FACTORY_CD}',
+                                '0',
+                                '${m_USER_ID}',
+                                '${tRetDate}'
+                            )
+                    `;
+                    const tSQL99_1 = prisma.$queryRaw(Prisma.raw(tSQL99));
+                    tSQLArray.push(tSQL99_1);
+
+                    tNewMrpSeq += 1;
+                }
+
+                if (nUseSum > 0) {
+                    let tSQL99 = `
+                        update ksv_po_mrp
+                        set
+                            use_qty = po_qty,
+                            po_qty = po_qty - ${nUseSum},
+                            po_matl_cd = '재고발주'
+                        where
+                            po_cd = '${m_PO_CD}'
+                            and po_seq = '${m_PO_SEQ}'
+                            and order_cd = '${tOne1.order_cd}'
+                            and matl_cd = '${tOne1.matl_cd}'
+                            and mrp_seq = '${tOne1.mrp_seq}'
+                    `;
+                    const tSQL99_1 = prisma.$queryRaw(Prisma.raw(tSQL99));
+                    tSQLArray.push(tSQL99_1);
+
+                    let tSQL99 = `
+                        update ksv_stock_mem
+                        set
+                            po_qty = po_qty - ${nUseSum}
+                        where
+                            po_cd = '${m_PO_CD}'
+                            and po_seq = '${m_PO_SEQ}'
+                            and order_cd = '${tOne1.order_cd}'
+                            and matl_cd = '${tOne1.matl_cd}'
+                            and mrp_seq = '${tOne1.mrp_seq}'
+                    `;
+                    const tSQL99_1 = prisma.$queryRaw(Prisma.raw(tSQL99));
+                    tSQLArray.push(tSQL99_1);
+                }
+
+                try {
+                    global.currentTransactionInfo = {
+                        contextValue: contextValue,
+                        functionName: AFLib.getFunctionName(),
+                    };
+                    await prisma.$transaction(tSQLArray);
+                    delete global.currentTransactionInfo;
+                } catch (e) {
+                    var tRetArray = [];
+                    var tObj = {};
+                    tObj.CODE = `ERROR:AutoStock:STEP-3:${e.message}`;
+                    tObj.id = 0;
+                    tRetArray.push(tObj);
+                    return tRetArray;
+                }
+            }
+
+            var tRetArray = [];
+            var tObj = {};
+            tObj.CODE = 'SUCCEED:AutoStock';
+            tObj.id = nRet1.count;
+            tRetArray.push(tObj);
+
+            return tRetArray;
+        },
+    },
+};
+
+export default moduleMutation_S030503_3;

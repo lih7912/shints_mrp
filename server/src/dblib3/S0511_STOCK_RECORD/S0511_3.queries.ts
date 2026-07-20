@@ -1,0 +1,73 @@
+import { Prisma } from '@prisma/client';
+import prisma from '../../db'; //PrismaClient 사용하기 위해 불러오기
+const fs = require('fs');
+
+// export default로 Query 내용 내보내기
+const moduleQuery_S0511_3 = {
+    Query: {
+        mgrQueryS0511_3: async (_, args) => {
+            var tSQL = '';
+            if (args.data.STYLE_CD !== '') {
+                tSQL += `AND STYLE_NAME like '%${args.data.STYLE_CD}%' `;
+            }
+            let sqlStr = `
+                SELECT
+                    A.MATL_CD,
+                    E.ORDER_CD,
+                    A.MATL_NAME,
+                    A.COLOR,
+                    A.SPEC,
+                    A.UNIT,
+                    E.STOCK_QTY,
+                    E.REMAIN_QTY,
+                    E.STOCK_STATUS,
+                    E.RACK,
+                    E.LOCATION,
+                    E.REASON_REMARK,
+                    E.REMARK,
+                    E.REMARK0,
+                    C.VENDOR_NAME,
+                    B.MATL_SEQ,
+                    E.REMAIN_QTY,
+                    E.STOCK_IDX,
+                    E.ROOT_IDX
+                FROM
+                    KCD_MATL_MST A,
+                    KCD_MATL_MEM B,
+                    KCD_VENDOR C,
+                    KSV_STOCK_MATL E
+                WHERE
+                    A.MATL_NAME LIKE '%${args.data.MATL_NAME}%' ESCAPE '['
+                    AND A.COLOR LIKE '%${args.data.COLOR}%'
+                    AND A.SPEC LIKE '%${args.data.SPEC}%'
+                    AND A.MATL_CD LIKE '%${args.data.MATL_CD}%'
+                    -- AND E.PO_CD = 'EO22-0032'
+                    AND E.PO_CD = '${args.data.PO_CD}'
+                    AND E.ORDER_CD LIKE '${args.data.ORDER_CD}%'
+                    AND E.STOCK_STATUS IN ('N', 'W')
+                    AND E.MATL_CD = A.MATL_CD
+                    AND E.REMAIN_QTY > 0
+                    AND B.MATL_CD = A.MATL_CD
+                    AND B.MATL_SEQ = (
+                        SELECT
+                            MAX(MATL_SEQ)
+                        FROM
+                            KCD_MATL_MEM
+                        WHERE
+                            MATL_CD = A.MATL_CD
+                    )
+                    AND C.VENDOR_CD = A.VENDOR_CD
+                    AND C.VENDOR_NAME LIKE '%${args.data.VENDOR_NAME}%'
+                ORDER BY
+                    1,
+                    2
+            `;
+            var tRet = await prisma.$queryRaw(Prisma.raw(sqlStr));
+            var tRetArray = [];
+            var tIdx = 0;
+            return tRet;
+        },
+    },
+};
+
+export default moduleQuery_S0511_3;

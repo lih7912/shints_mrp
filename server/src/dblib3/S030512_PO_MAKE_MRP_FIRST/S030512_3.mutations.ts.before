@@ -1,0 +1,544 @@
+// MGR_@@TNAME@@.mutations.js
+
+import * as fs from 'fs';
+import { Prisma } from '@prisma/client';
+import prisma from '../../db'; //PrismaClient 사용하기 위해 불러오기
+import AFLib from '../../commlib'; //PrismaClient 사용하기 위해 불러오기
+
+/*
+                STD_FLAG: String 
+                NET: String 
+                LOSS: String 
+                USE_SIZE: String 
+                REMARK: String 
+
+*/
+
+// export default로 Mutation 내용 내보내기
+const moduleMutation_S030512_3 = {
+    Mutation: {
+        mgrInsert_S030512_MRP_MAKE: async (_, args, contextValue) => {
+            //
+            var tDate = new Date();
+            var mm = tDate.getMonth() + 1;
+            var mm_str = '';
+            if (mm > 9) mm_str = mm.toString();
+            else mm_str = '0' + mm;
+
+            var dd = tDate.getDate();
+            var dd_str = '';
+            if (dd > 9) dd_str = dd;
+            else dd_str = '0' + dd;
+
+            var hours = tDate.getHours();
+            var hours_str = '';
+            if (hours > 9) hours_str = hours.toString();
+            else hours_str = '0' + hours;
+
+            var minutes = tDate.getMinutes();
+            var minutes_str = '';
+            if (minutes > 9) minutes_str = minutes.toString();
+            else minutes_str = '0' + minutes;
+
+            var seconds = tDate.getSeconds();
+            var seconds_str = '';
+            if (seconds > 9) seconds_str = seconds.toString();
+            else seconds_str = '0' + seconds;
+
+            var yyyy = tDate.getFullYear();
+
+            var tRetDate =
+                yyyy.toString() +
+                mm_str +
+                dd_str +
+                hours_str +
+                minutes_str +
+                seconds_str;
+            var tYY = 'B' + yyyy.toString().substring(2) + '-';
+
+            // let tPO = "POA2022S672";
+            var tUserInfo = AFLib.getUserInfo(contextValue);
+
+            /*
+      var tSQL = `
+          SELECT
+              max(A.SEQ) + 1 as max_seq
+          FROM
+              KSV_ORDER_MST A,
+              KCD_STYLE B
+          WHERE
+              A.STYLE_CD = B.STYLE_CD
+              and A.YY = ${tOneMst.YY}
+              and B.BUYER_CD = '${tOneMst.BUYER_CD}'
+      `;
+      var nRet0 = await prisma.$queryRaw(Prisma.raw(tSQL));
+      var tRet = nRet0[0];
+      var tMaxSeq = tRet.max_seq;
+*/
+
+            /*
+      var tTempSQL = `EXEC sp_helptext N'kspPoMrpNetTemp' `;
+      var tTempRet = await prisma.$queryRaw(Prisma.raw(tTempSQL));
+      console.log(tTempRet);
+*/
+
+            var tInputObj = args.datas[0];
+
+            var tSQL_PoMrpNet = `
+          exec kspPoMrpNet '${tInputObj.PO_CD}', '${tUserInfo.USER_ID}'
+      `;
+
+            try {
+                global.currentTransactionInfo = {
+                    contextValue: contextValue,
+                    functionName: AFLib.getFunctionName(),
+                };
+                var [nRet1] = await prisma.$transaction([
+                    prisma.$queryRaw(Prisma.raw(tSQL_PoMrpNet)),
+                ]);
+                delete global.currentTransactionInfo;
+                console.log(nRet1);
+
+                /*
+          var tTempSQL = `
+              select
+                  *
+              from
+                  ksv_po_mrpnet
+              where
+                  po_cd = '${tInputObj.PO_CD}'
+          `;
+          var tTempRet = await prisma.$queryRaw(Prisma.raw(tTempSQL));
+          console.log("PO MRPNET :" + tTempRet.length);
+*/
+            } catch (e) {
+                console.log(e);
+                var tRetArray = [];
+                var tObj = {};
+                tObj.CODE = 'PO MRP NET ERROR';
+                tObj.id = 0;
+                tRetArray.push(tObj);
+                return tRetArray;
+            }
+
+            var tSQL_PoMrp = `
+          exec kspPoMrp '${tInputObj.PO_CD}', '${tUserInfo.USER_ID}'
+      `;
+
+            try {
+                global.currentTransactionInfo = {
+                    contextValue: contextValue,
+                    functionName: AFLib.getFunctionName(),
+                };
+                var [nRet1] = await prisma.$transaction([
+                    prisma.$queryRaw(Prisma.raw(tSQL_PoMrp)),
+                ]);
+                delete global.currentTransactionInfo;
+
+                /*
+          var tTempSQL = `
+              select
+                  *
+              from
+                  ksv_po_mrp
+              where
+                  po_cd = '${tInputObj.PO_CD}'
+          `;
+          var tTempRet = await prisma.$queryRaw(Prisma.raw(tTempSQL));
+          console.log(`PO MRP:${tInputObj.PO_CD} => ${tTempRet.length}`);
+*/
+
+                var tRetArray = [];
+                var tObj = {};
+                tObj.CODE = `PO MRP SUCCEED: ${tInputObj.PO_CD} `;
+                tObj.id = 0;
+                tRetArray.push(tObj);
+            } catch (e) {
+                console.log(e);
+                var tRetArray = [];
+                var tObj = {};
+                tObj.CODE = 'PO MRP  ERROR';
+                tObj.id = 0;
+                tRetArray.push(tObj);
+                return tRetArray;
+            }
+
+            var tSQL_PoMatlList = `
+          exec kspPoMatlListMain '${tInputObj.PO_CD}', '${tUserInfo.USER_ID}'
+      `;
+
+            try {
+                global.currentTransactionInfo = {
+                    contextValue: contextValue,
+                    functionName: AFLib.getFunctionName(),
+                };
+                var [nRet1] = await prisma.$transaction([
+                    prisma.$queryRaw(Prisma.raw(tSQL_PoMatlList)),
+                ]);
+                delete global.currentTransactionInfo;
+
+                /*
+          var tTempSQL = `
+              select
+                  *
+              from
+                  ksv_po_matllist
+              where
+                  po_cd = '${tInputObj.PO_CD}'
+          `;
+          var tTempRet = await prisma.$queryRaw(Prisma.raw(tTempSQL));
+          console.log(`PO MATLLIST:${tInputObj.PO_CD} => ${tTempRet.length}`);
+*/
+
+                var tRetArray = [];
+                var tObj = {};
+                tObj.CODE = `PO MATLLIST SUCCEED: ${tInputObj.PO_CD} `;
+                tObj.id = 0;
+                tRetArray.push(tObj);
+            } catch (e) {
+                console.log(e);
+                var tRetArray = [];
+                var tObj = {};
+                tObj.CODE = 'PO MATLLIST ERROR';
+                tObj.id = 0;
+                tRetArray.push(tObj);
+                return tRetArray;
+            }
+
+            var tSQL_PoMrpList = `
+          exec kspPoMrpList '${tInputObj.PO_CD}', '${tUserInfo.USER_ID}'
+      `;
+
+            try {
+                global.currentTransactionInfo = {
+                    contextValue: contextValue,
+                    functionName: AFLib.getFunctionName(),
+                };
+                var [nRet1] = await prisma.$transaction([
+                    prisma.$queryRaw(Prisma.raw(tSQL_PoMrpList)),
+                ]);
+                delete global.currentTransactionInfo;
+
+                /*
+          var tTempSQL = `
+              select
+                  *
+              from
+                  ksv_po_mrp
+              where
+                  po_cd = '${tInputObj.PO_CD}'
+          `;
+          var tTempRet = await prisma.$queryRaw(Prisma.raw(tTempSQL));
+          console.log(`PO MRP:${tInputObj.PO_CD} => ${tTempRet.length}`);
+*/
+                var tRetArray = [];
+                var tObj = {};
+                tObj.CODE = `PO MRP LIST  SUCCEED: ${tInputObj.PO_CD} `;
+                tObj.id = 0;
+                tRetArray.push(tObj);
+            } catch (e) {
+                console.log(e);
+                var tRetArray = [];
+                var tObj = {};
+                tObj.CODE = 'PO MRP LIST ERROR';
+                tObj.id = 0;
+                tRetArray.push(tObj);
+                return tRetArray;
+            }
+
+            return tRetArray;
+        },
+
+        mgrInsert_S030512_MRP_SAVE: async (_, args, contextValue) => {
+            //
+            var tDate = new Date();
+            var mm = tDate.getMonth() + 1;
+            var mm_str = '';
+            if (mm > 9) mm_str = mm.toString();
+            else mm_str = '0' + mm;
+
+            var dd = tDate.getDate();
+            var dd_str = '';
+            if (dd > 9) dd_str = dd;
+            else dd_str = '0' + dd;
+
+            var hours = tDate.getHours();
+            var hours_str = '';
+            if (hours > 9) hours_str = hours.toString();
+            else hours_str = '0' + hours;
+
+            var minutes = tDate.getMinutes();
+            var minutes_str = '';
+            if (minutes > 9) minutes_str = minutes.toString();
+            else minutes_str = '0' + minutes;
+
+            var seconds = tDate.getSeconds();
+            var seconds_str = '';
+            if (seconds > 9) seconds_str = seconds.toString();
+            else seconds_str = '0' + seconds;
+
+            var yyyy = tDate.getFullYear();
+
+            var tRetDate =
+                yyyy.toString() +
+                mm_str +
+                dd_str +
+                hours_str +
+                minutes_str +
+                seconds_str;
+            var tRetDate1 = tRetDate.substring(0, 8);
+            var tYY = 'B' + yyyy.toString().substring(2) + '-';
+
+            // let tPO = "POA2022S672";
+            var tUserInfo = AFLib.getUserInfo(contextValue);
+
+            /*
+      var tSQL = `
+          SELECT
+              max(A.SEQ) + 1 as max_seq
+          FROM
+              KSV_ORDER_MST A,
+              KCD_STYLE B
+          WHERE
+              A.STYLE_CD = B.STYLE_CD
+              and A.YY = ${tOneMst.YY}
+              and B.BUYER_CD = '${tOneMst.BUYER_CD}'
+      `;
+      var nRet0 = await prisma.$queryRaw(Prisma.raw(tSQL));
+      var tRet = nRet0[0];
+      var tMaxSeq = tRet.max_seq;
+*/
+            var tInputObj = args.datas[0];
+
+            var sql_MaxSeq = `
+                select
+                    isnull(max(po_seq), 0) as max_po_seq
+                from
+                    ksv_po_mrp
+                where
+                    po_cd = '${tInputObj.PO_CD}'
+                    and po_seq < 98
+            `;
+            var tRet0 = await prisma.$queryRaw(Prisma.raw(sql_MaxSeq));
+            var tMaxSeq = tRet0[0].max_po_seq + 1;
+
+            var tInsSql = '';
+            var tInserObj = args.datas.forEach((col, i) => {
+                var tSQL = `
+                    insert into
+                        ksv_po_mrp (
+                            PO_CD,
+                            PO_SEQ,
+                            ORDER_CD,
+                            MATL_CD,
+                            MATL_SEQ,
+                            MATL_PRICE,
+                            MRP_SEQ,
+                            USE_SIZE,
+                            USE_QTY,
+                            PO_QTY,
+                            BEF_PO_QTY,
+                            DIFF_QTY,
+                            DIFF_PO_TYPE,
+                            CHANGE_REASON,
+                            USE_PO_TYPE,
+                            CURR_CD,
+                            TOT_AMT,
+                            CURR_DATE,
+                            USD_AMT,
+                            STATUS_CD,
+                            REG_USER,
+                            REG_DATETIME,
+                            use_real_qty,
+                            use_sum_qty,
+                            use_int_qty
+                        )
+                    select
+                        PO_CD,
+                        ${tMaxSeq},
+                        ORDER_CD,
+                        MATL_CD,
+                        MATL_SEQ,
+                        MATL_PRICE,
+                        MRP_SEQ,
+                        USE_SIZE,
+                        USE_QTY,
+                        PO_QTY,
+                        BEF_PO_QTY,
+                        DIFF_QTY,
+                        DIFF_PO_TYPE,
+                        CHANGE_REASON,
+                        USE_PO_TYPE,
+                        CURR_CD,
+                        TOT_AMT,
+                        CURR_DATE,
+                        USD_AMT,
+                        STATUS_CD,
+                        REG_USER,
+                        REG_DATETIME,
+                        use_real_qty,
+                        use_sum_qty,
+                        use_int_qty
+                    from
+                        ksv_po_mrptemp
+                    where
+                        user_id = '${tUserInfo.USER_ID}'
+                        and po_cd = '${col.PO_CD}'
+                        and order_cd = '${col.ORDER_CD}'
+                        and matl_cd = '${col.MATL_CD}'
+                        and mrp_seq = ${col.MRP_SEQ};
+                `;
+                tInsSql += tSQL;
+            });
+
+            var tInsPoMstSql = `
+                insert into
+                    ksv_po_mst (
+                        po_cd,
+                        po_seq,
+                        po_type,
+                        po_date,
+                        po_status,
+                        matl_due_date,
+                        prod_due_date,
+                        place_cd,
+                        curr_date,
+                        yy,
+                        seq,
+                        factory_cd,
+                        delivery_type,
+                        status_cd,
+                        reg_user,
+                        reg_datetime
+                    )
+                select
+                    po_cd,
+                    ${tMaxSeq},
+                    po_type,
+                    '${tRetDate1}',
+                    '4',
+                    matl_due_date,
+                    prod_due_date,
+                    place_cd,
+                    '${tRetDate1}',
+                    yy,
+                    seq,
+                    factory_cd,
+                    delivery_type,
+                    '0',
+                    '${tUserInfo.USER_ID}',
+                    '${tRetDate}'
+                from
+                    ksv_po_mst
+                where
+                    po_cd = '${tInputObj.PO_CD}'
+                    and po_seq = 1
+            `;
+
+            var tInsPoMemSql = `
+                insert into
+                    ksv_po_mem (po_cd, po_seq, order_cd)
+                select
+                    po_cd,
+                    ${tMaxSeq},
+                    order_cd
+                from
+                    ksv_po_mem
+                where
+                    po_cd = '${tInputObj.PO_CD}'
+                    and po_seq = 1
+            `;
+
+            var tExecSql = `exec kspPoMatlListMain '${tInputObj.PO_CD}','${tUserInfo.USER_ID}' `;
+            var tExecSql1 = `exec kspPoMrpList '${tInputObj.PO_CD}','${tUserInfo.USER_ID}' `;
+
+            var tUpdatePoMstSql = `
+                update ksv_po_mst
+                set
+                    po_status = '2',
+                    curr_date = '${tRetDate1}'
+                where
+                    po_cd = '${tInputObj.PO_CD}'
+            `;
+
+            var tUpdateOrderMstSql = `
+                update ksv_order_mst
+                set
+                    order_status = '2'
+                where
+                    order_cd in (
+                        select
+                            order_cd
+                        from
+                            ksv_po_mem
+                        where
+                            po_cd = '${tInputObj.PO_CD}'
+                            and po_seq = '1'
+                    )
+                    and order_status <> '4'
+            `;
+
+            /*
+      var tUpdateOrderMstSql1 = `
+          update ksv_order_mst
+          set
+              order_status = '2'
+          where
+              po_cd = '${tInputObj.PO_CD}'
+              and order_status <> '4'
+      `;
+*/
+
+            try {
+                if (tMaxSeq > 1) {
+                    global.currentTransactionInfo = {
+                        contextValue: contextValue,
+                        functionName: AFLib.getFunctionName(),
+                    };
+                    var [nRet1, nRet2, nRet3, nRet4, nRet5, nRet6, nRet7] =
+                        await prisma.$transaction([
+                            prisma.$queryRaw(Prisma.raw(tInsSql)),
+                            prisma.$queryRaw(Prisma.raw(tInsPoMstSql)),
+                            prisma.$queryRaw(Prisma.raw(tInsPoMemSql)),
+                            prisma.$queryRaw(Prisma.raw(tExecSql)),
+                            prisma.$queryRaw(Prisma.raw(tExecSql1)),
+                            prisma.$queryRaw(Prisma.raw(tUpdatePoMstSql)),
+                            prisma.$queryRaw(Prisma.raw(tUpdateOrderMstSql)),
+                        ]);
+                    delete global.currentTransactionInfo;
+                } else {
+                    global.currentTransactionInfo = {
+                        contextValue: contextValue,
+                        functionName: AFLib.getFunctionName(),
+                    };
+                    var [nRet1, nRet2, nRet3, nRet4, nRet5] =
+                        await prisma.$transaction([
+                            prisma.$queryRaw(Prisma.raw(tInsSql)),
+                            prisma.$queryRaw(Prisma.raw(tExecSql)),
+                            prisma.$queryRaw(Prisma.raw(tExecSql1)),
+                            prisma.$queryRaw(Prisma.raw(tUpdatePoMstSql)),
+                            prisma.$queryRaw(Prisma.raw(tUpdateOrderMstSql)),
+                        ]);
+                    delete global.currentTransactionInfo;
+                }
+                var tRetArray = [];
+                var tObj = {};
+                tObj.CODE =
+                    'MRP Insert SUCCEED:' + tInputObj.PO_SEQ + ',' + tMaxSeq;
+                tObj.id = 0;
+                tRetArray.push(tObj);
+                return tRetArray;
+            } catch (e) {
+                console.log(e);
+                var tRetArray = [];
+                var tObj = {};
+                tObj.CODE = 'MRP Insert ERROR';
+                tObj.id = 0;
+                tRetArray.push(tObj);
+                return tRetArray;
+            }
+        },
+    },
+};
+
+export default moduleMutation_S030512_3;

@@ -1,0 +1,35 @@
+// 데이터 형식(typeDefs) 지정하기 위한 gql 불러오기
+import { gql } from 'apollo-server';
+
+// export default 활용해 gql typeDefs 내보내기
+const moduleTypedefs_BASE_KSV_PU_POOL = gql`
+    type BASE_QRY_KSV_PU_POOL {
+        PO_CD: String
+        PO_SEQ: Int
+        IN_DATE: String
+        PU_CD: String
+        BUYER_CD: String
+        VENDOR_CD: String
+        FACTORY_CD: String
+        STATUS_CD: String
+        REG_USER: String
+        REG_DATETIME: String
+        id: Int
+    }
+
+    input BASE_INPUT_KSV_PU_POOL {
+        PO_CD: String
+        PO_SEQ: Int
+        IN_DATE: String
+        PU_CD: String
+        BUYER_CD: String
+        VENDOR_CD: String
+        FACTORY_CD: String
+        STATUS_CD: String
+        REG_USER: String
+        REG_DATETIME: String
+        id: Int
+    }
+`;
+
+export default moduleTypedefs_BASE_KSV_PU_POOL;

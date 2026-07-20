@@ -1,0 +1,85 @@
+{
+    "name": "sakai-react",
+    "version": "7.0.3-SNAPSHOT",
+    "homepage": ".",
+    "private": false,
+    "repository": {
+        "type": "git",
+        "url": "https://github.com/primefaces/sakai-react.git"
+    },
+    "license": "MIT",
+    "dependencies": {
+        "@apollo/client": "^3.7.17",
+        "@fullcalendar/core": "^5.7.2",
+        "@fullcalendar/daygrid": "^5.7.2",
+        "@fullcalendar/interaction": "^5.7.2",
+        "@fullcalendar/react": "^5.7.0",
+        "@fullcalendar/timegrid": "^5.7.2",
+        "ag-grid-community": "^35.1.0",
+        "ag-grid-react": "^35.1.0",
+        "async": "^3.2.6",
+        "axios": "^0.19.0",
+        "chart.js": "^3.3.2",
+        "classnames": "^2.2.6",
+        "exceljs": "^4.4.0",
+        "file-saver": "^2.0.5",
+        "gopd": "^1.2.0",
+        "graphql": "^16.5.0",
+        "graphql-tag": "^2.12.6",
+        "graphql-tools": "^8.3.0",
+        "http-proxy-middleware": "^2.0.6",
+        "install": "^0.13.0",
+        "jquery": "^3.7.1",
+        "moment": "^2.30.1",
+        "n": "^10.1.0",
+        "npm": "^9.1.2",
+        "primeflex": "3.3.1",
+        "primeicons": "^6.0.1",
+        "primereact": "^9.6.3",
+        "prismjs": "^1.29.0",
+        "react": "^17.0.1",
+        "react-app-polyfill": "^1.0.6",
+        "react-dev-utils": "^12.0.1",
+        "react-dom": "^17.0.1",
+        "react-icons": "^5.5.0",
+        "react-iframe": "^1.8.0",
+        "react-router-dom": "^5.2.0",
+        "react-scripts": "5.0.0",
+        "react-transition-group": "^4.4.1",
+        "sass": "^1.32.8",
+        "sheetjs-style": "^0.15.8",
+        "sweetalert2": "^11.26.3",
+        "xlsx": "^0.18.5",
+        "xlsx-style": "^0.8.13"
+    },
+    "scripts": {
+        "start": "react-scripts start",
+        "build": "react-scripts build",
+        "test": "react-scripts test",
+        "eject": "react-scripts eject"
+    },
+    "eslintConfig": {
+        "extends": [
+            "react-app"
+        ]
+    },
+    "browserslist": [
+        ">0.2%",
+        "not dead",
+        "not ie <= 11",
+        "not op_mini all"
+    ],
+    "devDependencies": {
+        "@babel/plugin-proposal-private-property-in-object": "^7.21.11",
+        "bindings": "^1.5.0",
+        "eslint": "^8.57.1",
+        "eslint-plugin-react": "^7.37.5",
+        "eslint-plugin-react-hooks": "^7.0.1",
+        "node-addon-api": "^8.3.0",
+        "node-gyp": "^11.0.0"
+    },
+    "prettier": {
+        "tabWidth": 4,
+        "useTabs": false
+    }
+}

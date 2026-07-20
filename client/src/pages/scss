@@ -1,0 +1,34 @@
+[?25l[J[J[J[J[J[J[?2004h[?25h[?1049h[22;0;0t[?1h=[?2004h[1;24r[?12h[?12l[27m[23m[29m[m[H[2J[?25l[24;1H"Crud.js" 384L, 16830C[1;1Himport React, { useState, useEffect, useRef } from 'react';
+import classNames from 'classnames';
+import { DataTable } from 'primereact/datatable';
+import { Column } from 'primereact/column';
+import { Toast } from 'primereact/toast';
+import { Button } from 'primereact/button';
+import { Tooltip } from 'primereact/tooltip';
+import { FileUpload } from 'primereact/fileupload';
+import { Rating } from 'primereact/rating';
+import { Toolbar } from 'primereact/toolbar';
+import { InputTextarea } from 'primereact/inputtextarea';
+import { RadioButton } from 'primereact/radiobutton';
+import { InputNumber } from 'primereact/inputnumber';
+import { Dialog } from 'primereact/dialog';
+import { InputText } from 'primereact/inputtext';
+import { ProductService } from '../service/ProductService';
+
+const Crud = () => {
+    let emptyProduct = {[19;9Hid: null,[20;9Hname: '',[21;9Himage: null,[22;9Hdescription: '',[23;9Hcategory: null,[1;1H[?25h[?25l[24;1H[97m[41mE78: Unknown mark[m[24;18H[K[1;1H[?25h
+
+
+[?25l[24;1HType  :qa!  and press <Enter> to abandon all changes and exit Vim[4;1H[?25h
+
+
+
+
+
+
+im
+
+
+[24;1H[?2004l[?2004l[?1l>[?1049l[23;0;0tVim: Error reading input, exiting...
+Vim: Finished.
+[24;1H88 files to edit

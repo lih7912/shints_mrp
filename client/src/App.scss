@@ -1,0 +1,1023 @@
+/* 전체 애플리케이션에 Roboto 폰트 적용 */
+body {
+    font-family: "Roboto", sans-serif !important;
+}
+
+html {
+    font-size: 10px !important;
+}
+
+/* PrimeReact 기본 컴포넌트 폰트 설정 */
+.p-component {
+    font-family: "Roboto", sans-serif !important;
+}
+
+body {
+    background-color: #ffffff !important;
+}
+.hidden {
+    display: none;
+}
+.show0 {
+    display: block;
+}
+.wrapperClass9 {
+    position: "fixed";
+    padding: 0rem 0rem 0rem 0rem;
+    top: 0rem;
+    left: 0rem;
+    height: 81rem;
+    width: 129rem;
+}
+.layout-main-container9 {
+    z-index: 1;
+    position: "absolute";
+    padding: 1rem 0rem 0rem 1.5rem;
+    top: 1rem;
+    left: 19rem;
+    height: 80rem;
+    width: 110rem;
+}
+.layout-sidebar {
+    z-index: 1;
+    position: "absolute";
+    padding: 1rem 0rem 0rem 1rem;
+    top: 1rem;
+    left: 1rem;
+    height: 80rem;
+}
+.p-tree {
+    padding: 0rem 0rem 0rem 0rem;
+    border: 0;
+}
+.p-tree-content {
+    margin: 0rem;
+    padding: 0rem;
+}
+
+.p-dropdown-item {
+    height: "0.8rem";
+}
+.col-right {
+    justify-content: end;
+    text-align: right;
+}
+
+.p-datatable-thead {
+    justify-content: center;
+    text-align: center;
+    top: -1px !important;
+}
+
+.p-datatable-tbody {
+    justify-content: center;
+    text-align: center;
+}
+
+.p-datatable.p-datatable-sm .p-datatable-thead > tr > th {
+    padding: 0rem 0.3rem;
+}
+
+.p-datatable.p-datatable-sm .p-datatable-tbody > tr > td {
+    padding: 0rem 0.3rem;
+}
+
+.p-datatable .p-datatable-tbody > tr > td.stock-matl-mismatch {
+    background-color: #d3ffd3 !important;
+}
+
+.t-header {
+    justify-content: center;
+    text-align: center;
+}
+
+.p-editable-column {
+    background-color: #f2fbf6; /* 옅은 초록색 */
+}
+
+.p-disabled {
+    background-color: rgb(228, 225, 225);
+    color: black;
+}
+
+.layout-theme-light {
+    background-color: transparent !important;
+}
+.layout-main {
+    background-color: white !important;
+    overflow-x: hidden;
+    overflow-y: hidden;
+    /*width:1340px;*/
+    height: 674px;
+}
+
+button {
+    background-color: #6366f1;
+    border-radius: 3px !important;
+    border: none;
+    color: white;
+    font-weight: 700;
+    font-size: 1rem;
+    height: 20px;
+    cursor: pointer;
+}
+
+button label {
+    cursor: pointer;
+}
+
+span .p-button {
+    margin: 0 2px 0 2px;
+}
+
+.field .p-button {
+    margin: 0 2px 0 2px;
+}
+
+div .p-button {
+    margin: 0 2px 0 2px;
+}
+
+button label {
+    color: white;
+    font-weight: 700;
+}
+
+button span {
+    color: white;
+    font-weight: 700;
+}
+
+.p-button {
+    background-color: #6366f1;
+    border-radius: 3px !important;
+    border: none;
+    color: white;
+    padding: 0;
+}
+
+.p-link {
+    background-color: #6366f1;
+}
+
+.p-button:hover {
+    background-color: #440000 !important;
+    transform: scale(1.05) !important;
+    transition: transform 0.1s ease-in-out !important;
+}
+
+.p-button:active {
+    background-color: #440000 !important;
+    transform: scale(0.95) !important;
+    transition: transform 0.1s ease-in-out !important;
+}
+
+.p-button.p-button-text {
+    background-color: #6366f1;
+    color: white;
+}
+
+.p-button-text.green {
+    background-color: #3ea72a;
+    color: white;
+}
+
+.p-button-text.orange {
+    background-color: #da771a;
+    color: white;
+}
+
+.p-button-text.red {
+    background-color: red;
+    color: white;
+}
+
+.red {
+    color: red;
+}
+
+.blue {
+    color: blue;
+}
+
+.p-disabled,
+.p-component:disabled {
+    opacity: 0.55 !important;
+}
+
+.p-button:disabled {
+    opacity: 0.3 !important;
+}
+
+.p-dialog {
+    border: #5052d1 1.5px solid !important;
+    box-shadow: 0 5px 30px rgba(0, 0, 0, 1);
+}
+
+.p-dialog-header {
+    padding: 5px !important;
+}
+
+.p-dialog-content {
+    padding: 5px !important;
+}
+
+.p-sortable-column-icon {
+    width: 10px !important;
+    height: 10px !important;
+}
+
+.disabled {
+    opacity: 0.5;
+}
+
+td .p-dropdown-items-wrapper {
+    z-index: 1007;
+    position: fixed;
+    background: white;
+}
+
+p {
+    vertical-align: middle;
+}
+
+button {
+    color: white !important;
+}
+
+.p-datepicker-header button {
+    background-color: #6366f1 !important;
+}
+
+.loadingModal {
+    width: 100px;
+}
+
+.loadingModal .p-dialog-content {
+    overflow: hidden;
+}
+
+.loadingModal .p-dialog-header {
+    display: none;
+}
+
+.loadingModal .p-progress-spinner {
+    width: 50px;
+}
+
+.p-dialog .p-dialog-header .p-dialog-header-icon {
+    color: #1900d9 !important;
+}
+
+.p-dialog-header-icons .p-dialog-header-close-icon {
+    width: 16px;
+    height: 16px;
+}
+
+.p-component-overlay {
+    background-color: transparent !important;
+}
+
+/* 마우스 오버 시 행 강조 */
+.p-datatable .p-datatable-tbody > tr:hover {
+    background-color: #fef6f6 !important;
+    color: #750000 !important;
+    cursor: pointer;
+    font-weight: 400;
+}
+
+.p-datatable .p-datatable-tbody > tr.p-highlight {
+    font-weight: 400;
+    background: #c0d7e5 !important;
+    color: #000000 !important;
+}
+
+.p-datatable-tbody > tr {
+    height: 20px !important; /* 원하는 높이(px)로 변경 */
+}
+
+.highlight-pair:hover,
+.highlight-pair:hover + .highlight-pair {
+    background-color: #f0f8ff !important; /* Light blue */
+}
+
+.p-checkbox {
+    vertical-align: sub;
+    padding-left: 4px;
+}
+
+button > span {
+    margin-top: 0px !important;
+}
+
+.p-button-sm span {
+    margin-top: 0px !important;
+}
+
+td.blink {
+    animation: fadein 2s infinite;
+}
+
+@keyframes fadein {
+    0% {
+        opacity: 1;
+    }
+    80% {
+        opacity: 0;
+    }
+    100% {
+        opacity: 1;
+    }
+}
+
+.unusable-row {
+    background-color: pink !important;
+}
+
+.diff-td {
+    background-color: pink !important; /* 연핑크 */
+}
+
+/* span.diff-td 가 포함된 td는 td 전체를 핑크로 표시 */
+td:has(span.diff-td) {
+    background-color: pink !important;
+}
+
+tr:has(td > span.diff-td) td:nth-child(3) {
+    background-color: pink !important;
+}
+
+.mailDialog .p-dialog-content {
+    background-color: #ffffff !important; /* 다이얼로그 본문 배경을 흰색으로 설정 */
+    padding: 20px !important;
+    border-radius: 10px; /* 모서리를 부드럽게 */
+}
+
+.custom-mailDialog .p-dialog-footer {
+    background-color: #ffffff !important; /* 푸터 배경도 흰색으로 설정 */
+    padding: 15px !important;
+}
+
+tr,
+td {
+    height: 20px;
+}
+
+.p-button.p-button-secondary.p-button-text {
+    background-color: #6366f1;
+}
+
+p {
+    margin: 0 !important;
+}
+
+.af-grid-container {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr); /* 4열 */
+    gap: 1rem;
+    width: 100%;
+    padding: 0.5rem;
+}
+
+.af-grid-item {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.af-label {
+    white-space: nowrap;
+    width: 8rem;
+    text-align: right;
+}
+
+.af-input {
+    flex: 1;
+    min-width: 0;
+}
+
+.af-input-group {
+    display: flex;
+    gap: 0.5rem;
+    width: 100%;
+}
+
+.af-span-2 {
+    grid-column: span 2;
+}
+
+/* S0701 left form compact mode: keep all controls inside 70rem without scrolling */
+.s0701-compact-grid {
+    gap: 0.25rem 0.35rem;
+    padding: 0.25rem;
+}
+
+.s0701-compact-grid .af-grid-item {
+    gap: 0.2rem;
+    min-width: 0;
+}
+
+.s0701-compact-grid .af-label {
+    width: 4.8rem;
+}
+
+.s0701-compact-grid .af-input,
+.s0701-compact-grid .p-inputtext,
+.s0701-compact-grid .p-dropdown,
+.s0701-compact-grid .p-calendar {
+    min-width: 0;
+    width: 100%;
+}
+
+.s0701-compact-grid .af-input-group {
+    gap: 0.2rem;
+}
+
+.s0701-compact-grid .af-input-group .af-label {
+    width: 2.2rem;
+}
+
+.s0701-compact-grid .af-input-group .p-inputtext {
+    min-width: 0;
+}
+
+.s0701-compact-grid .af-input-group > .p-inputtext:first-child {
+    flex: 1 1 auto;
+    max-width: 7rem;
+}
+
+.s0701-compact-grid .af-input-group .p-dropdown {
+    width: 6rem !important;
+    min-width: 4.6rem;
+}
+
+.s0701-compact-grid .af-input-group .af-input {
+    max-width: 4.6rem;
+}
+
+.image-container {
+    display: inline-block;
+    position: relative;
+}
+
+.zoomed-image-centered {
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    height: 80vh; /* 화면 높이의 80% */
+    width: auto; /* 너비는 자동 (비율 유지) */
+    z-index: 1000;
+    background: #fff;
+    padding: 10px;
+    box-shadow: 0 0 20px rgba(0, 0, 0, 0.5);
+    border: 1px solid #ccc;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.zoomed-image-centered img {
+    height: 100%; /* 부모 요소 기준으로 높이 맞춤 */
+    width: auto; /* 원본 비율 유지 */
+    display: block;
+}
+
+.selected-bold-row {
+    font-weight: bold;
+    background-color: #ffe5e5 !important; /* 연한 빨간색 */
+}
+
+.p-sortable-column .p-sortable-column-icon {
+    display: none !important;
+}
+
+.p-sortable-column {
+    cursor: pointer !important;
+}
+
+.p-datatable {
+    border: #d3d3d3 solid 1px;
+    border-radius: 3px !important;
+}
+
+.p-datatable table {
+    table-layout: auto !important;
+}
+
+.S030303_MRP_BY_SEARCH .p-datatable .p-datatable-thead > tr > th,
+.S030303_MRP_BY_SEARCH .p-datatable .p-datatable-tbody > tr > td {
+    max-width: 80px;
+    white-space: nowrap;
+    overflow: hidden;
+}
+
+.S030302_COPY_STYLE .p-datatable .p-datatable-thead > tr > th,
+.S030302_COPY_STYLE .p-datatable .p-datatable-tbody > tr > td {
+    max-width: 80px;
+    white-space: nowrap;
+    overflow: hidden;
+}
+
+.p-datatable .p-datatable-thead > tr > th,
+.p-datatable .p-datatable-tbody > tr > td {
+    max-width: 150px;
+    white-space: nowrap;
+    overflow: hidden;
+}
+
+.af-force-width {
+    max-width: none !important;
+}
+
+.t-header:has(.p-checkbox) {
+    width: 26px !important;
+    min-width: 26px !important;
+    max-width: 26px !important;
+    padding: 0 !important;
+    text-align: center !important;
+}
+.t-body:has(.p-checkbox) {
+    width: 26px !important;
+    min-width: 26px !important;
+    max-width: 26px !important;
+    padding: 0 !important;
+    text-align: center !important;
+}
+
+/* 헤더 셀 */
+.p-datatable .p-datatable-thead > tr > th.bgBlue {
+    color: #471ada;
+}
+
+/* 바디 셀 */
+.p-datatable .p-datatable-tbody > tr > td.bgBlue {
+    background-color: #f2f3ff;
+}
+
+/* 헤더 셀 */
+.p-datatable .p-datatable-thead > tr > th.bgPink {
+    color: #da1aaa;
+}
+
+/* 바디 셀 */
+.p-datatable .p-datatable-tbody > tr > td.bgPink {
+    background-color: #ffe6fa;
+}
+
+/* 헤더 셀 */
+.p-datatable .p-datatable-thead > tr > th.green {
+    background-color: #f2fbf6;
+}
+
+/* 헤더 셀 */
+.p-datatable .p-datatable-thead > tr > th.orange {
+    color: #da771a;
+}
+
+/* 바디 셀 */
+.p-datatable .p-datatable-tbody > tr > td.green {
+    background-color: #f2fbf6;
+}
+
+/* 바디 셀 */
+.p-datatable .p-datatable-tbody > tr > td.orange {
+    background-color: #fff7e8;
+}
+
+.p-datatable .tableRed {
+    background-color: #ffe5e5; /* 연한 빨강 */
+}
+
+.p-datatable .p-selectable-row.tableRed:not(.p-highlight) {
+    background-color: #ffe5e5;
+}
+
+.page-shell.limit {
+    max-width: 123rem;
+    min-width: 123rem;
+}
+
+.p-datatable td.p-cell-editing .p-inputtext {
+    width: 100%; /* 셀 안에서 딱 맞추기 */
+    min-width: 0 !important; /* 12rem 제한 해제 */
+    box-sizing: border-box; /* padding 포함 */
+}
+
+/* CSS: 스크롤러는 언제나 부모 높이 100% */
+.af-div-with-table > .p-virtualscroller {
+    height: 100% !important; /* 라이브러리 계산 무시 */
+}
+
+.p-dropdown-panel {
+    box-shadow: 0 4px 12px 0 rgba(0, 0, 0, 0.5) !important;
+}
+
+.p-datepicker {
+    box-shadow: 0 4px 12px 0 rgba(0, 0, 0, 0.5) !important;
+}
+
+.p-datepicker-month,
+.p-datepicker-year.p-link {
+    padding: 0 7px 0 7px !important;
+}
+
+.p-datepicker-buttonbar button {
+    padding: 0 10px 0 10px !important;
+    height: 20px;
+}
+
+input,
+.p-dropdown {
+    height: 20px !important;
+    border-radius: 3px !important;
+}
+
+.p-inputtext,
+p,
+span {
+    border-radius: 3px !important;
+}
+
+span {
+    align-self: center !important;
+}
+
+.p-icon.p-toast-icon-close-icon {
+    color: blue;
+}
+
+.p-resizable-column {
+    justify-items: center;
+}
+
+p {
+    align-self: center !important;
+    height: none !important;
+}
+
+.p-button .p-button-icon {
+    font-size: 1rem !important;
+}
+
+.S0306_MRP_BY_ORDER .fixed-table table {
+    table-layout: fixed !important;
+}
+
+.p-hidden-accessible {
+    display: none !important;
+}
+
+.p-checkbox {
+    vertical-align: middle !important;
+}
+
+.p-datatable-scrollable-body {
+    min-height: unset;
+    max-height: unset;
+}
+
+.emergency_blink {
+    animation: fadein 0.75s infinite;
+}
+
+.blink {
+    animation: fadein 2s infinite;
+}
+
+@keyframes fadein {
+    0% {
+        opacity: 1;
+    }
+    25% {
+        opacity: 0.3;
+    }
+    100% {
+        opacity: 1;
+    }
+}
+
+.p-radiobutton .p-radiobutton-box .p-radiobutton-icon {
+    width: 12px;
+    height: 10px;
+    transition-duration: 0.5s;
+    background-color: #ffffff;
+}
+
+.swal2-container {
+    z-index: 999999 !important;
+}
+
+.swal2-actions button {
+    font-weight: 500;
+    padding: 7px 15px 20px 15px !important;
+}
+
+.swal2-title {
+    position: relative;
+    max-width: 100%;
+    margin: 0;
+    padding: 0.8em 1em 0;
+    color: inherit;
+    font-size: 13px;
+    font-weight: 400;
+    text-align: center;
+    text-transform: none;
+    word-wrap: break-word;
+    cursor: initial;
+    font-family: "Roboto";
+}
+
+.file-upload-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+
+    width: 9rem;
+    height: 20px;
+
+    background-color: #6366f1;
+    color: #ffffff;
+
+    border: none;
+    border-radius: 3px;
+
+    font-size: 1rem;
+    font-weight: 700;
+    line-height: 1;
+
+    padding-top: 0.3rem;
+    cursor: pointer;
+
+    user-select: none;
+    appearance: none;
+}
+
+.file-upload-btn:hover {
+    background: #4f46e5;
+}
+
+/* ConfirmDialog 전체 크기 */
+.big-confirm-dialog.p-confirm-dialog {
+    width: 250px !important;
+}
+
+/* 헤더 */
+.big-confirm-dialog .p-dialog-header {
+    padding: 1.25rem 1.5rem;
+    font-size: 1.2rem;
+}
+
+/* 본문 영역 */
+.big-confirm-dialog .p-confirm-dialog-message {
+    font-size: 1.15rem;
+    line-height: 1.6;
+    justify-content: center !important;
+}
+
+/* 아이콘 */
+.big-confirm-dialog .p-confirm-dialog-icon {
+    font-size: 2rem;
+}
+
+/* 버튼 영역 */
+.big-confirm-dialog .p-dialog-footer {
+    padding: 1.25rem 1.5rem;
+    text-align: center;
+}
+
+/* Yes / No 버튼 */
+.big-confirm-dialog .p-button {
+    min-width: 40px;
+    height: 25px;
+}
+
+/* 버튼 간 간격 */
+.big-confirm-dialog .p-button + .p-button {
+    margin-left: 0.5rem;
+}
+
+.p-confirm-dialog .p-dialog-content {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.p-inputtext::placeholder {
+    color: #c0c4cc;
+    opacity: 1;
+}
+
+.row-wh-empty td {
+    background-color: yellow;
+}
+
+.s0803-frm206 {
+    padding: 1rem;
+
+    .search-box,
+    .list-box,
+    .editor-box {
+        background: #fff;
+        border: 1px solid #d7e0f4;
+        border-radius: 16px;
+        padding: 1rem;
+        margin-bottom: 0.75rem;
+    }
+
+    .search-grid {
+        display: grid;
+        grid-template-columns: minmax(220px, 1.1fr) repeat(3, minmax(0, 1fr));
+        gap: 0.75rem 1rem;
+    }
+
+    .search-field,
+    .editor-field {
+        display: flex;
+        flex-direction: column;
+        gap: 0.35rem;
+    }
+
+    .search-actions,
+    .toolbar-buttons,
+    .editor-actions,
+    .editor-template-controls,
+    .radio-row,
+    .calc-links {
+        display: flex;
+        gap: 0.5rem;
+        flex-wrap: wrap;
+        align-items: center;
+    }
+
+    .toolbar-grid {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 0.75rem;
+        margin-top: 0.9rem;
+    }
+
+    .toolbar-group {
+        border: 1px solid #d7e0f4;
+        border-radius: 14px;
+        padding: 0.75rem;
+    }
+
+    .blue {
+        background: #5f6fe5 !important;
+        border-color: #5f6fe5 !important;
+        color: #fff !important;
+    }
+
+    .green {
+        background: #22a858 !important;
+        border-color: #22a858 !important;
+        color: #fff !important;
+    }
+
+    .mr-2 {
+        margin-right: 0.5rem;
+    }
+
+    .list-scroll {
+        max-height: 34rem;
+        overflow: auto;
+        border: 1px solid #dde4f3;
+        border-radius: 12px;
+    }
+
+    .result-table,
+    .bank-table {
+        width: 100%;
+        border-collapse: collapse;
+        min-width: 1100px;
+    }
+
+    .result-table th,
+    .result-table td,
+    .bank-table th,
+    .bank-table td {
+        border-bottom: 1px solid #e8edf8;
+        padding: 0.55rem 0.65rem;
+        white-space: nowrap;
+    }
+
+    .result-table thead th,
+    .bank-table thead th {
+        position: sticky;
+        top: 0;
+        background: #f5f8ff;
+        z-index: 1;
+    }
+
+    .result-table tbody tr.selected,
+    .bank-table tbody tr:hover {
+        background: #eef3ff;
+    }
+
+    .summary-box,
+    .page-message {
+        margin-top: 0.75rem;
+    }
+
+    .page-message {
+        color: #b23434;
+        font-weight: 700;
+    }
+
+    .editor-header,
+    .detail-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-bottom: 0.75rem;
+    }
+
+    .editor-body {
+        max-height: 44rem;
+        overflow: auto;
+        padding-right: 0.25rem;
+    }
+
+    .editor-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 0.75rem 1rem;
+    }
+
+    .editor-field--full {
+        grid-column: 1 / -1;
+    }
+
+    .editor-template-controls .p-dropdown {
+        width: 20rem;
+    }
+
+    .is-number,
+    .is-number-input input,
+    .is-number-input {
+        text-align: right;
+    }
+
+    .detail-modal {
+        position: fixed;
+        inset: 0;
+        background: rgba(15, 20, 35, 0.35);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 1200;
+    }
+
+    .detail-panel {
+        background: #fff;
+        border-radius: 18px;
+        border: 1px solid #d9e2f2;
+        width: min(980px, calc(100vw - 32px));
+        max-height: calc(100vh - 48px);
+        overflow: auto;
+        padding: 1rem 1.15rem;
+    }
+
+    .detail-grid {
+        display: grid;
+        gap: 0.55rem;
+    }
+
+    .detail-row {
+        display: grid;
+        grid-template-columns: 88px 1fr 88px 1fr;
+        gap: 0.45rem;
+        align-items: center;
+    }
+
+    .detail-row > div {
+        min-height: 34px;
+        border: 1px solid #dbe2ef;
+        background: #fbfcfe;
+        border-radius: 8px;
+        padding: 0.45rem 0.6rem;
+    }
+
+    .detail-row .span3 {
+        grid-column: span 3;
+    }
+
+    .empty-cell {
+        text-align: center;
+        color: #6f7b91;
+        padding: 1rem;
+    }
+}
+
+/*
+.p-checkbox .p-checkbox-box .p-checkbox-icon {
+    color: red !important;
+    background-color: #ffffff !important;
+}
+
+.p-checkbox .p-checkbox-box {
+    border: 1px solid #e3e3ff !important;
+    font-weight: 600 !important;
+}
+*/

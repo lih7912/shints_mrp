@@ -1,0 +1,54 @@
+[
+    {
+        "cd_mngd": "100",
+        "nm_mngd": "M/C"
+    },
+    {
+        "cd_mngd": "200",
+        "nm_mngd": "O/D"
+    },
+    {
+        "cd_mngd": "210",
+        "nm_mngd": "XMD출고매출"
+    },
+    {
+        "cd_mngd": "300",
+        "nm_mngd": "B/C"
+    },
+    {
+        "cd_mngd": "400",
+        "nm_mngd": "장갑"
+    },
+    {
+        "cd_mngd": "500",
+        "nm_mngd": "텐트"
+    },
+    {
+        "cd_mngd": "600",
+        "nm_mngd": "유상자재"
+    },
+    {
+        "cd_mngd": "610",
+        "nm_mngd": "캐주얼"
+    },
+    {
+        "cd_mngd": "620",
+        "nm_mngd": "아동복"
+    },
+    {
+        "cd_mngd": "630",
+        "nm_mngd": "단체복"
+    },
+    {
+        "cd_mngd": "640",
+        "nm_mngd": "ETP유상매출"
+    },
+    {
+        "cd_mngd": "650",
+        "nm_mngd": "ETP해외투자"
+    },
+    {
+        "cd_mngd": "900",
+        "nm_mngd": "기타"
+    }
+]

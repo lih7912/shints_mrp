@@ -1,0 +1,4 @@
+BEGIN { FS=" "; }
+{
+tmps = sprintf ("sed -i 's/DEBIT_NOTE_FACTORY_BVT/DEBIT_NOTE_FACTORY_ETP/g' %s" , $0); print tmps;
+}

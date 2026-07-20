@@ -1,0 +1,8 @@
+node_modules
+src/shints_src
+src/stsExcel
+*.zip
+src/erpshints_client_src
+*.swp
+.env
+src/assets/env_graphql_neoe.json

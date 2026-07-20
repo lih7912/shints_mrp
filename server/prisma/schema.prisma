@@ -1,0 +1,18 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlserver"
+  url      = env("DATABASE_URL")
+}
+
+model a_abc {
+  data1 String? @db.VarChar(Max)
+  data2 String? @db.VarChar(Max)
+  data3 String? @db.VarChar(Max)
+  id    Int     @id(map: "PK_a_abc_id") @default(autoincrement())
+
+  @@index([id], map: "id99_idx_a_abc")
+}
+

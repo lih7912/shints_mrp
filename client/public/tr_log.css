@@ -1,0 +1,121 @@
+/* 전체 애플리케이션에 Roboto 폰트 적용 */
+body {
+    font-family: "Roboto", sans-serif;
+    font-size: 12px;
+}
+
+th,
+td {
+    padding: 8px;
+    text-align: left;
+}
+
+td {
+    max-width: 300px; /* 원하는 최대 너비 */
+    white-space: nowrap; /* 줄바꿈 방지 */
+    overflow: hidden; /* 넘친 내용 숨김 */
+    text-overflow: ellipsis; /* 말줄임표(...) 적용 */
+}
+
+#logTable tbody tr {
+    display: table-row !important;
+    pointer-events: auto; /* 기본값으로 설정 */
+    cursor: pointer;
+}
+
+/*
+.logtableRow:hover {
+    font-weight: 600;
+    background-color: #e4efff !important;
+}
+*/
+
+#queryArea {
+    border: none;
+    white-space: pre-wrap; /* 줄바꿈 허용 */
+    word-wrap: break-word; /* 단어가 너무 길면 줄바꿈 */
+    overflow-wrap: break-word;
+}
+
+pre {
+    white-space: pre-wrap; /* 줄바꿈 허용 */
+    word-wrap: break-word; /* 단어가 너무 길면 줄바꿈 */
+    overflow-wrap: break-word;
+    height: 100%;
+}
+
+table.table tbody tr.selected {
+    background-color: #0d6efd !important;
+    color: white !important;
+    font-weight: bold;
+    transition: background-color 0.5s ease; /* 부드러운 전환 효과 */
+}
+
+.table {
+    --bs-table-bg: none;
+    --bs-table-hover-color: none;
+    --bs-table-color: none;
+}
+
+.logtableRow.group-odd {
+    background-color: #e3f2fd; /* 연한 하늘색 */
+}
+
+.logtableRow.group-even {
+    background-color: #ffffff; /* 흰색 */
+}
+
+.calendar-container {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background: white;
+    border-radius: 8px;
+    width: auto;
+}
+
+.filter-bar {
+    display: flex;
+    align-items: center;
+    gap: 24px;
+    flex-wrap: wrap;
+}
+
+.filter-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.filter-input {
+    width: 140px;
+}
+
+#current-date {
+    font-size: 12px;
+    width: 170px;
+}
+
+@media (max-width: 1200px) {
+    .filter-bar {
+        flex-wrap: wrap;
+    }
+}
+
+.token.important {
+    color: red;
+    font-weight: bold;
+    background-color: yellow;
+    padding: 2px;
+    border-radius: 3px;
+}
+
+.loading-overlay {
+    position: fixed;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background-color: rgba(255, 255, 255, 0.4);
+    z-index: 2000;
+}

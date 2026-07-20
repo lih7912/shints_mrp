@@ -1,0 +1,1218 @@
+// MGR_@@TNAME@@.mutations.js
+
+import * as fs from 'fs';
+import { Prisma } from '@prisma/client';
+import prisma from '../../db'; //PrismaClient 사용하기 위해 불러오기
+import AFLib from '../../commlib'; //PrismaClient 사용하기 위해 불러오기
+
+/*
+                STD_FLAG: String 
+                NET: String 
+                LOSS: String 
+                USE_SIZE: String 
+                REMARK: String 
+
+*/
+
+// export default로 Mutation 내용 내보내기
+const moduleMutation_S0431_5 = {
+    Mutation: {
+        mgrInsert_S0431_5_1: async (_, args, contextValue) => {
+            //
+            var tDateNew = new Date();
+            tDateNew.setMonth(tDateNew.getMonth() + 1);
+            var tZeroDate = '00';
+            var tDateNew_M =
+                tZeroDate.substring(
+                    0,
+                    2 - String(tDateNew.getMonth() + 1).length,
+                ) + String(tDateNew.getMonth() + 1);
+            var tDateNew_D =
+                tZeroDate.substring(0, 2 - String(tDateNew.getDate()).length) +
+                String(tDateNew.getMonth());
+            var tNewDateStr = tDateNew.getFullYear() + tDateNew_M + tDateNew_D;
+
+            var tDate = new Date();
+            var mm = tDate.getMonth() + 1;
+            var mm_str = '';
+            if (mm > 9) mm_str = mm.toString();
+            else mm_str = '0' + mm;
+
+            var dd = tDate.getDate();
+            var dd_str = '';
+            if (dd > 9) dd_str = dd;
+            else dd_str = '0' + dd;
+
+            var hours = tDate.getHours();
+            var hours_str = '';
+            if (hours > 9) hours_str = hours.toString();
+            else hours_str = '0' + hours;
+
+            var minutes = tDate.getMinutes();
+            var minutes_str = '';
+            if (minutes > 9) minutes_str = minutes.toString();
+            else minutes_str = '0' + minutes;
+
+            var seconds = tDate.getSeconds();
+            var seconds_str = '';
+            if (seconds > 9) seconds_str = seconds.toString();
+            else seconds_str = '0' + seconds;
+
+            var yyyy = tDate.getFullYear();
+
+            var tRetDate =
+                yyyy.toString() +
+                mm_str +
+                dd_str +
+                hours_str +
+                minutes_str +
+                seconds_str;
+            var tRetDate1 = tRetDate.substring(0, 8);
+            var tYY = yyyy.toString().substring(2);
+
+            // let tPO = "POA2022S672";
+            var tUserInfo = AFLib.getUserInfo(contextValue);
+
+            var tInput = {
+                ...args.datas[0],
+            };
+            if (!tInput.ORIGIN_PORT) tInput.ORIGIN_PORT = '';
+            if (!tInput.DESTINATION) tInput.DESTINAtION = '';
+
+            var tInput1 = {
+                ...args.datas1[0],
+            };
+
+            var tSQLArray = [];
+
+            var tYY2 = tRetDate.substring(2, 4);
+            var tSEQ = tRetDate.substring(4, 14);
+            var tNewCd = `SO${tYY2}-${tSEQ}`;
+
+            var tInvoiceNo = '';
+            var tPackCd = '';
+            var tOrigin = '';
+            var tDest = '';
+            var tDeliveryType = '';
+            var tMethod = '';
+            var tRemark = '';
+
+            var tCT_NO = `box-${tRetDate1}`;
+
+            var tPoArray = [];
+            args.datas1.forEach((col, i) => {
+                if (col.PO_CD) {
+                    var tCheck = 0;
+                    tPoArray.forEach((col1, i1) => {
+                        if (col.PO_CD === col1) tCheck = 1;
+                    });
+                    if (tCheck === 0) {
+                        var tcol1 = col.PO_CD.replace(/null/gi, '');
+                        tPoArray.push(tcol1);
+                    }
+                }
+            });
+
+            if (tPoArray.length === 1) tRemark = '';
+            else {
+                tPoArray.forEach((col, i) => {
+                    if (col) {
+                        if (tRemark === '') tRemark = `${col}`;
+                        else tRemark += `/${col}`;
+                    }
+                });
+                tRemark += ` MIXED BOX`;
+            }
+
+            if (
+                tInput.SHIP_MODE === '1' ||
+                tInput.SHIP_MODE === '2' ||
+                tInput.SHIP_MODE === '11'
+            ) {
+                tDeliveryType = '2';
+                tMethod = 'S';
+            }
+            if (tInput.SHIP_MODE === '3') {
+                tDeliveryType = '1';
+                tMethod = 'A';
+            }
+            if (tInput.SHIP_MODE === '4') {
+                tDeliveryType = 'F';
+                tMethod = 'P';
+            }
+            if (tInput.SHIP_MODE === '5' || tInput.SHIP_MODE === '12') {
+                tDeliveryType = 'D';
+                tMethod = 'A';
+            }
+            if (tInput.SHIP_MODE === '6') {
+                tDeliveryType = '7';
+                tMethod = 'E';
+            }
+            if (tInput.SHIP_MODE === '7') {
+                tDeliveryType = '6';
+                tMethod = 'H';
+            }
+            if (tInput.SHIP_MODE === '8') {
+                tDeliveryType = '42';
+                tMethod = 'E';
+            }
+            if (tInput.SHIP_MODE === '9') {
+                tDeliveryType = '43';
+                tMethod = 'E';
+            }
+            if (tInput.SHIP_MODE === '10') {
+                tDeliveryType = '8';
+                tMethod = 'O';
+            } else {
+                // 기본 SEA
+                tDeliveryType = '2';
+                tMethod = 'S';
+            }
+
+            if (
+                parseFloat(tInput.GROSS_WEIGHT) <= 0 &&
+                parseFloat(tInput.WEIGHT) <= 0
+            ) {
+                if (tInput.SHIP_MODE !== '1' && tInput.SHIP_MODE !== '2') {
+                    var tRetArray = [];
+                    var tObj = {};
+                    tObj.CODE = 'ERROR:무게는 필수입력값 입니다.';
+                    tObj.id = 0;
+                    tRetArray.push(tObj);
+                    return tRetArray;
+                }
+            }
+
+            if (tInput.ORIGIN_PORT === '') {
+                var tRetArray = [];
+                var tObj = {};
+                tObj.CODE = 'ERROR:Origin Port가 입력되어야 합니다';
+                tObj.id = 0;
+                tRetArray.push(tObj);
+                return tRetArray;
+            }
+
+            if (
+                tInput.ORIGIN_PORT.toUpperCase() === 'KOREA' ||
+                tInput.ORIGIN_PORT.toUpperCase() === 'SEOUL' ||
+                tInput.ORIGIN_PORT.toUpperCase() === 'INCHEON' ||
+                tInput.ORIGIN_PORT.toUpperCase() === 'BUSAN'
+            )
+                tOrigin = 'S';
+            else tOrigin = 'O';
+
+            var mFactoryCd = 'FC000';
+            if (tInput.DESTINATION === 'BVT') {
+                tDest = 'B';
+                mFactoryCd = 'FC034';
+            } else if (tInput.DESTINATION === 'ETP') {
+                tDest = 'E';
+                mFactoryCd = 'FC044';
+            } else if (tInput.DESTINATION === 'SHINTS') {
+                tDest = 'S';
+                mFactoryCd = 'FC045';
+            } else tDest = 'O';
+
+            var tPackCd_prefix = `${tOrigin}T${tDest}-${tMethod}${tRetDate1.substring(2, 4)}-`;
+            var sql10 = `
+                select
+                    isnull(max(pack_cd), '${tPackCd_prefix}000') as max_pack_cd
+                from
+                    ksv_stock_out
+                where
+                    pack_cd like '${tPackCd_prefix}%'
+            `;
+            var nRet10 = await prisma.$queryRaw(Prisma.raw(sql10));
+            var tMaxSeq = 1;
+            var tMaxSeqStr = '';
+            if (nRet10.length > 0) {
+                var tMaxSeqStr = nRet10[0].max_pack_cd.substring(8, 11);
+                tMaxSeq = parseInt(tMaxSeqStr) + 1;
+                var tZero = '000';
+                tMaxSeqStr =
+                    tZero.substring(0, 3 - String(tMaxSeq).length) +
+                    String(tMaxSeq);
+            }
+            tPackCd = `TMP-${tOrigin}T${tDest}-${tMethod}${tRetDate1.substring(2, 4)}-${tRetDate}`;
+
+            if (!tInput.REMARK);
+            else tPackCd = tInput.REMARK;
+
+            tInvoiceNo = '';
+            if (!tInput.INVOICE_NO);
+            else tInvoiceNo = tInput.INVOICE_NO;
+
+            var tIdx1 = 0;
+            var sqlPu = '';
+            for (tIdx1 = 0; tIdx1 < args.datas1.length; tIdx1++) {
+                var col = {
+                    ...args.datas1[tIdx1],
+                };
+                if (tIdx1 === 0) sqlPu = ` '${col.PU_CD}' `;
+                else sqlPu += ` ,'${col.PU_CD}' `;
+            }
+
+            var sql0 = `
+                select
+                    *
+                from
+                    ksv_pu_mst2
+                where
+                    pu_cd in (${sqlPu})
+            `;
+            var nRet0 = await prisma.$queryRaw(Prisma.raw(sql0));
+            var tPuMst2 = {};
+            if (nRet0.length > 0) {
+                tPuMst2 = {
+                    ...nRet0[0],
+                };
+            }
+
+            var sql1 = `
+                select
+                    *
+                from
+                    kcd_vendor
+                where
+                    vendor_cd = '${tPuMst2.VENDOR_CD}'
+            `;
+            var nRet1 = await prisma.$queryRaw(Prisma.raw(sql1));
+            var tVendor = {};
+            if (nRet1.length > 0) {
+                tVendor = {
+                    ...nRet1[0],
+                };
+            }
+
+            var wShipmentCd = '';
+
+            if (tInput.SHIP_MODE === '4' || tInput.SHIP_MODE === '5' || tInput.SHIP_MODE === '12') {
+                // FEDEX, DHL, UPS
+
+                tPackCd = tInput.REMARK;
+
+                var sql100 = `
+                    select
+                        isnull(max(right(shipment_cd, 6)), '000000') as stsout_seq
+                    from
+                        ksv_shipment_mst
+                    where
+                        shipment_cd like 'SHIP${tYY2}-%'
+                `;
+                var nRet100 = await prisma.$queryRaw(Prisma.raw(sql100));
+                var nMaxSeq = parseInt(nRet100[0].stsout_seq) + 1;
+                var tZero = '000000';
+                wShipmentCd =
+                    `SHIP${tYY2}-` +
+                    tZero.substring(0, 6 - String(nMaxSeq).length) +
+                    String(nMaxSeq);
+
+                var tPlaceCd = '0';
+                let tSQL99 = `
+                    insert into
+                        ksv_shipment_mst (
+                            shipment_cd,
+                            ship_mode,
+                            place_cd,
+                            origin_port,
+                            bl_no,
+                            etd,
+                            eta,
+                            container_no,
+                            reg_user,
+                            reg_datetime,
+                            status_cd,
+                            destination,
+                            is_singapore,
+                            cost,
+                            ship_line,
+                            org_origin_port,
+                            org_destination,
+                            fix_flag,
+                            remark, 
+                            invoice_no
+                        )
+                    values
+                        (
+                            '${wShipmentCd}',
+                            '${tInput.SHIP_MODE}',
+                            '${tPlaceCd}',
+                            '${tInput.ORIGIN_PORT}',
+                            '',
+                            '${tInput.READY_DATE}',
+                            '${tInput.TARGET_ETA}',
+                            '',
+                            '${tUserInfo.USER_ID}',
+                            '${tRetDate}',
+                            '1',
+                            '${tInput.DESTINATION}',
+                            '0',
+                            '0',
+                            '',
+                            '${tInput.ORIGIN_PORT}',
+                            '${tInput.DESTINATION}',
+                            '1',
+                            '${tPackCd}',
+                            ''
+                        )
+                `;
+                const tSQL99_1 = prisma.$queryRaw(Prisma.raw(tSQL99));
+                tSQLArray.push(tSQL99_1);
+            }
+
+            let tSQL99 = `
+                insert into
+                    ksv_shipment_mem (
+                        SHIPMENT_CD,
+                        STSOUT_CD,
+                        IS_STSOUT,
+                        INVOICE_NO,
+                        TRADE_TERM,
+                        READY_DATE,
+                        ORIGIN_PORT,
+                        DESTINATION,
+                        CT_QTY,
+                        WEIGHT,
+                        CBM,
+                        TARGET_ETA,
+                        ORG_ORIGIN_PORT,
+                        ORG_DESTINATION,
+                        SHIP_MODE,
+                        REMARK
+                    )
+                values
+                    (
+                        '${wShipmentCd}',
+                        '${tNewCd}',
+                        '1',
+                        '${tInvoiceNo}',
+                        '${tInput.PAY_TERM}',
+                        '${tInput.READY_DATE}',
+                        '${tInput.ORIGIN_PORT}',
+                        '${tInput.DESTINATION}',
+                        '${tInput.CT_QTY}',
+                        '${tInput.GROSS_WEIGHT}',
+                        '${tInput.CBM}',
+                        '${tInput.TARGET_ETA}',
+                        '${tInput.ORIGIN_PORT}',
+                        '${tInput.DESTINATION}',
+                        '${tInput.SHIP_MODE}',
+                        '${tInput.REMARK}'
+                    )
+            `;
+            const tSQL99_1 = prisma.$queryRaw(Prisma.raw(tSQL99));
+            tSQLArray.push(tSQL99_1);
+
+            // ksv_stock_out_mst에는 stsin_cd는 안넣음
+            tInput.STSIN_CD = '';
+
+            let tSQL99 = `
+                insert into
+                    ksv_stock_out_mst (
+                        stsout_cd,
+                        stsin_cd,
+                        pu_cd,
+                        out_datetime,
+                        reg_user,
+                        reg_datetime,
+                        pack_cd,
+                        invoice_no,
+                        trade_term,
+                        ready_date,
+                        origin_port,
+                        weight,
+                        gross_weight,
+                        cbm,
+                        ct_qty,
+                        destination,
+                        shipment_cd,
+                        eta,
+                        ready_facin_flag,
+                        ata,
+                        ship_mode
+                    )
+                values
+                    (
+                        '${tNewCd}',
+                        '${tInput.STSIN_CD}',
+                        '',
+                        '${tRetDate}',
+                        '${tUserInfo.USER_ID}',
+                        '${tRetDate}',
+                        '',
+                        '${tInvoiceNo}',
+                        '${tInput.PAY_TERM}',
+                        '${tInput.READY_DATE}',
+                        '${tInput.ORIGIN_PORT}',
+                        '${tInput.WEIGHT}',
+                        '${tInput.GROSS_WEIGHT}',
+                        '${tInput.CBM}',
+                        '${tInput.CT_QTY}',
+                        '${tInput.DESTINATION}',
+                        '',
+                        '${tInput.TARGET_ETA}',
+                        '0',
+                        '',
+                        '${tInput.SHIP_MODE}'
+                    )
+            `;
+            const tSQL99_1 = prisma.$queryRaw(Prisma.raw(tSQL99));
+            tSQLArray.push(tSQL99_1);
+
+            var s_out_qty = 0;
+            var sqlPu = '';
+            var upWeight = 0;
+            for (tIdx1 = 0; tIdx1 < args.datas1.length; tIdx1++) {
+                var col = {
+                    ...args.datas1[tIdx1],
+                };
+
+                if (tIdx1 === 0) sqlPu = ` '${col.PU_CD}' `;
+                else sqlPu += ` ,'${col.PU_CD}' `;
+
+                let tSQL99 = `
+                    update ksv_stock_mem2
+                    set
+                        out_qty = out_qty + ${col.BAL_QTY},
+                        stock_status = '2'
+                    where
+                        po_cd = '${col.PO_CD}'
+                        and matl_cd = '${col.MATL_CD}'
+                        and pu_cd = '${col.PU_CD}'
+                `;
+                const tSQL99_1 = prisma.$queryRaw(Prisma.raw(tSQL99));
+                tSQLArray.push(tSQL99_1);
+
+                let tSQL99 = `
+                    update ksv_stock_in_mst
+                    set
+                        out_qty = out_qty + ${col.BAL_QTY}
+                    where
+                        stsin_cd = '${col.STSIN_CD}'
+                `;
+                const tSQL99_1 = prisma.$queryRaw(Prisma.raw(tSQL99));
+                tSQLArray.push(tSQL99_1);
+            }
+
+            //
+            let tSQL99 = `
+                update ksv_pu_mst2
+                set
+                    origin_port = '${tInput.ORIGIN_PORT}'
+                where
+                    pu_cd in (${sqlPu})
+            `;
+            const tSQL99_1 = prisma.$queryRaw(Prisma.raw(tSQL99));
+            tSQLArray.push(tSQL99_1);
+            //
+
+            var tIdx1 = 0;
+            for (tIdx1 = 0; tIdx1 < args.datas1.length; tIdx1++) {
+                var col0 = {
+                    ...args.datas1[tIdx1],
+                };
+
+                var sql0 = `
+                    select
+                        a.*,
+                        b.IN_DATETIME,
+                        b.IN_QTY as IN_QTY1,
+                        b.IN_PRICE,
+                        isnull(b.PU_CD, '') as PU_CD2,
+                        isnull(c.weight, 0) as matl_weight,
+                        c.UNIT,
+                        c1.MATL_PRICE,
+                        c.MATL_NAME,
+                        b.OUT_QTY as OUT_QTY1
+                    from
+                        ksv_stock_mem a,
+                        ksv_stock_in b,
+                        kcd_matl_mst c,
+                        kcd_matl_mem c1
+                    where
+                        a.pu_cd = '${col0.PU_CD}'
+                        and a.po_cd = '${col0.PO_CD}'
+                        and a.matl_cd = '${col0.MATL_CD}'
+                        and a.matl_cd = c.matl_cd
+                        and a.in_qty > a.out_qty
+                        and b.in_qty > 0 
+                        and b.lc_qty <= 0
+                        and (b.in_qty > b.out_qty )
+                        and a.po_cd = b.po_cd
+                        and a.po_seq = b.po_seq
+                        and a.order_cd = b.order_cd
+                        and a.matl_cd = b.matl_cd
+                        and a.mrp_seq = b.mrp_seq
+                        and c.matl_cd = c1.matl_cd
+                        and c1.matl_seq = (
+                            select
+                                max(matl_seq)
+                            from
+                                kcd_matl_mem
+                            where
+                                matl_cd = c.matl_cd
+                        )
+                    order by
+                        a.order_cd, a.po_seq
+                `;
+                var nRet0 = await prisma.$queryRaw(Prisma.raw(sql0));
+
+                var tOutPercent = 0;
+                var tRemainQty = parseFloat(col0.OUT_QTY);
+
+                var tDeliveryAmt = 0;
+
+                console.log(
+                    `====> Out Info.length : ${nRet0.length}/ ${tRemainQty}  `,
+                );
+                if (nRet0.length <= 0) {
+                    var tRetArray = [];
+                    var tObj = {};
+                    tObj.CODE = `ERROR:STOCK_OUT:Not Found Stock Record.(Contact IT Team)[${col0.PO_CD}, ${col0.MATL_CD}]`;
+                    tObj.id = 0;
+                    tRetArray.push(tObj);
+                    return tRetArray;
+                }
+
+                var tIdx2 = 0;
+                for (tIdx2 = 0; tIdx2 < nRet0.length; tIdx2++) {
+                    var col = {
+                        ...nRet0[tIdx2],
+                    };
+
+                    if (tRemainQty <= 0) continue;
+
+                    if (!col.PU_CD) col.PU_CD = col.PU_CD2;
+
+                    var tOutQty = 0;
+                    var tOutQty0_1 =
+                        parseFloat(col.IN_QTY1) - parseFloat(col.OUT_QTY1);
+                    if (
+                        parseFloat(col.IN_QTY1) === 0 &&
+                        parseFloat(col.OUT_QTY1) === 0
+                    ) {
+                        // inqty을 0으로 sts-in시키고 stock_mem의 in_qty만 증가시킨 경우. 구버전에서 sts-in없이 sts-out만 잡고자 하는 처리 대응. 260107
+                        // 지금은 사용하지 않음. 260604 . Won
+                        tOutQty = tRemainQty;
+                        tRemainQty = 0;
+                    } else {
+                        if (tOutQty0_1 > tRemainQty) {
+                            tOutQty = tRemainQty;
+                            tRemainQty = 0;
+                        } else {
+                            tOutQty = tOutQty0_1;
+                            tRemainQty -= tOutQty;
+                        }
+                    }
+
+                    // 마지막인데 remain이 남은경우
+                    if (tIdx2 === nRet0.length - 1 && tRemainQty > 0) {
+                        tOutQty += tRemainQty;
+                        tRemainQty = 0;
+                    }
+
+                    console.log(
+                        `====> Out Info : ${col.PO_CD}/ ${col.PO_SEQ}/${col.MATL_CD}/${col.IN_QTY}/${col.OUT_QTY}/${col.IN_QTY1}/${col.OUT_QTY1}=> ${tOutQty}/${tRemainQty}  `,
+                    );
+
+                    if (tOutQty <= 0) {
+                        continue;
+                    }
+
+                    var tInputWeight =
+                        parseFloat(col0.WEIGHT) * tOutQty * 1000;
+                    var tWeight = tInputWeight;
+                    if (parseFloat(tInput.WEIGHT) <= 0)
+                        tInput.WEIGHT = tInput.GROSS_WEIGHT;
+                    var tWeight_gross =
+                        parseFloat(tInput.GROSS_WEIGHT) *
+                        (tInputWeight / parseFloat(tInput.WEIGHT));
+
+                    console.log(
+                        `====> Out Info(in_qty, out_qty, bal_qty, out_qty):${col.ORDER_CD}/${col.IN_QTY1}/${col.OUT_QTY1}/${col0.BAL_QTY}/${col0.OUT_QTY} `,
+                    );
+
+                    var tDeliveryAmt0 =
+                        parseFloat(col.IN_PRICE) * parseFloat(tOutQty);
+                    tDeliveryAmt += tDeliveryAmt0;
+
+                    let tSQL99 = `
+                        update ksv_stock_mem
+                        set
+                            out_qty = out_qty + ${tOutQty},
+                            stock_status = '2'
+                        where
+                            po_cd = '${col.PO_CD}'
+                            and po_seq = '${col.PO_SEQ}'
+                            and order_cd = '${col.ORDER_CD}'
+                            and matl_cd = '${col.MATL_CD}'
+                            and mrp_seq = '${col.MRP_SEQ}'
+                            and matl_seq = '${col.MATL_SEQ}'
+                            and  pu_cd = '${col0.PU_CD}'
+                    `;
+                    const tSQL99_1 = prisma.$queryRaw(Prisma.raw(tSQL99));
+                    tSQLArray.push(tSQL99_1);
+
+                    let tSQL99 = `
+                        update ksv_stock_in
+                        set
+                            out_qty = out_qty + ${tOutQty},
+                            out_status = '1'
+                        where
+                            po_cd = '${col.PO_CD}'
+                            and po_seq = '${col.PO_SEQ}'
+                            and order_cd = '${col.ORDER_CD}'
+                            and matl_cd = '${col.MATL_CD}'
+                            and mrp_seq = '${col.MRP_SEQ}'
+                            and in_datetime = '${col.IN_DATETIME}'
+                            and pu_cd = '${col0.PU_CD}'
+                            and in_qty > 0
+                            and lc_qty <= 0
+                    `;
+                    const tSQL99_1 = prisma.$queryRaw(Prisma.raw(tSQL99));
+                    tSQLArray.push(tSQL99_1);
+
+                    var tFactoryCd = 'FC000';
+                    var tOutType = '4';
+                    if (tInput.DESTINATION === 'BVT') {
+                        tFactoryCd = 'FC034';
+                        tOutType = '2';
+                    } else if (tInput.DESTINATION === 'ETP') {
+                        tFactoryCd = 'FC044';
+                        tOutType = '3';
+                    } else if (tInput.DESTINATION === 'SHINTS') {
+                        tFactoryCd = 'FC010';
+                        tOutType = '1';
+                    }
+                    tInput.CT_NO = `box-${tNewCd}`;
+
+                    var writeW = 0;
+                    if (upWeight <= 0) {
+                        writeW = parseFloat(tInput.GROSS_WEIGHT);
+                        upWeight = parseFloat(tInput.GROSS_WEIGHT);
+                    }
+                    tInputWeight = writeW;
+
+                    let tSQL99 = `
+                        insert into
+                            ksv_stock_out (
+                                po_cd,
+                                po_seq,
+                                order_cd,
+                                matl_cd,
+                                mrp_seq,
+                                matl_seq,
+                                in_datetime,
+                                out_datetime,
+                                out_qty,
+                                out_type,
+                                out_status,
+                                pack_cd,
+                                delivery_type,
+                                ship_date,
+                                ct_qty,
+                                ct_no,
+                                remark,
+                                out_factory_cd,
+                                status_cd,
+                                reg_user,
+                                reg_datetime,
+                                pu_cd,
+                                stsout_cd,
+                                invoice_no,
+                                trade_term,
+                                ready_date,
+                                origin_port,
+                                weight,
+                                cbm,
+                                destination,
+                                eta,
+                                stsin_cd,
+                                in_price,
+                                delivery_amt
+                            )
+                        values
+                            (
+                                '${col.PO_CD}',
+                                ${col.PO_SEQ},
+                                '${col.ORDER_CD}',
+                                '${col.MATL_CD}',
+                                ${col.MRP_SEQ},
+                                ${col.MATL_SEQ},
+                                '${col.IN_DATETIME}',
+                                '${tRetDate}',
+                                ${tOutQty},
+                                '${tOutType}',
+                                '0',
+                                '${tPackCd}',
+                                '${tDeliveryType}',
+                                '${tRetDate1}',
+                                ${tInput.CT_QTY},
+                                '${tCT_NO}',
+                                '${tRemark}',
+                                '${tFactoryCd}',
+                                '0',
+                                '${tUserInfo.USER_ID}',
+                                '${tRetDate}',
+                                '${col0.PU_CD}',
+                                '${tNewCd}',
+                                '${tInput.INVOICE_NO}',
+                                '${tInput.PAY_TERM}',
+                                '${tInput.READY_DATE}',
+                                '${tInput.ORIGIN_PORT}',
+                                '${tInputWeight}',
+                                '${tInput.CBM}',
+                                '${tInput.DESTINATION}',
+                                '',
+                                '${col0.STSIN_CD}',
+                                '${col.IN_PRICE}',
+                                '${tDeliveryAmt0}'
+                            )
+                    `;
+                    const tSQL99_1 = prisma.$queryRaw(Prisma.raw(tSQL99));
+                    tSQLArray.push(tSQL99_1);
+
+                    // KZZ_FRIGHT Insert
+                    if (
+                        tDeliveryType === '7' || // Express
+                        tDeliveryType === '6' || // Handy carry
+                        tDeliveryType === 'D' || // DHL
+                        tDeliveryType === 'A' || // ADC
+                        tDeliveryType === '42' || // Express(Third)
+                        tDeliveryType === '31' || // AIR(Third)
+                        tDeliveryType === '1'
+                    ) {
+                        // AIR
+
+                        var m_AirCharge = '';
+                        var m_ExpressCharge = '';
+
+                        if (tDeliveryType === '7' || tDeliveryType === '1') {
+                            let tSql0 = `
+                                SELECT
+                                    charge
+                                FROM
+                                    kzz_freight_charge
+                                WHERE
+                                    frt_type = '4'
+                                    and reg_datetime = (
+                                        select
+                                            max(reg_datetime)
+                                        from
+                                            kzz_freight_charge
+                                        where
+                                            frt_type = '4'
+                                    )
+                            `;
+                            var nRet88 = await prisma.$queryRaw(
+                                Prisma.raw(tSql0),
+                            );
+                            if (nRet88.length > 0)
+                                m_ExpressCharge = nRet88[0].charge;
+
+                            let tSql0 = `
+                                SELECT
+                                    charge
+                                FROM
+                                    kzz_freight_charge
+                                WHERE
+                                    frt_type = '3'
+                                    and reg_datetime = (
+                                        select
+                                            max(reg_datetime)
+                                        from
+                                            kzz_freight_charge
+                                        where
+                                            frt_type = '3'
+                                    )
+                            `;
+                            var nRet89 = await prisma.$queryRaw(
+                                Prisma.raw(tSql0),
+                            );
+                            if (nRet89.length > 0)
+                                m_AirCharge = nRet89[0].charge;
+                        }
+
+                        var m_FrtType = '';
+                        var m_AreaType = '';
+                        var m_Weight = 0;
+                        var m_Weight_Gross = 0;
+                        var m_Amount = 0;
+                        var m_BLNo = 0;
+                        var m_InvoiceNo = 0;
+                        var m_BuyerCd = col.ORDER_CD.substring(0, 2);
+                        var m_adp_check = '0';
+                        if (tDeliveryType === '7') {
+                            // Express
+                            m_FrtType = '4';
+                            m_AreaType = '2';
+                            m_adp_check = '1';
+                        } else if (tDeliveryType === '6') {
+                            m_FrtType = '41';
+                            m_AreaType = '2';
+                        } else if (tDeliveryType === 'D') {
+                            m_FrtType = '5';
+                            m_AreaType = '2';
+                        } else if (tDeliveryType === 'A') {
+                            m_FrtType = 'A';
+                            m_AreaType = '2';
+                        } else if (tDeliveryType === '31') {
+                            m_FrtType = '31';
+                            m_AreaType = '3';
+                        } else if (tDeliveryType === '42') {
+                            // Express
+                            m_FrtType = '42';
+                            m_AreaType = '3';
+                            m_adp_check = '1';
+                        } else if (tDeliveryType === '43') {
+                            // Express
+                            m_FrtType = '44';
+                            m_AreaType = '3';
+                            m_adp_check = '1';
+                        } else if (tDeliveryType === '41') {
+                            // Express
+                            m_FrtType = '41';
+                            m_AreaType = '3';
+                            m_adp_check = '1';
+                        } else {
+                            m_FrtType = '3';
+                            m_AreaType = '2';
+                        }
+
+                        m_Weight = parseFloat(tInputWeight);
+                        m_Weight_Gross = parseFloat(tInputWeight);
+
+                        if (tDeliveryType === '7') {
+                            m_Amount = m_Weight * m_ExpressCharge;
+                        } else if (tInput1.DELIVERY_TYPe === '1') {
+                            m_Amount = m_Weight * m_AirCharge;
+                        }
+                        m_BLNo = '';
+                        m_InvoiceNo = tPackCd;
+                        var m_STSOUT_CD = tNewCd;
+
+                        var tSpec = col.MATL_NAME.replace(/'/gi, '');
+                        // var tRemark = tInput.REMARK.replace(/'/gi, '');
+
+                        let tSQL99 = `
+                            INSERT INTO
+                                KZZ_FREIGHT (
+                                    FRT_DATE,
+                                    TRADE_TYPE,
+                                    departure,
+                                    destination,
+                                    FRT_TYPE,
+                                    AREA_TYPE,
+                                    MATL_TYPE,
+                                    PO_CD,
+                                    ORDER_CD,
+                                    STYLE_CD,
+                                    MATL_CD,
+                                    unit,
+                                    price,
+                                    mw,
+                                    garment_compo,
+                                    qty,
+                                    SENDER,
+                                    RECEIVER,
+                                    SPEC,
+                                    REMARK,
+                                    po_seq,
+                                    mrp_seq,
+                                    in_datetime,
+                                    REG_USER,
+                                    REG_DATETIME,
+                                    DELAY_REASON,
+                                    weight,
+                                    weight_net,
+                                    amount,
+                                    net,
+                                    vat,
+                                    adp_check,
+                                    bl_no,
+                                    invoice_no,
+                                    charge_kind,
+                                    charge_code,
+                                    buyer_cd,
+                                    stsout_cd
+                                )
+                            VALUES
+                                (
+                                    '${tRetDate1}',
+                                    '1',
+                                    '00',
+                                    '${tFactoryCd}',
+                                    '${m_FrtType}',
+                                    '${m_AreaType}',
+                                    'M',
+                                    '${col.PO_CD}',
+                                    '${col.ORDER_CD}',
+                                    '',
+                                    '${col.MATL_CD}',
+                                    '${col.UNIT}',
+                                    '${col.MATL_PRICE}',
+                                    '',
+                                    '',
+                                    ${tOutQty},
+                                    '${tUserInfo.USER_ID}',
+                                    '',
+                                    '${tSpec}',
+                                    '${tRemark}',
+                                    ${col.PO_SEQ},
+                                    ${col.MRP_SEQ},
+                                    '${col.IN_DATETIME}',
+                                    '${tUserInfo.USER_ID}',
+                                    '${tRetDate}',
+                                    '',
+                                    ${m_Weight},
+                                    '${m_Weight_Gross}',
+                                    '${m_Amount}',
+                                    '0',
+                                    '0',
+                                    '${m_adp_check}',
+                                    '${m_BLNo}',
+                                    '${m_InvoiceNo}',
+                                    '',
+                                    '',
+                                    '${m_BuyerCd}',
+                                    '${m_STSOUT_CD}'
+                                )
+                        `;
+                        const tSQL99_1 = prisma.$queryRaw(Prisma.raw(tSQL99));
+                        tSQLArray.push(tSQL99_1);
+                    }
+                }
+
+                // KCD_MATL_MST의 WEIGHT 업데이트
+                tSQLArray.push(
+                    prisma.$queryRaw(
+                        Prisma.raw(`
+                            update kcd_matl_mst
+                            set
+                                weight = ${col0.WEIGHT * 1000.0}
+                                where matl_cd = '${col0.MATL_CD}'
+                        `),
+                    ),
+                );
+            }
+
+            try {
+                global.currentTransactionInfo = {
+                    contextValue: contextValue,
+                    functionName: AFLib.getFunctionName(),
+                };
+                await prisma.$transaction(tSQLArray);
+                delete global.currentTransactionInfo;
+            } catch (e) {
+                var tRetArray = [];
+                var tObj = {};
+                tObj.CODE = `ERROR:STOCK_OUT:${e.message}`;
+                tObj.id = 0;
+                tRetArray.push(tObj);
+                return tRetArray;
+            }
+
+            tSQLArray = [];
+            // 금액재계산
+            var sql3 = `
+                select
+                    a.pu_cd,
+                    isnull(sum(a.out_qty * b.PO_PRICE), 0) as stsout_amt
+                from
+                    ksv_stock_out a,
+                    ksv_stock_mem2 b
+                where
+                    a.pu_cd in (${sqlPu})
+                    and a.po_cd = b.po_cd
+                    and a.matl_cd = b.matl_cd
+                group by
+                    a.pu_cd
+            `;
+            var tRet3 = await prisma.$queryRaw(Prisma.raw(sql3));
+            var tStsoutAmt = 0;
+            var tIdx3 = 0;
+            for (tIdx3 = 0; tIdx3 < tRet3.length; tIdx3++) {
+                var col = {
+                    ...tRet3[tIdx3],
+                };
+                let tSQL99 = `
+                    update ksv_pu_mst2
+                    set
+                        stsout_amt = ${col.stsout_amt}
+                    where
+                        pu_cd = '${col.pu_cd}'
+                `;
+                var ret99 = await prisma.$queryRaw(Prisma.raw(tSQL99));
+            }
+
+            var tRetArray = [];
+            var tObj = {};
+            tObj.CODE = 'SUCCEED:STS Out';
+            tObj.id = 0;
+            tRetArray.push(tObj);
+            return tRetArray;
+        },
+
+        mgrDelete_S0431_5: async (_, args, contextValue) => {
+            //
+            var tDateNew = new Date();
+            tDateNew.setMonth(tDateNew.getMonth() + 1);
+            var tZeroDate = '00';
+            var tDateNew_M =
+                tZeroDate.substring(
+                    0,
+                    2 - String(tDateNew.getMonth() + 1).length,
+                ) + String(tDateNew.getMonth() + 1);
+            var tDateNew_D =
+                tZeroDate.substring(0, 2 - String(tDateNew.getDate()).length) +
+                String(tDateNew.getMonth());
+            var tNewDateStr = tDateNew.getFullYear() + tDateNew_M + tDateNew_D;
+
+            var tDate = new Date();
+            var mm = tDate.getMonth() + 1;
+            var mm_str = '';
+            if (mm > 9) mm_str = mm.toString();
+            else mm_str = '0' + mm;
+
+            var dd = tDate.getDate();
+            var dd_str = '';
+            if (dd > 9) dd_str = dd;
+            else dd_str = '0' + dd;
+
+            var hours = tDate.getHours();
+            var hours_str = '';
+            if (hours > 9) hours_str = hours.toString();
+            else hours_str = '0' + hours;
+
+            var minutes = tDate.getMinutes();
+            var minutes_str = '';
+            if (minutes > 9) minutes_str = minutes.toString();
+            else minutes_str = '0' + minutes;
+
+            var seconds = tDate.getSeconds();
+            var seconds_str = '';
+            if (seconds > 9) seconds_str = seconds.toString();
+            else seconds_str = '0' + seconds;
+
+            var yyyy = tDate.getFullYear();
+
+            var tRetDate =
+                yyyy.toString() +
+                mm_str +
+                dd_str +
+                hours_str +
+                minutes_str +
+                seconds_str;
+            var tRetDate1 = tRetDate.substring(0, 8);
+            var tYY = 'B' + yyyy.toString().substring(2) + '-';
+
+            // let tPO = "POA2022S672";
+            var tUserInfo = AFLib.getUserInfo(contextValue);
+
+            /*
+                  var tSQL = `
+                      SELECT
+                          max(A.SEQ) + 1 as max_seq
+                      FROM
+                          KSV_ORDER_MST A,
+                          KCD_STYLE B
+                      WHERE
+                          A.STYLE_CD = B.STYLE_CD
+                          and A.YY = ${tOneMst.YY}
+                          and B.BUYER_CD = '${tOneMst.BUYER_CD}'
+                  `;
+                  var nRet0 = await prisma.$queryRaw(Prisma.raw(tSQL));
+                  var tRet = nRet0[0];
+                  var tMaxSeq = tRet.max_seq;
+            */
+
+            var tSQLArray = [];
+            let tSQL99 = `
+                delete from ksv_pu_mst2
+                where
+                    pu_cd = '${args.datas.PU_CD}'
+            `;
+            const tSQL99_1 = prisma.$queryRaw(Prisma.raw(tSQL99));
+            tSQLArray.push(tSQL99_1);
+
+            let tSQL99 = `
+                update ksv_stock_mem
+                set
+                    pu_cd = ''
+                where
+                    pu_cd = '${args.datas.PU_CD}'
+            `;
+            const tSQL99_1 = prisma.$queryRaw(Prisma.raw(tSQL99));
+            tSQLArray.push(tSQL99_1);
+
+            try {
+                global.currentTransactionInfo = {
+                    contextValue: contextValue,
+                    functionName: AFLib.getFunctionName(),
+                };
+                await prisma.$transaction(tSQLArray);
+                delete global.currentTransactionInfo;
+                var tRetArray = [];
+                var tObj = {};
+                tObj.CODE = 'SUCCEED:Delete PU_CD:' + args.datas.PU_CD;
+                tObj.id = 0;
+                tRetArray.push(tObj);
+            } catch (e) {
+                var tRetArray = [];
+                var tObj = {};
+                tObj.CODE = 'ERROR:Delete PU_CD';
+                tObj.id = 0;
+                tRetArray.push(tObj);
+            }
+
+            // 금액재계산
+            var tRet3 = await prisma.$queryRaw`
+                select
+                    isnull(sum(a.out_qty * b.PO_PRICE), 0) as stsout_amt
+                from
+                    ksv_stock_out a,
+                    ksv_stock_mem2 b
+                where
+                    a.pu_cd = ${args.datas.PU_CD}
+                    and a.po_cd = b.po_cd
+                    and a.matl_cd = b.matl_cd
+                    -- and   a.pu_cd = b.pu_cd
+            `;
+            var tStsoutAmt = 0;
+            tRet3.forEach((col, i) => {
+                tStsoutAmt += parseFloat(col.stsout_amt);
+            });
+
+            tSQLArray = [];
+            let tSQL99 = `
+                update ksv_pu_mst2
+                set
+                    stsout_amt = ${tStsoutAmt}
+                where
+                    pu_cd = '${args.datas.PU_CD}'
+            `;
+            const tSQL99_1 = prisma.$queryRaw(Prisma.raw(tSQL99));
+            tSQLArray.push(tSQL99_1);
+
+            try {
+                global.currentTransactionInfo = {
+                    contextValue: contextValue,
+                    functionName: AFLib.getFunctionName(),
+                };
+                await prisma.$transaction(tSQLArray);
+                delete global.currentTransactionInfo;
+            } catch (e) {
+                var tRetArray = [];
+                var tObj = {};
+                tObj.CODE = 'ERROR:STS OUT';
+                tObj.id = 0;
+                tRetArray.push(tObj);
+                return tRetArray;
+            }
+
+            return tRetArray;
+        },
+    },
+};
+
+export default moduleMutation_S0431_5;
