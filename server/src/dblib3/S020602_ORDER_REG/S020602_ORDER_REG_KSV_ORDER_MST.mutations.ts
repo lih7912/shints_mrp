@@ -2174,6 +2174,7 @@ const moduleMutation_S020602_ORDER_REG_EDT_KSV_ORDER_MST = {
                 }
                 tObj.ADD_QTY = tAddQty;
                 tTotAddQty += tObj.ADD_QTY;
+
                 tSaveOrderMstArray.push(tObj);
                 /*
          if (tObj.TYPE === 'Main' || tObj.TYPE === 'Combined') {
@@ -2282,12 +2283,14 @@ const moduleMutation_S020602_ORDER_REG_EDT_KSV_ORDER_MST = {
                 var tORDER_TYPE;
                 var tObj = { ...tSaveOrderMstArray[tIdx] };
 
+                // console.log(`=============> Check nat_cd, exf_date, etd_date: ${tObj.ORDER_CD} / ${tObj.NAT_CD} / ${tObj.EXF_DATE} / ${tObj.ETD_DATE} `);
+
                 if (tObj.TYPE === 'Main') {
                     tORDER_CD_0 = tORDER_CD;
                     tSubIdx = 0;
                     if (tOrderType.substring(0, 1) === 'C') {
                         tORDER_TYPE = '1';
-                        tObj.NAT_CD = '';
+                        // tObj.NAT_CD = '';
                     } else {
                         tORDER_TYPE = '0';
                     }
@@ -2334,7 +2337,6 @@ const moduleMutation_S020602_ORDER_REG_EDT_KSV_ORDER_MST = {
                 var tWObj = { ...tMstMain };
                 tWObj.ORDER_CD = tORDER_CD_0;
                 tWObj.ORDER_TYPE = tORDER_TYPE;
-                tWObj.NAT_CD = tObj.NAT_CD;
                 tWObj.REF_ORDER_NO = tObj.BUYER_PO.replace(/'/gi, "''");
                 tWObj.REMARK = tObj.REMARK1.replace(/'/gi, "''");
                 tWObj.COLLECTION = tObj.COLLECTION;
@@ -2343,12 +2345,18 @@ const moduleMutation_S020602_ORDER_REG_EDT_KSV_ORDER_MST = {
                 // tWObj.DUE_DATE = tObj.ETD_DATE;
                 // tWObj.MATL_DUE_DATE = tObj.EXF_DATE;
                 // tWObj.MATL_DUE_DATE = tObj.EXF_DATE;
-                tWObj.DUE_DATE = tObj.EXF_DATE;
-                tWObj.ETD = tObj.ETD_DATE;
                 tWObj.TOT_CNT = parseInt(tObj.ORDER_QTY);
                 tWObj.ADD_CNT = parseInt(tObj.ADD_QTY);
                 tWObj.ORDER_OP_TYPE = tObj.TYPE;
                 tWObj.MID_SIZE1 = tInMidSize;
+
+                // 화면에서 들어온것을 사용. Won 260720
+                tWObj.NAT_CD = tObj.NAT_CD;
+                tWObj.DUE_DATE = tObj.EXF_DATE;
+                tWObj.ETD = tObj.ETD_DATE;
+
+                // console.log(`=============> Check nat_cd, exf_date, etd_date: ${tWObj.ORDER_CD} / ${tWObj.NAT_CD} / ${tWObj.DUE_DATE} / ${tWObj.ETD} `);
+                
 
                 if (args.datas.ORDER_MST.XX_ORDER_CD !== '')
                     tWObj.XX_ORDER_CD = args.datas.ORDER_MST.XX_ORDER_CD;
