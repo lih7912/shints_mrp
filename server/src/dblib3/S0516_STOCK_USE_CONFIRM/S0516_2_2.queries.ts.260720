@@ -183,18 +183,17 @@ const moduleQuery_S0516_2_2 = {
                     left join kcd_vendor e1 on e1.vendor_cd = c1.vendor_cd
                 where
                     a.po_cd like '%${args.data.PO_CD}%'
-                    and a.use_po_type = '2' 
-                    and (a.diff_po_type = '0' or a.diff_po_type = '5')
+                    and a.use_po_type = '2'
+                    and a.diff_po_type = '0'
                     and a.stock_idx = d.stock_idx
                     and a.po_cd = b.po_cd
-                    -- and a.po_seq = b.po_seq
+                    and a.po_seq = b.po_seq
                     and a.order_cd = b.order_cd
                     and a.po_matl_cd = b.matl_cd
-                    -- and a.po_mrp_seq = b.mrp_seq
-                    and b.use_po_type <> '2'
+                    and a.po_mrp_seq = b.mrp_seq
                     and (
-                        a.matl_cd like '%${args.data.MATL_CD}%'
-                        or a.po_matl_cd like '%${args.data.MATL_CD}%'
+                        c.matl_cd like '%${args.data.MATL_CD}%'
+                        or c1.matl_cd like '%${args.data.MATL_CD}%'
                     )
                     and (
                         c.matl_name like '%${args.data.MATL_NAME}%'
@@ -220,34 +219,13 @@ const moduleQuery_S0516_2_2 = {
                         d.ware_cd like '%${args.data.WAREHOUSE}%'
                         or d.factory_cd like '%${args.data.WAREHOUSE}%'
                     )
-                    and isnull(h.use_datetime, '') like '%${args.data.USE_DATE}%' ${tSQL}
+                    and h.use_datetime like '%${args.data.USE_DATE}%' ${tSQL}
                 order by
-                    a.stock_idx,
                     b.po_cd,
                     b.order_cd,
                     b.matl_cd
             `;
-            var tRet99 = await prisma.$queryRaw(Prisma.raw(sqlStr));
-
-            // stock use(2/0) 와 stock cancel(2/5)을 둘다 조회하여 실제 Stock 적용수량을 계산
-            // 2026.07.20. Won
-            var save99 = {};
-            var tRet = [];
-            tRet99.forEach((col, i) => {
-                if (i === 0) {
-                    save99 = { ...col };
-                } else {
-                    if (save99.STOCK_IDX === col.STOCK_IDX) {
-                        var tVal = parseFloat(save99.PO_QTY) + parseFloat(col.PO_QTY);
-                        save99.PO_QTY = parseFloat(tVal).toFixed(2);
-                        save99.USE_QTY = parseFloat(tVal).toFixed(2);
-                    } else {
-                        tRet.push(save99);
-                        save99 = { ...col };
-                    }
-                }
-            });
-            tRet.push(save99);
+            var tRet = await prisma.$queryRaw(Prisma.raw(sqlStr));
 
             if (tRet.length === 0) {
                 return [];
