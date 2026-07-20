@@ -660,30 +660,22 @@ const moduleQuery_S0914_FAC_IN_OUT_MANAGER = {
                 const sqlStr = `
                     SELECT
                         ROW_NUMBER() OVER (
-                            ORDER BY
-                                USE_DATETIME DESC
+                            ORDER BY A.STOCK_STATUS
                         ) AS id,
-                        ISNULL(USE_PO_CD, '') AS USE_PO_CD,
-                        ISNULL(USE_ORDER_CD, '') AS USE_ORDER_CD,
-                        USE_QTY,
-                        USE_DATETIME
+                        ISNULL(B.USE_PO_CD, '') AS USE_PO_CD,
+                        ISNULL(B.USE_ORDER_CD, '') AS USE_ORDER_CD,
+                        B.USE_QTY AS USE_QTY,
+                        B.USE_DATETIME AS USE_DATETIME
                     FROM
-                        KSV_STOCK_USE
+                        KSV_STOCK_MATL A
+                        INNER JOIN KSV_STOCK_USE B ON B.STOCK_IDX = A.STOCK_IDX
+                            AND B.USE_PO_CD <> '${poCd}'
                     WHERE
-                        STOCK_IDX IN (
-                            SELECT
-                                STOCK_IDX
-                            FROM
-                                KSV_PO_MRP
-                            WHERE
-                                1 = 1
-                                AND PO_CD like '%${poCd}%'
-                                AND MATL_CD like '%${matlCd}%'
-                                AND PO_SEQ IN ('97', '98', '99')
-                                AND PO_CD IS NOT NULL
-                        )
+                        A.PO_CD LIKE '%${poCd}%'
+                        AND A.MATL_CD LIKE '%${matlCd}%'
+                        AND A.STOCK_STATUS IN ('W', 'N')
                     ORDER BY
-                        USE_DATETIME DESC
+                        A.STOCK_STATUS
                 `;
 
                 const ret = await prisma.$queryRaw(Prisma.sql([sqlStr]));
