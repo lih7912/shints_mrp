@@ -56,6 +56,7 @@ const emptyQRY_KSV_PO_MST = {
 
 const S0305_SEARCH_STORAGE_KEY = "S0305_MRP_MANAGER_SEARCH";
 const S0305_REQUERY_STORAGE_KEY = "S0305_MRP_MANAGER_REQUERY";
+const S0305_AUTO_PO_FIX_KEY = "S0305_AUTO_PO_FIX";
 const S0305_QRY_FIELDS = Object.keys(emptyQRY_KSV_PO_MST);
 
 const pickS0305SearchQuery = (source) => {
@@ -79,6 +80,23 @@ const getS0305StoredQuery = (storageKey) => {
         return Object.keys(query).length > 0 ? query : null;
     } catch (error) {
         console.log(`${storageKey} parse error => ${error}`);
+        return null;
+    }
+};
+
+const getS0305AutoPoFixTarget = () => {
+    const raw = sessionStorage.getItem(S0305_AUTO_PO_FIX_KEY);
+    if (!raw) return null;
+
+    try {
+        const parsed = JSON.parse(raw);
+        if (!parsed?.PO_CD) return null;
+        return {
+            PO_CD: parsed.PO_CD,
+            PO_SEQ: String(parsed.PO_SEQ ?? ""),
+        };
+    } catch (error) {
+        console.log(`${S0305_AUTO_PO_FIX_KEY} parse error => ${error}`);
         return null;
     }
 };
@@ -854,8 +872,7 @@ const S0305_MRP_MANAGER = () => {
         });
     };
 
-    const process_PO_SETTLE = () => {
-        const row = selectedTBL_KSV_PO_MST?.[0];
+    const runProcessPoSettle = (row) => {
         if (!row) {
             alert("작업할 PO를 선택하세요.<br><br>Please select a PO to process.");
             return;
@@ -937,6 +954,10 @@ const S0305_MRP_MANAGER = () => {
                         }
                     });
             });
+    };
+
+    const process_PO_SETTLE = () => {
+        runProcessPoSettle(selectedTBL_KSV_PO_MST?.[0]);
     };
 
     const process_PO_CANCEL = async () => {
@@ -1459,6 +1480,23 @@ const S0305_MRP_MANAGER = () => {
                         prevSelected.includes(`${row.PO_CD}::${row.PO_SEQ}`),
                     );
                     setSelectedTBL_KSV_PO_MST(selectedRows);
+                }
+
+                const autoPoFixTarget = getS0305AutoPoFixTarget();
+                if (autoPoFixTarget) {
+                    const targetRow = nextRows.find(
+                        (row) =>
+                            row.PO_CD === autoPoFixTarget.PO_CD &&
+                            String(row.PO_SEQ ?? "") === autoPoFixTarget.PO_SEQ,
+                    );
+
+                    if (targetRow) {
+                        setSelectedTBL_KSV_PO_MST([targetRow]);
+                        sessionStorage.removeItem(S0305_AUTO_PO_FIX_KEY);
+                        setTimeout(() => {
+                            runProcessPoSettle(targetRow);
+                        }, 0);
+                    }
                 }
             } else {
                 console.log(

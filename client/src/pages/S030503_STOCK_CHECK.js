@@ -25,6 +25,7 @@ import { ProgressSpinner } from "primereact/progressspinner";
 
 import { ServiceLib } from "../service/service_lib/ServiceLib";
 import { ServiceS030503_STOCK_CHECK } from "../service/service_biz/ServiceS030503_STOCK_CHECK";
+import { ServiceS0305_MRP_MANAGER } from "../service/service_biz/ServiceS0305_MRP_MANAGER";
 import { ServiceS030514_PO_LIST } from "../service/service_biz/ServiceS030514_PO_LIST";
 import { ServiceS030513_MRP_LIST } from "../service/service_biz/ServiceS030513_MRP_LIST";
 
@@ -61,6 +62,7 @@ const emptyQRY_KSV_PO_MST = {
 
 const S0305_SEARCH_STORAGE_KEY = "S0305_MRP_MANAGER_SEARCH";
 const S0305_REQUERY_STORAGE_KEY = "S0305_MRP_MANAGER_REQUERY";
+const S0305_AUTO_PO_FIX_KEY = "S0305_AUTO_PO_FIX";
 
 const emptyTBL_KCD_MATL_MST = {
     id: 0,
@@ -128,6 +130,9 @@ const S030503_STOCK_CHECK = () => {
     const serviceS030503_STOCK_CHECKRef = useRef(null);
     if (!serviceS030503_STOCK_CHECKRef.current) serviceS030503_STOCK_CHECKRef.current = new ServiceS030503_STOCK_CHECK();
     const serviceS030503_STOCK_CHECK = serviceS030503_STOCK_CHECKRef.current;
+    const serviceS0305_MRP_MANAGERRef = useRef(null);
+    if (!serviceS0305_MRP_MANAGERRef.current) serviceS0305_MRP_MANAGERRef.current = new ServiceS0305_MRP_MANAGER();
+    const serviceS0305_MRP_MANAGER = serviceS0305_MRP_MANAGERRef.current;
     const serviceS030514_PO_LISTRef = useRef(null);
     if (!serviceS030514_PO_LISTRef.current) serviceS030514_PO_LISTRef.current = new ServiceS030514_PO_LIST();
     const serviceS030514_PO_LIST = serviceS030514_PO_LISTRef.current;
@@ -1359,7 +1364,7 @@ const S030503_STOCK_CHECK = () => {
         });
     };
 
-    const confirmUseStock = () => {
+    const confirmUseStock = async () => {
         var tQryObj = { ...dataQRY_KSV_PO_MST };
 
         if (!tQryObj.PO_LOG_TYPE || tQryObj.PO_LOG_TYPE === ' ')  {
@@ -1378,13 +1383,15 @@ const S030503_STOCK_CHECK = () => {
 
         //setIsProgress(true);
         setLoadingTBL_KSV_ORDER_MEM(true);
-        serviceS030503_STOCK_CHECK.mgrConfirmUseStock(tObj).then((data) => {
+        serviceS030503_STOCK_CHECK.mgrConfirmUseStock(tObj).then( async (data) => {
             setLoadingTBL_KSV_ORDER_MEM(false);
             if (typeof data.graphQLErrors === "undefined") {
                 if (data.length > 0) {
                     alert(data[0].CODE);
                     if (data[0].CODE.includes("SUCC")) {
                         console.log("SUCC condition passed");
+
+                        requestS0305Requery();
 
                         const rawSelInfo = sessionStorage.getItem("S0305_SEL_INFO");
                         let nextSelInfo = {};
@@ -1397,8 +1404,13 @@ const S030503_STOCK_CHECK = () => {
                             "S0305_SEL_INFO",
                             JSON.stringify(nextSelInfo),
                         );
-
-                        requestS0305Requery();
+                        sessionStorage.setItem(
+                            S0305_AUTO_PO_FIX_KEY,
+                            JSON.stringify({
+                                PO_CD: tObj.PO_CD,
+                                PO_SEQ: tObj.PO_SEQ,
+                            }),
+                        );
 
                         var tCols = data[0].CODE.split(":");
                         console.log("tCols:", tCols, "tCols.length:", tCols.length, "PO_SEQ:", tObj.PO_SEQ);
@@ -1916,8 +1928,8 @@ const S030503_STOCK_CHECK = () => {
                     </div>
                 </span>
 
-                <span className="af-span-3-0" style={{ width: "7rem" }}>
-                    <div className="af-span-div-btn" style={{ width: "6rem" }}>
+                <span className="af-span-3-0" style={{ width: "11rem" }}>
+                    <div className="af-span-div-btn" style={{ width: "10rem" }}>
                         <Tooltip
                             className="menuCodeTooltip"
                             target={`#btnSearch`}
@@ -1933,7 +1945,7 @@ const S030503_STOCK_CHECK = () => {
                             }
                             accessKey="S"
                             id="btnSearch"
-                            style={{ width: "6rem" }}
+                            style={{ width: "10rem" }}
                             className="p-button-text"
                             onClick={searchPO_MRP}
                         />
@@ -1951,11 +1963,11 @@ const S030503_STOCK_CHECK = () => {
                     </div>
                 </span>
 
-                <span className="af-span-3-0" style={{ width: "16rem" }}>
-                    <div className="af-span-div-btn" style={{ width: "15rem" }}>
+                <span className="af-span-3-0" style={{ width: "11rem" }}>
+                    <div className="af-span-div-btn" style={{ width: "10rem" }}>
                         <Button
-                            label="Stock Check(Fix)"
-                            style={{ width: "15rem" }}
+                            label="PO Fix"
+                            style={{ width: "10rem" }}
                             className="p-button-text"
                             onClick={confirmUseStock}
                         />
