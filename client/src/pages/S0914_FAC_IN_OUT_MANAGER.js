@@ -473,7 +473,10 @@ const S0914_FAC_IN_OUT_MANAGER = () => {
                     <Dropdown
                         value={poCd}
                         options={poOptions}
-                        onChange={(e) => setPoCd(e.value)}
+                        onChange={(e) => {
+                            setPoCd(e.value);
+                            searchOrderCd(e.value);
+                        }}
                         style={{ width: 150 }}
                         filter
                         editable
