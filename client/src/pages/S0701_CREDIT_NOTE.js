@@ -327,8 +327,31 @@ const S0701_CREDIT_NOTE = () => {
             tObj.GW_CODE &&
             (selObj.GW_STATUS === "상신" || selObj.GW_STATUS === "종결")
         ) {
-            alert("상신/종결중인 데이타는 수정할수 없습니다.<br><br>Data that has been submitted/closed cannot be modified.");
-            return;
+            const normalizeText = (val) => String(val || "").trim();
+            const normalizeNum = (val) =>
+                Number.isFinite(parseFloat(val)) ? parseFloat(val) : 0;
+
+            const isOnlyExpDateChanged =
+                normalizeText(tObj.DATE_OF_ISSUE) ===
+                    normalizeText(selObj.CRDB_DATE) &&
+                normalizeNum(tObj.PAY_AMT) === normalizeNum(selObj.CRDB_AMT) &&
+                normalizeText(tObj.PAY_CURR_CD) ===
+                    normalizeText(selObj.CURR_CD) &&
+                normalizeText(tObj.TITLE) === normalizeText(selObj.TITLE) &&
+                normalizeText(tObj.REMARK) === normalizeText(selObj.REMARK) &&
+                normalizeText(tObj.CHARGER) === normalizeText(selObj.CHARGER) &&
+                normalizeText(tObj.PO_CD) === normalizeText(selObj.PO_CD) &&
+                normalizeText(tObj.ORDER_CD) === normalizeText(selObj.ORDER_CD) &&
+                normalizeText(tObj.PAYMENT_PLAN) ===
+                    normalizeText(selObj.PAYMENT_PLAN) &&
+                normalizeText(tObj.BUYER_CD) === normalizeText(selObj.BUYER_CD) &&
+                normalizeText(tObj.PAY_TO) === normalizeText(selObj.MESSER_CD) &&
+                normalizeText(tObj.END_TYPE) === normalizeText(selObj.END_TYPE);
+
+            if (!isOnlyExpDateChanged) {
+                alert("상신/종결중인 데이타는 Pay Date(Exp Date)만 수정할수 있습니다.<br><br>For submitted/closed GW data, only Pay Date (Exp Date) can be updated.");
+                return;
+            }
         }
 
         // setDatasTBL_KSV_INVOICE_MST([]);
