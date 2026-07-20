@@ -1919,6 +1919,22 @@ const S030504_REVISE = () => {
                     </div>
                 </span>
                 <span className="af-span-3" style={{ width: "5rem" }}>
+                    <p className="af-span-p" style={{ width: "3rem" }}>MATL</p>
+                    <div className="af-span-checkbox">
+                        <Checkbox
+                            checked={changeCheckBoxVal(
+                                dataQRY_KSV_PO_MST.MATL_CHK,
+                            )}
+                            onChange={(e) =>
+                                onCheckboxChangeQRY_KSV_PO_MST_MATL_CHK(
+                                    e,
+                                    "MATL_CHK",
+                                )
+                            }
+                        />
+                    </div>
+                </span>
+                <span className="af-span-3" style={{ width: "5rem" }}>
                     <p className="af-span-p" style={{ width: "3rem" }}>ETC</p>
                     <div className="af-span-checkbox">
                         <Checkbox
@@ -1935,7 +1951,7 @@ const S030504_REVISE = () => {
                         />
                     </div>
                 </span>
-                <span className="af-span-3" style={{ width: "38.5rem" }}>
+                <span className="af-span-3" style={{ width: "33rem" }}>
                     <div className="af-span-div" style={{ width: "19rem" }}>
                         <Dropdown
                             istyle={{ width: "19rem" }}
