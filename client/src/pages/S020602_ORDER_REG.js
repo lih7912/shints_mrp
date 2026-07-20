@@ -1677,7 +1677,8 @@ const S020602_ORDER_REG = () => {
         setDatasTBL_KSV_ORDER_MST(tWArray);
         setDataTBL_KSV_ORDER_MST(tObjORDER_MST);
 
-        setSelectedTBL_KSV_ORDER_MST(tObjORDER_MST);
+        var tSelArray = []; tSelArray.push(tObjORDER_MST);
+        setSelectedTBL_KSV_ORDER_MST(tSelArray);
 
         setDatasTBL_KSV_ORDER_MEM([]);
         setSelectedTBL_KSV_PROD_MEM([]);
@@ -1746,7 +1747,8 @@ const S020602_ORDER_REG = () => {
 
         setDatasTBL_KSV_ORDER_MST(tWArray);
         setDataTBL_KSV_ORDER_MST(tObjORDER_MST);
-        setSelectedTBL_KSV_ORDER_MST(tObjORDER_MST);
+        var tSelArray = []; tSelArray.push(tObjORDER_MST);
+        setSelectedTBL_KSV_ORDER_MST(tSelArray);
     };
 
     const editTBL_KSV_ORDER_MST = (argData) => {};
@@ -1829,11 +1831,13 @@ const S020602_ORDER_REG = () => {
             alert("Size가 먼저 선택되어야 합니다<br><br>Size must be selected first");
             return;
         }
-        onRowClick1TBL_KSV_ORDER_MST_Sub(
-            argData0,
-            datasTBL_KSV_ORDER_MST,
-            dataEDT_KSV_ORDER_MST1.SIZE_GROUP,
-        );
+        if (argData0) {
+            onRowClick1TBL_KSV_ORDER_MST_Sub(
+                argData0,
+                datasTBL_KSV_ORDER_MST,
+                dataEDT_KSV_ORDER_MST1_SIZE_GROUP.SIZE_GROUP.trim(),
+            );
+        }
     };
 
     const onRowClick1TBL_KSV_ORDER_MST_Sub = (
@@ -1902,7 +1906,9 @@ const S020602_ORDER_REG = () => {
             editTBL_KSV_ORDER_MST(argTBL_KSV_ORDER_MST);
             setDataTBL_KSV_ORDER_MST(argTBL_KSV_ORDER_MST);
 
-            setSelectedTBL_KSV_ORDER_MST(argData);
+            var tSelArray = [];
+            tSelArray.push(argData);
+            setSelectedTBL_KSV_ORDER_MST(tSelArray);
 
             console.log(
                 `calc_MAIN_ORDER_MEM(Step1): ${tTmpArray.length}/`,
@@ -1936,7 +1942,8 @@ const S020602_ORDER_REG = () => {
             editTBL_KSV_ORDER_MST(argTBL_KSV_ORDER_MST);
             setDataTBL_KSV_ORDER_MST(argTBL_KSV_ORDER_MST);
 
-            setSelectedTBL_KSV_ORDER_MST(argData);
+            var tSelArray = []; tSelArray.push(argData);
+            setSelectedTBL_KSV_ORDER_MST(tSelArray);
             argData.ORDER_MEM.forEach((item, index) => {
                 item.seq = index + 1;
             });
@@ -1974,10 +1981,20 @@ const S020602_ORDER_REG = () => {
     };
 
     const onRowClickTBL_KSV_ORDER_MST = (event) => {
+
+        /*
+        var tArray = [];
+        tArray.push(event.value);
+        setSelectedTBL_KSV_ORDER_MST(tArray)
+
+        alert('kkk-1');
+        */
+
+        /*
         let argTBL_KSV_ORDER_MST = event.data;
         if (flagSelectModeTBL_KSV_ORDER_MST) return;
-
         // Service : NawooAll:mgrQueryTBL_KSV_ORDER_MEM
+        */
     };
 
     /* TABLE KSV_ORDER_MEM*/
@@ -3026,10 +3043,10 @@ const S020602_ORDER_REG = () => {
             } else {
                 if (tIdx === 0) {
                     var tOneObj1 = { ...tORDER_MST_ARRAY[1] };
-                    tOneObj.NAT_CD = tOneObj1.NAT_CD;
+                    // tOneObj.NAT_CD = tOneObj1.NAT_CD;
                     tOneObj.BUYER_PO = "Combined Order";
-                    tOneObj.EXF_DATE = tOneObj1.EXF_DATE;
-                    tOneObj.ETD_DATE = tOneObj1.ETD_DATE;
+                    // tOneObj.EXF_DATE = tOneObj1.EXF_DATE;
+                    // tOneObj.ETD_DATE = tOneObj1.ETD_DATE;
                     tOneObj.IS_DL = tOneObj1.IS_DL;
                     tOneObj.REMARK1 = tOneObj1.REMARK1;
                     tOneObj.REMARK2 = tOneObj1.REMARK2;
@@ -4144,7 +4161,9 @@ const S020602_ORDER_REG = () => {
 
         setDatasTBL_KSV_ORDER_MST(tORDER_MST_ARRAY);
         setDataTBL_KSV_ORDER_MST(tORDER_MST_ARRAY[0]);
-        setSelectedTBL_KSV_ORDER_MST(tORDER_MST_ARRAY[0]);
+
+        var tSelArray = []; tSelArray.push(tORDER_MST_ARRAY[0]);
+        setSelectedTBL_KSV_ORDER_MST(tSelArray);
         // setSelectedTBL_KSV_ORDER_MST(tObjORDER_MST);
         // setSelectedTBL_KSV_ORDER_MST([]);
         onRowClick1TBL_KSV_ORDER_MST_Sub(tObjORDER_MST, tORDER_MST_ARRAY, val);
@@ -4546,13 +4565,30 @@ const S020602_ORDER_REG = () => {
 
         _dataEDT_KSV_ORDER_MST4.NAT_CD = val;
         // changeORDER_MST(_dataEDT_KSV_ORDER_MST4);
-        if (dataEDT_KSV_ORDER_MST.IS_COMBINED === "1") return;
-        let _tObj = { ...datasTBL_KSV_ORDER_MST[0] };
-        _tObj.NAT_CD = val;
-        _tObj.NAT_NAME = val1;
-        let _tObjs = [...datasTBL_KSV_ORDER_MST];
-        _tObjs[0] = { ..._tObj };
-        setDatasTBL_KSV_ORDER_MST(_tObjs);
+        if (dataEDT_KSV_ORDER_MST.IS_COMBINED !== "1")  {
+            let _tObj = { ...datasTBL_KSV_ORDER_MST[0] };
+            _tObj.NAT_CD = val;
+            _tObj.NAT_NAME = val1;
+            let _tObjs = [...datasTBL_KSV_ORDER_MST];
+            _tObjs[0] = { ..._tObj };
+            setDatasTBL_KSV_ORDER_MST(_tObjs);
+        } else {
+            var tArray = [];
+            var tSelArray = [];
+            datasTBL_KSV_ORDER_MST.forEach((col, i) => {
+                if (col.ORDER_CD === selectedTBL_KSV_ORDER_MST[0].ORDER_CD) {
+                   var tObj = { ...col };
+                   tObj.NAT_CD = val;
+                   tObj.NAT_NAME = val1;
+                   tArray.push(tObj);
+                   tSelArray.push(tObj);
+                } else {
+                   tArray.push(col);
+                }
+            });
+            setDatasTBL_KSV_ORDER_MST(tArray);
+            setSelectedTBL_KSV_ORDER_MST(tSelArray)
+        }
     };
 
     const onCalChangeEDT_KSV_ORDER_MST4_EXF_DATE = (e, name) => {
@@ -4570,12 +4606,28 @@ const S020602_ORDER_REG = () => {
 
         _dataEDT_KSV_ORDER_MST4.EXF_DATE = val;
         // changeORDER_MST(_dataEDT_KSV_ORDER_MST4);
-        if (dataEDT_KSV_ORDER_MST.IS_COMBINED === "1") return;
-        let _tObj = { ...datasTBL_KSV_ORDER_MST[0] };
-        _tObj.EXF_DATE = val;
-        let _tObjs = [...datasTBL_KSV_ORDER_MST];
-        _tObjs[0] = { ..._tObj };
-        setDatasTBL_KSV_ORDER_MST(_tObjs);
+        if (dataEDT_KSV_ORDER_MST.IS_COMBINED !== "1") { 
+            let _tObj = { ...datasTBL_KSV_ORDER_MST[0] };
+            _tObj.EXF_DATE = val;
+            let _tObjs = [...datasTBL_KSV_ORDER_MST];
+            _tObjs[0] = { ..._tObj };
+            setDatasTBL_KSV_ORDER_MST(_tObjs);
+        } else {
+            var tArray = [];
+            var tSelArray = [];
+            datasTBL_KSV_ORDER_MST.forEach((col, i) => {
+                if (col.ORDER_CD === selectedTBL_KSV_ORDER_MST[0].ORDER_CD) {
+                   var tObj = { ...col };
+                   tObj.EXF_DATE = val;
+                   tArray.push(tObj);
+                   tSelArray.push(tObj);
+                } else {
+                   tArray.push(col);
+                }
+            });
+            setDatasTBL_KSV_ORDER_MST(tArray);
+            setSelectedTBL_KSV_ORDER_MST(tSelArray)
+        }
     };
 
     const onCalChangeEDT_KSV_ORDER_MST4_ETD_DATE = (e, name) => {
@@ -4593,12 +4645,28 @@ const S020602_ORDER_REG = () => {
 
         _dataEDT_KSV_ORDER_MST4.ETD_DATE = val;
         // changeORDER_MST(_dataEDT_KSV_ORDER_MST4);
-        if (dataEDT_KSV_ORDER_MST.IS_COMBINED === "1") return;
-        let _tObj = { ...datasTBL_KSV_ORDER_MST[0] };
-        _tObj.ETD_DATE = val;
-        let _tObjs = [...datasTBL_KSV_ORDER_MST];
-        _tObjs[0] = { ..._tObj };
-        setDatasTBL_KSV_ORDER_MST(_tObjs);
+        if (dataEDT_KSV_ORDER_MST.IS_COMBINED !== "1") {
+            let _tObj = { ...datasTBL_KSV_ORDER_MST[0] };
+            _tObj.ETD_DATE = val;
+            let _tObjs = [...datasTBL_KSV_ORDER_MST];
+            _tObjs[0] = { ..._tObj };
+            setDatasTBL_KSV_ORDER_MST(_tObjs);
+        } else {
+            var tArray = [];
+            var tSelArray = [];
+            datasTBL_KSV_ORDER_MST.forEach((col, i) => {
+                if (col.ORDER_CD === selectedTBL_KSV_ORDER_MST[0].ORDER_CD) {
+                   var tObj = { ...col };
+                   tObj.ETD_DATE = val;
+                   tArray.push(tObj);
+                   tSelArray.push(tObj);
+                } else {
+                   tArray.push(col);
+                }
+            });
+            setDatasTBL_KSV_ORDER_MST(tArray);
+            setSelectedTBL_KSV_ORDER_MST(tSelArray)
+        } 
     };
 
     const [datasEDT_KSV_ORDER_MST4_IS_DL, setDatasEDT_KSV_ORDER_MST4_IS_DL] =
@@ -5096,10 +5164,11 @@ const S020602_ORDER_REG = () => {
                 });
                 setDatasTBL_KSV_ORDER_MST(tOrderMsts);
 
-                setSelectedTBL_KSV_ORDER_MST(tOrderMsts[0]);
+                var tSelArray = []; tSelArray.push(tOrderMsts[0]);
+                setSelectedTBL_KSV_ORDER_MST(tSelArray);
                 onRowClick1TBL_KSV_ORDER_MST_Sub(
                     tOrderMsts[0],
-                    datasTBL_KSV_ORDER_MST,
+                    tOrderMsts,
                     data.ORDER_MST[0].SIZE_GROUP,
                     "info",
                 );
@@ -6718,7 +6787,6 @@ const S020602_ORDER_REG = () => {
                     resizableColumns
                     columnResizeMode="expand"
                     showGridlines
-                    selectionMode="checkbox"
                     selection={selectedTBL_KSV_ORDER_MST}
                     onSelectionChange={(e) => {
                         setSelectedTBL_KSV_ORDER_MST(e.value);
@@ -6733,6 +6801,7 @@ const S020602_ORDER_REG = () => {
                     scrollable
                     scrollHeight="22rem"
                 >
+                    <AFColumn selectionMode="single" field="__checkbox__" reorderable={false} headerStyle={{ width: "5px" }} style={{ width: "5px" }} ></AFColumn>
                     <AFColumn field="ORDER_CD" header="Order#" className="af-col" style={{ width: "6rem" }} ></AFColumn>
                     <AFColumn field="TYPE" header="Type" className="af-col" style={{ width: "4rem" }} ></AFColumn>
                     <AFColumn field="NAT_NAME" header="Country" className="af-col" style={{ width: "6rem" }} ></AFColumn>
