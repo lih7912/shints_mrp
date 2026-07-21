@@ -131,6 +131,7 @@ export class ServiceS0914_FAC_IN_OUT_MANAGER {
                     ) {
                         mgrQuery_S0914_TopList(data: $data) {
                             id
+                            PO_CD
                             VENDOR_NAME
                             MATL_CD
                             MATL_NAME
@@ -158,6 +159,7 @@ export class ServiceS0914_FAC_IN_OUT_MANAGER {
                             REMAIN_E
                             REMAIN_A
                             DELAYREMARK
+                            REMARK_BVT
                             PRICE
                             MOQ
                             MRP1
@@ -366,6 +368,33 @@ export class ServiceS0914_FAC_IN_OUT_MANAGER {
             return data.mgrQuery_S0914_StockUseList;
         } catch (e) {
             console.error("getStockUseList error:", e);
+            return e;
+        }
+    }
+
+    async updateRemarkBvt(argData) {
+        apolloOption.cache = new InMemoryCache();
+
+        try {
+            const { data } = await this.client.mutate({
+                mutation: gql`
+                    mutation MmgrUpdate_S0914_RemarkBvt(
+                        $data: I_S0914_UPDATE_REMARK_BVT!
+                    ) {
+                        mgrUpdate_S0914_RemarkBvt(data: $data) {
+                            id
+                            CODE
+                        }
+                    }
+                `,
+                variables: {
+                    data: argData,
+                },
+            });
+
+            return data.mgrUpdate_S0914_RemarkBvt;
+        } catch (e) {
+            console.error("updateRemarkBvt error:", e);
             return e;
         }
     }

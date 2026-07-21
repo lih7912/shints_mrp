@@ -202,7 +202,8 @@ const moduleQuery_S0914_FAC_IN_OUT_MANAGER = {
                         ), 0) as MOQ_BASE,
                         isnull((select sum(po_qty) from ksv_stock_mem where po_cd = a.po_cd and matl_cd = a.matl_cd and po_seq in (98, 99)), 0) as OVERIN,
                         isnull(d.matl_price, 0) as PRICE,
-                        isnull(a.remark_bvt, '') as DELAYREMARK
+                        isnull(a.remark, '') as DELAYREMARK,
+                        isnull(a.remark_bvt, '') as REMARK_BVT
                     from ksv_po_matllist a
                     inner join kcd_vendor b on b.vendor_cd = a.vendor_cd
                     inner join kcd_matl_mst c on c.matl_cd = a.matl_cd
@@ -262,6 +263,7 @@ const moduleQuery_S0914_FAC_IN_OUT_MANAGER = {
                     tObj.OVERIN = Number(tObj.OVERIN || 0);
                     tObj.PRICE = Number(tObj.PRICE || 0);
                     tObj.DELAYREMARK = tObj.DELAYREMARK || '';
+                    tObj.REMARK_BVT = tObj.REMARK_BVT || tObj.remark_bvt || tObj.DELAYREMARK || '';
 
                     tObj.STOCK = Number(tObj.STOCK || 0);
                     tObj.FACIN = Number(tObj.FACIN_BASE || 0) + Number(tObj.STOCK || 0);

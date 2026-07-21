@@ -19,6 +19,17 @@ const typeDefs = gql`
         SPEC: String
     }
 
+    input I_S0914_UPDATE_REMARK_BVT {
+        PO_CD: String
+        MATL_CD: String
+        REMARK_BVT: String
+    }
+
+    type Ret_S0914_UPDATE_REMARK_BVT {
+        CODE: String
+        id: Int
+    }
+
     # 상단 메인 그리드 행 타입
     type T_S0914_TOP_ROW_SUB {
         ORDER_CD: String
@@ -29,6 +40,7 @@ const typeDefs = gql`
     type T_S0914_TOP_ROW {
         id: Int
 
+        PO_CD: String
         VENDOR_NAME: String
         MATL_CD: String
         MATL_NAME: String
@@ -57,6 +69,7 @@ const typeDefs = gql`
         REMAIN_E: Float
         REMAIN_A: Float
         DELAYREMARK: String
+        REMARK_BVT: String
         PRICE: Float
         MOQ: Float
 
@@ -197,6 +210,12 @@ const typeDefs = gql`
         mgrQuery_S0914_StockUseList(
             data: I_S0914_FAC_IN_OUT_MANAGER!
         ): [T_S0914_STOCK_USE_ROW!]!
+    }
+
+    type Mutation {
+        mgrUpdate_S0914_RemarkBvt(
+            data: I_S0914_UPDATE_REMARK_BVT!
+        ): [Ret_S0914_UPDATE_REMARK_BVT!]!
     }
 `;
 

@@ -7,6 +7,7 @@ import { Dropdown } from "primereact/dropdown";
 import { Tooltip } from "primereact/tooltip";
 import { InputText } from "primereact/inputtext";
 import { Dialog } from "primereact/dialog";
+import { Toast } from "primereact/toast";
 
 import { ServiceLib } from "../service/service_lib/ServiceLib";
 import { ServiceS0914_FAC_IN_OUT_MANAGER } from "../service/service_biz/S0914_FAC_IN_OUT_MANAGER";
@@ -21,6 +22,7 @@ const S0914_FAC_IN_OUT_MANAGER = () => {
     const serviceS0914Ref = useRef(null);
     if (!serviceS0914Ref.current) serviceS0914Ref.current = new ServiceS0914_FAC_IN_OUT_MANAGER();
     const serviceS0914 = serviceS0914Ref.current;
+    const toast = useRef(null);
 
     const [loading, setLoading] = useState(false);
     const [loadingTop, setLoadingTop] = useState(false);
@@ -352,6 +354,73 @@ const S0914_FAC_IN_OUT_MANAGER = () => {
         }
     }
 
+    async function onRemarkBvtBlur(row, nextValue) {
+        const poCdForSave = String(row?.PO_CD || "").trim();
+        const matlCdForSave = String(row?.MATL_CD || "").trim();
+        const prevValue = String(row?.REMARK_BVT ?? "");
+        const newValue = String(nextValue ?? "");
+
+        if (!poCdForSave || !matlCdForSave) {
+            toast.current?.show({
+                severity: "warn",
+                summary: "Save skipped",
+                detail: "PO_CD or MATL_CD is empty.",
+                life: 2500,
+            });
+            return;
+        }
+
+        if (prevValue === newValue) {
+            return;
+        }
+
+        const result = await serviceS0914.updateRemarkBvt({
+            PO_CD: poCdForSave,
+            MATL_CD: matlCdForSave,
+            REMARK_BVT: newValue,
+        });
+
+        if (result && result.graphQLErrors) {
+            toast.current?.show({
+                severity: "error",
+                summary: "Save failed",
+                detail: result.graphQLErrors[0]?.message || "GraphQL error",
+                life: 3000,
+            });
+            return;
+        }
+
+        const code = Array.isArray(result) ? result[0]?.CODE || "" : "";
+        if (code.startsWith("ERROR:")) {
+            toast.current?.show({
+                severity: "error",
+                summary: "Save failed",
+                detail: code,
+                life: 3000,
+            });
+            return;
+        }
+
+        setTopList((prev) =>
+            prev.map((one) => {
+                if (
+                    String(one?.PO_CD || "").trim() === poCdForSave &&
+                    String(one?.MATL_CD || "").trim() === matlCdForSave
+                ) {
+                    return { ...one, REMARK_BVT: newValue };
+                }
+                return one;
+            }),
+        );
+
+        toast.current?.show({
+            severity: "success",
+            summary: "Saved",
+            detail: "Remark(BVT) updated.",
+            life: 2000,
+        });
+    }
+
     async function exportReport() {
         try {
             setLoading(true);
@@ -425,6 +494,7 @@ const S0914_FAC_IN_OUT_MANAGER = () => {
 
     return (
         <div className="p-fluid af-div-main">
+            <Toast ref={toast} />
             {/* 상단 검색 영역 + 버튼 */}
             <div
                 className="af-div-first"
@@ -700,6 +770,21 @@ const S0914_FAC_IN_OUT_MANAGER = () => {
                     <AFColumn field="REMAIN_E" headerClassName="t-header" header="REMAIN(E)" className="text-right" body={(row) => serviceLib.formatNumber(row.REMAIN_E)} />
                     <AFColumn field="REMAIN_A" headerClassName="t-header" header="REMAIN(A)" className="text-right" body={(row) => serviceLib.formatNumber(row.REMAIN_A)} />
                     <AFColumn field="DELAYREMARK" headerClassName="t-header" header="Delay Report Remark" />
+                    <AFColumn
+                        field="REMARK_BVT"
+                        headerClassName="t-header"
+                        header="Remark(BVT)"
+                        className="green"
+                        body={(row) => (
+                            <InputText
+                                defaultValue={row?.REMARK_BVT || ""}
+                                style={{ width: "100%" }}
+                                onBlur={(e) =>
+                                    onRemarkBvtBlur(row, e.target.value)
+                                }
+                            />
+                        )}
+                    />
                     <AFColumn field="PRICE" headerClassName="t-header" header="PRICE($)" className="text-right" body={(row) => serviceLib.formatNumber(row.PRICE, 2)} />
 
                     {dynamicColumnsTBL_KSV_PO_MRP2}
