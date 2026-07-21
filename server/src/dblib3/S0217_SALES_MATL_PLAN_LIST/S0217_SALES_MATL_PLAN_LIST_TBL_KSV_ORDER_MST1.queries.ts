@@ -412,6 +412,87 @@ class S0217_COMM {
 // export default로 Query 내용 내보내기
 const moduleQuery_S0217_SALES_MATL_PLAN_LIST_TBL_KSV_ORDER_MST1 = {
     Query: {
+        mgrQuery_S0217_SALES_MATL_PLAN_LIST_TBL_KSV_ORDER_MST1: async (
+            _,
+            args,
+        ) => {
+            try {
+                var tTableName = '';
+                if (args.data.FACTORY_CD === 'FC044') {
+                    tTableName = 'KSV_ORDER_PLAN_ETHIOPIA';
+                } else {
+                    tTableName = 'KSV_ORDER_PLAN';
+                }
+
+                let sqlStr = `
+                    SELECT
+                        A.COLLECTION,
+                        A.CURR_CD,
+                        SUM(A.PLAN_QTY) AS SUM_QTY
+                    FROM
+                        ${tTableName} A,
+                        KCD_USER B,
+                        KCD_BUYER C
+                    WHERE
+                        A.USER_ID = B.USER_ID
+                        AND A.BUYER_CD = C.BUYER_CD
+                        AND A.YYMM BETWEEN '${args.data.S_DATE}' AND '${args.data.E_DATE}'
+                        AND (B.USER_ID LIKE '%${args.data.USER_CD}%')
+                        AND (C.BUYER_CD LIKE '%${args.data.BUYER_CD}%')
+                        AND (C.BUYER_TEAM LIKE '%${args.data.TEAM_CD}%')
+                    GROUP BY
+                        A.COLLECTION,
+                        A.CURR_CD
+                    ORDER BY
+                        A.COLLECTION,
+                        A.CURR_CD
+                `;
+                var tRet = await prisma.$queryRaw(Prisma.raw(sqlStr));
+
+                var tRetArray = [];
+                var tIdx = 0;
+                for (tIdx = 0; tIdx < tRet.length; tIdx++) {
+                    var tOne = { ...tRet[tIdx] };
+
+                    let sqlStr1 = `
+                        SELECT
+                            A.YYMM,
+                            SUM(A.PLAN_QTY) AS YYMM_QTY,
+                            SUM(A.PLAN_AMT) AS YYMM_AMT
+                        FROM
+                            ${tTableName} A,
+                            KCD_USER B,
+                            KCD_BUYER C
+                        WHERE
+                            A.USER_ID = B.USER_ID
+                            AND A.BUYER_CD = C.BUYER_CD
+                            AND A.YYMM BETWEEN '${args.data.S_DATE}' AND '${args.data.E_DATE}'
+                            AND (B.USER_ID LIKE '%${args.data.USER_CD}%')
+                            AND (C.BUYER_CD LIKE '%${args.data.BUYER_CD}%')
+                            AND (C.BUYER_TEAM LIKE '%${args.data.TEAM_CD}%')
+                            AND A.COLLECTION = '${tOne.COLLECTION}'
+                            AND A.CURR_CD = '${tOne.CURR_CD}'
+                        GROUP BY
+                            A.YYMM
+                        ORDER BY
+                            A.YYMM
+                    `;
+                    var tRet1 = await prisma.$queryRaw(Prisma.raw(sqlStr1));
+                    tOne.YYMM_SUM = Array.isArray(tRet1) ? tRet1 : [];
+
+                    tRetArray.push(tOne);
+                }
+
+                return Array.isArray(tRetArray) ? tRetArray : [];
+            } catch (error) {
+                console.log(
+                    'mgrQuery_S0217_SALES_MATL_PLAN_LIST_TBL_KSV_ORDER_MST1 error => ' +
+                        JSON.stringify(error),
+                );
+                return [];
+            }
+        },
+
         mgrQuery_S0217_EXCEL_PRINT: async (_, args, contextValue) => {
             var tRetDate = AFLib.getCurrTime();
             var tRetDate1 = tRetDate.substring(0, 8);

@@ -245,7 +245,7 @@ const S0217_SALES_MATL_PLAN_LIST = () => {
         emptyTBL_KSV_ORDER_MST,
     );
     const [selectedTBL_KSV_ORDER_MST, setSelectedTBL_KSV_ORDER_MST] = useState(
-        [],
+        null,
     );
     const [
         flagSelectModeTBL_KSV_ORDER_MST,
@@ -260,10 +260,18 @@ const S0217_SALES_MATL_PLAN_LIST = () => {
     const onRowClick1TBL_KSV_ORDER_MST = (argData0) => {
         var argData = {};
 
+        if (!argData0) {
+            return;
+        }
+
         if (typeof argData0.length !== "undefined") {
             argData = argData0[0];
         } else {
             argData = argData0;
+        }
+
+        if (!argData) {
+            return;
         }
 
         let argTBL_KSV_ORDER_MST = argData;
@@ -297,94 +305,97 @@ const S0217_SALES_MATL_PLAN_LIST = () => {
 
         setDatasTBL_KSV_ORDER_MST([]);
         setDatasTBL_KSV_ORDER_MST1([]);
+        setDatasTBL_KSV_ORDER_MST1_COLS([]);
 
         serviceS0217_SALES_MATL_PLAN_LIST
             .mgrQuery_LIST_1(dataQRY_KSV_ORDER_PLAN)
             .then((data) => {
                 setLoadingTBL_KSV_ORDER_MST(false);
                 if (typeof data.graphQLErrors === "undefined") {
+                    var tRows = Array.isArray(data) ? data : [];
                     console.log(
                         "ServiceNawooAll.mgrQueryTBL_KSV_ORDER_MST() call => " +
-                            data.length,
+                            tRows.length,
                     );
 
-                    var tArray = data.map((col, i) => {
-                        var tObj = {};
-                        tObj.id = i + 1;
-                        tObj.USER_NAME = col.USER_NAME;
-                        tObj.CURR_CD = col.CURR_CD;
-                        tObj.BUYER_NAME = col.BUYER_NAME;
-                        tObj.COLLECTION = col.COLLECTION;
-                        tObj.TOTAL_QTY = col.TOTAL_QTY;
-                        tObj.TOTAL_AMT = col.TOTAL_AMT;
+                    var tSeq = 1;
+                    var tArray = tRows.flatMap((col) => {
+                        var tLineRows = Array.isArray(col.LINE_SUM)
+                            ? col.LINE_SUM
+                            : [];
 
-                        let tObj0 = col.LINE_SUM.filter((col, i) => {
-                            if (col.LINE_TYPE === "1") return col;
-                        });
-                        if (tObj0.length <= 0) {
+                        if (tLineRows.length <= 0) {
+                            tLineRows = [
+                                {
+                                    LINE_TYPE: "",
+                                    LINE_QTY: 0,
+                                    LINE_AMT: 0,
+                                },
+                            ];
+                        }
+
+                        return tLineRows.map((lineCol) => {
+                            var tObj = {};
+                            tObj.id = tSeq;
+                            tSeq += 1;
+                            tObj.USER_NAME = col.USER_NAME;
+                            tObj.CURR_CD = col.CURR_CD;
+                            tObj.BUYER_NAME = col.BUYER_NAME;
+                            tObj.COLLECTION = col.COLLECTION;
+                            tObj.TOTAL_QTY = 0;
+                            tObj.TOTAL_AMT = 0;
+
                             tObj.LINE_1_QTY = 0;
                             tObj.LINE_1_AMT = 0;
-                        } else {
-                            tObj.LINE_1_QTY = tObj0[0].LINE_QTY;
-                            tObj.LINE_1_AMT = tObj0[0].LINE_AMT;
-                        }
-
-                        tObj0 = col.LINE_SUM.filter((col, i) => {
-                            if (col.LINE_TYPE === "G") return col;
-                        });
-                        if (tObj0.length <= 0) {
                             tObj.LINE_G_QTY = 0;
                             tObj.LINE_G_AMT = 0;
-                        } else {
-                            tObj.LINE_G_QTY = tObj0[0].LINE_QTY;
-                            tObj.LINE_G_AMT = tObj0[0].LINE_AMT;
-                        }
-
-                        tObj0 = col.LINE_SUM.filter((col, i) => {
-                            if (col.LINE_TYPE === "S") return col;
-                        });
-                        if (tObj0.length <= 0) {
                             tObj.LINE_S_QTY = 0;
                             tObj.LINE_S_AMT = 0;
-                        } else {
-                            tObj.LINE_S_QTY = tObj0[0].LINE_QTY;
-                            tObj.LINE_S_AMT = tObj0[0].LINE_AMT;
-                        }
-
-                        tObj0 = col.LINE_SUM.filter((col, i) => {
-                            if (col.LINE_TYPE === "3") return col;
-                        });
-                        if (tObj0.length <= 0) {
                             tObj.LINE_3_QTY = 0;
                             tObj.LINE_3_AMT = 0;
-                        } else {
-                            tObj.LINE_3_QTY = tObj0[0].LINE_QTY;
-                            tObj.LINE_3_AMT = tObj0[0].LINE_AMT;
-                        }
-
-                        tObj0 = col.LINE_SUM.filter((col, i) => {
-                            if (col.LINE_TYPE === "D") return col;
-                        });
-                        if (tObj0.length <= 0) {
                             tObj.LINE_D_QTY = 0;
                             tObj.LINE_D_AMT = 0;
-                        } else {
-                            tObj.LINE_D_QTY = tObj0[0].LINE_QTY;
-                            tObj.LINE_D_AMT = tObj0[0].LINE_AMT;
-                        }
-
-                        tObj0 = col.LINE_SUM.filter((col, i) => {
-                            if (col.LINE_TYPE === "W") return col;
-                        });
-                        if (tObj0.length <= 0) {
                             tObj.LINE_W_QTY = 0;
                             tObj.LINE_W_AMT = 0;
-                        } else {
-                            tObj.LINE_W_QTY = tObj0[0].LINE_QTY;
-                            tObj.LINE_W_AMT = tObj0[0].LINE_AMT;
-                        }
 
-                        return tObj;
+                            if (lineCol.LINE_TYPE === "1") {
+                                tObj.LINE_1_QTY = lineCol.LINE_QTY;
+                                tObj.LINE_1_AMT = lineCol.LINE_AMT;
+                            } else if (lineCol.LINE_TYPE === "G") {
+                                tObj.LINE_G_QTY = lineCol.LINE_QTY;
+                                tObj.LINE_G_AMT = lineCol.LINE_AMT;
+                            } else if (lineCol.LINE_TYPE === "S") {
+                                tObj.LINE_S_QTY = lineCol.LINE_QTY;
+                                tObj.LINE_S_AMT = lineCol.LINE_AMT;
+                            } else if (lineCol.LINE_TYPE === "3") {
+                                tObj.LINE_3_QTY = lineCol.LINE_QTY;
+                                tObj.LINE_3_AMT = lineCol.LINE_AMT;
+                            } else if (lineCol.LINE_TYPE === "D") {
+                                tObj.LINE_D_QTY = lineCol.LINE_QTY;
+                                tObj.LINE_D_AMT = lineCol.LINE_AMT;
+                            } else if (lineCol.LINE_TYPE === "W") {
+                                tObj.LINE_W_QTY = lineCol.LINE_QTY;
+                                tObj.LINE_W_AMT = lineCol.LINE_AMT;
+                            }
+
+                            tObj.TOTAL_QTY =
+                                (parseFloat(tObj.LINE_1_QTY) || 0) +
+                                (parseFloat(tObj.LINE_G_QTY) || 0) +
+                                (parseFloat(tObj.LINE_S_QTY) || 0) +
+                                (parseFloat(tObj.LINE_3_QTY) || 0) +
+                                (parseFloat(tObj.LINE_D_QTY) || 0) +
+                                (parseFloat(tObj.LINE_W_QTY) || 0);
+
+                            tObj.TOTAL_AMT =
+                                (parseFloat(tObj.LINE_1_AMT) || 0) +
+                                (parseFloat(tObj.LINE_G_AMT) || 0) +
+                                (parseFloat(tObj.LINE_S_AMT) || 0) +
+                                (parseFloat(tObj.LINE_3_AMT) || 0) +
+                                (parseFloat(tObj.LINE_D_AMT) || 0) +
+                                (parseFloat(tObj.LINE_W_AMT) || 0);
+
+                            return tObj;
+                        });
                     });
 
                     setDatasTBL_KSV_ORDER_MST(tArray);
@@ -402,17 +413,21 @@ const S0217_SALES_MATL_PLAN_LIST = () => {
             .mgrQueryTBL_KSV_ORDER_MST1(dataQRY_KSV_ORDER_PLAN)
             .then((data) => {
                 if (typeof data.graphQLErrors === "undefined") {
+                    var tRows = Array.isArray(data) ? data : [];
                     console.log(
                         "ServiceNawooAll.mgrQueryTBL_KSV_ORDER_MST1() call => " +
-                            data.length,
+                            tRows.length,
                     );
 
-                    var tOneObj = data[0];
+                    var tOneObj = tRows[0] || {};
+                    var tOneObjYYMMSum = Array.isArray(tOneObj.YYMM_SUM)
+                        ? tOneObj.YYMM_SUM
+                        : [];
 
                     var tColArray = [];
                     var tIdx = 0;
-                    for (tIdx = 0; tIdx < tOneObj.YYMM_SUM.length; tIdx++) {
-                        var tOne = tOneObj.YYMM_SUM[tIdx];
+                    for (tIdx = 0; tIdx < tOneObjYYMMSum.length; tIdx++) {
+                        var tOne = tOneObjYYMMSum[tIdx];
                         tColArray.push(`QTY-${tOne.YYMM}`);
                         tColArray.push(`AMT-${tOne.YYMM}`);
                     }
@@ -426,15 +441,19 @@ const S0217_SALES_MATL_PLAN_LIST = () => {
                     console.log(tColArray1);
                     setDatasTBL_KSV_ORDER_MST1_COLS(tColArray1);
 
-                    var tDataArray = data.map((col, i) => {
+                    var tDataArray = tRows.map((col, i) => {
                         var tObj = {};
                         tObj.id = i + 1;
                         tObj.COLLECTION = col.COLLECTION;
                         tObj.CURR_CD = col.CURR_CD;
 
+                        var tYYMMSum = Array.isArray(col.YYMM_SUM)
+                            ? col.YYMM_SUM
+                            : [];
+
                         var tIdx1 = 0;
-                        for (tIdx1 = 0; tIdx1 < col.YYMM_SUM.length; tIdx1++) {
-                            var tOne = col.YYMM_SUM[tIdx1];
+                        for (tIdx1 = 0; tIdx1 < tYYMMSum.length; tIdx1++) {
+                            var tOne = tYYMMSum[tIdx1];
                             tObj[`QTY-${tOne.YYMM}`] = serviceLib.numWithCommas(
                                 parseFloat(tOne.YYMM_QTY),
                                 0,
@@ -1028,7 +1047,7 @@ const S0217_SALES_MATL_PLAN_LIST = () => {
     };
 
     const clearSelectedTBL_KSV_ORDER_MST = () => {
-        setSelectedTBL_KSV_ORDER_MST([]);
+        setSelectedTBL_KSV_ORDER_MST(null);
         setFlagSelectModeTBL_KSV_ORDER_MST(false);
     };
 
@@ -1043,7 +1062,7 @@ const S0217_SALES_MATL_PLAN_LIST = () => {
         emptyTBL_KSV_ORDER_MST1,
     );
     const [selectedTBL_KSV_ORDER_MST1, setSelectedTBL_KSV_ORDER_MST1] =
-        useState([]);
+        useState(null);
     const [
         flagSelectModeTBL_KSV_ORDER_MST1,
         setFlagSelectModeTBL_KSV_ORDER_MST1,
@@ -1054,10 +1073,18 @@ const S0217_SALES_MATL_PLAN_LIST = () => {
     const onRowClick1TBL_KSV_ORDER_MST1 = (argData0) => {
         var argData = {};
 
+        if (!argData0) {
+            return;
+        }
+
         if (typeof argData0.length !== "undefined") {
             argData = argData0[0];
         } else {
             argData = argData0;
+        }
+
+        if (!argData) {
+            return;
         }
 
         let argTBL_KSV_ORDER_MST1 = argData;
@@ -1208,8 +1235,8 @@ const S0217_SALES_MATL_PLAN_LIST = () => {
         setDatasTBL_KSV_ORDER_MST1_COLS([]);
         setDataTBL_KSV_ORDER_MST(emptyTBL_KSV_ORDER_MST);
         setDataTBL_KSV_ORDER_MST1(emptyTBL_KSV_ORDER_MST1);
-        setSelectedTBL_KSV_ORDER_MST([]);
-        setSelectedTBL_KSV_ORDER_MST1([]);
+        setSelectedTBL_KSV_ORDER_MST(null);
+        setSelectedTBL_KSV_ORDER_MST1(null);
         setFlagSelectModeTBL_KSV_ORDER_MST(false);
         setFlagSelectModeTBL_KSV_ORDER_MST1(false);
     };
@@ -1478,13 +1505,17 @@ const S0217_SALES_MATL_PLAN_LIST = () => {
                     showGridlines
                     selection={selectedTBL_KSV_ORDER_MST}
                     onSelectionChange={(e) => {
+                        const tSelection =
+                            e && typeof e.value !== "undefined"
+                                ? e.value
+                                : null;
                         setFlagSelectModeTBL_KSV_ORDER_MST(true);
-                        setSelectedTBL_KSV_ORDER_MST(e.value);
+                        setSelectedTBL_KSV_ORDER_MST(tSelection);
                         console.log(
-                            "selected length:" +
-                                selectedTBL_KSV_ORDER_MST.length,
+                            "selected:" +
+                                (tSelection ? "1" : "0"),
                         );
-                        onRowClick1TBL_KSV_ORDER_MST(e.value);
+                        onRowClick1TBL_KSV_ORDER_MST(tSelection);
                     }}
                     onRowClick={onRowClickTBL_KSV_ORDER_MST}
                     dataKey="id"
@@ -1532,13 +1563,17 @@ const S0217_SALES_MATL_PLAN_LIST = () => {
                     showGridlines
                     selection={selectedTBL_KSV_ORDER_MST1}
                     onSelectionChange={(e) => {
+                        const tSelection =
+                            e && typeof e.value !== "undefined"
+                                ? e.value
+                                : null;
                         setFlagSelectModeTBL_KSV_ORDER_MST1(true);
-                        setSelectedTBL_KSV_ORDER_MST1(e.value);
+                        setSelectedTBL_KSV_ORDER_MST1(tSelection);
                         console.log(
-                            "selected length:" +
-                                selectedTBL_KSV_ORDER_MST1.length,
+                            "selected:" +
+                                (tSelection ? "1" : "0"),
                         );
-                        onRowClick1TBL_KSV_ORDER_MST1(e.value);
+                        onRowClick1TBL_KSV_ORDER_MST1(tSelection);
                     }}
                     onRowClick={onRowClickTBL_KSV_ORDER_MST1}
                     dataKey="id"
