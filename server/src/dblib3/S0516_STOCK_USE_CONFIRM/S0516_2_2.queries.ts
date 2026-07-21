@@ -190,7 +190,9 @@ const moduleQuery_S0516_2_2 = {
                     and a.po_seq = b.po_seq
                     and a.order_cd = b.order_cd
                     and a.po_matl_cd = b.matl_cd
-                    and a.po_mrp_seq = b.mrp_seq
+                    -- and a.po_mrp_seq = b.mrp_seq
+                    and b.use_po_type = '1'
+                    and b.diff_po_type in ('0', '3')
                     and (
                         c.matl_cd like '%${args.data.MATL_CD}%'
                         or c1.matl_cd like '%${args.data.MATL_CD}%'
@@ -223,9 +225,33 @@ const moduleQuery_S0516_2_2 = {
                 order by
                     b.po_cd,
                     b.order_cd,
-                    b.matl_cd
+                    b.matl_cd,
+                    b.mrp_seq
             `;
-            var tRet = await prisma.$queryRaw(Prisma.raw(sqlStr));
+            var tRet99 = await prisma.$queryRaw(Prisma.raw(sqlStr));
+
+            // stock use(2/0) 와 stock cancel(2/5)을 둘다 조회하여 실제 Stock 적용수량을 계산
+            // 2026.07.20. Won
+            var save99 = {};
+            var tRet = [];
+            tRet99.forEach((col, i) => {
+                tRet.push(col);
+                /*
+                if (i === 0) {
+                    save99 = { ...col };
+                } else {
+                    if (save99.STOCK_IDX === col.STOCK_IDX) {
+                        var tVal = parseFloat(save99.PO_QTY) + parseFloat(col.PO_QTY);
+                        save99.PO_QTY = parseFloat(tVal).toFixed(2);
+                        save99.USE_QTY = parseFloat(tVal).toFixed(2);
+                    } else {
+                        tRet.push(save99);
+                        save99 = { ...col };
+                    }
+                }
+                */
+            });
+            tRet.push(save99);
 
             if (tRet.length === 0) {
                 return [];

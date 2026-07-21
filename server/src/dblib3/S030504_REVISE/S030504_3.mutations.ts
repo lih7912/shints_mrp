@@ -698,7 +698,36 @@ class S030504_QRY_COMM {
                     let nRet3 = await prisma.$queryRaw(Prisma.raw(sql3));
                     if (nRet3.length > 0) tIn0 = { ...nRet3[0] };
 
+                    var tIn1 = {};
+                    let sql3_1 = `
+                        select * from ksv_po_mrp
+                         where po_cd = '${tIn.po_cd}'
+                         and   po_seq = '${tIn.org_po_seq}'
+                         and   order_cd = '${tIn.order_cd}'
+                         and   matl_cd = '${tIn.matl_cd}'
+                         and   stock_idx = '${tIn.stock_idx}'
+                         and   use_po_type = '2'
+                         and   diff_po_type = '0'
+                    `;
+                    let nRet3_1 = await prisma.$queryRaw(Prisma.raw(sql3_1));
+                    if (nRet3_1.length > 0) {
+                        tIn1 = { ...nRet3_1[0] };
+                    } else {
+                        var tRetArray = [];
+                        var tObj = {};
+                        tObj.CODE =
+                            'ERROR:REVISE SAVE:재고취소중 에러가 발생했씁니다. IT팀에 문의하세요';
+                        tObj.id = 0;
+                        tRetArray.push(tObj);
+                        var tRet4 = AFLib2.CommonFunc.DeleteMrpWork(
+                            tUserInfo.USER_ID,
+                            tInput1.PO_CD,
+                        );
+                        return tRetArray;
+                    }
+
                     // diff_po_type=5, use_po_type=2, po_qty = 마이너스 재고수량인  ksv_po_mrp 생성
+                    // mrp_seq는 기존거를 집어넣음.  20260721 . Won
                     let tSQL99 = `
                         -- SET TRANSACTION ISOLATION LEVEL READ UNCOMMITTED 
                         insert into
@@ -738,7 +767,7 @@ class S030504_QRY_COMM {
                                 '${tIn.po_seq}',
                                 '${tIn.order_cd}',
                                 '${tIn.matl_cd}',
-                                '${tNewMrpSeq}',
+                                '${tIn1.MRP_SEQ}',
                                 '${tIn0.matl_seq}',
                                 '${tIn.matl_price}',
                                 '${tIn.use_size}',
@@ -797,8 +826,8 @@ class S030504_QRY_COMM {
                                 '${tIn.po_cd}',
                                 '${tIn.po_seq}',
                                 '${tIn.order_cd}',
-                                '${tIn0.matl_seq}',
-                                '${tNewMrpSeq}',
+                                '${tIn.matl_cd}',
+                                '${tIn1.MRP_SEQ}',
                                 '${tIn0.matl_seq}',
                                 '${tFactoryCd}',
                                 '0',
@@ -1064,7 +1093,7 @@ class S030504_QRY_COMM {
                                 '${tIn.po_seq}',
                                 '${tIn.order_cd}',
                                 '${tIn.matl_cd}',
-                                '${tNewMrpSeq}',
+                                '${tIn.mrp_seq}',
                                 '${tIn.matl_seq}',
                                 '${tIn.matl_price}',
                                 '${tIn.use_size}',
@@ -1169,7 +1198,7 @@ class S030504_QRY_COMM {
                                 '${tIn.po_seq}',
                                 '${tIn.order_cd}',
                                 '${tIn.matl_cd}',
-                                '${tNewMrpSeq}',
+                                '${tIn.mrp_seq}',
                                 '${tIn.matl_seq}',
                                 '${tIn.matl_price}',
                                 '${tIn.use_size}',
