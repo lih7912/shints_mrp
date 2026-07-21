@@ -659,7 +659,7 @@ const moduleQuery_S020601_ORDER_MODIFY_QRY = {
                      f.ATD as SHIP_DATE1,
                      h.NAT_NAME as COUNTRY,
                      f.income_date as SALES_DATE,
-                     f.docu_no as DOCU_NO,
+                     isnull(f.docu_no, '') as DOCU_NO,
                      j.curr_cd as CURR_CD,
                      i.usd_rate as USD_RATE
                  from
@@ -684,12 +684,10 @@ const moduleQuery_S020601_ORDER_MODIFY_QRY = {
                 Prisma.raw(sqlStr_Invoice),
             );
 
-            let sqlStr_Invoice_Docu = `
-
-            `;
-            var tRet_Invoice_Docu = await prisma.$queryRaw(
-                Prisma.raw(sqlStr_Invoice_Docu),
-            );
+            var tRet_Invoice_Docu = [];
+            tRet_Invoice.forEach((col2, i2)  => {
+                if (col2.DOCU_NO) tRet_Invoice_Docu.push(col2);
+            });
 
             let sqlStr_Invoice_Docu_Domestic = `
                 select distinct
@@ -779,6 +777,9 @@ const moduleQuery_S020601_ORDER_MODIFY_QRY = {
             tWRet.INFO_INVOICE_MEM = tRet;
 
             var tRet_Docu = [];
+
+            console.log(`Neoe List: ${tRet_Invoice_Docu_Domestic.length}/${tRet_Invoice_Docu.length} `);
+
             if (tRet_Invoice_Docu_Domestic.length > 0) {
                 tRet_Invoice_Docu_Domestic.forEach((col, i) => {
                     var tObj = { ...col };
@@ -793,8 +794,8 @@ const moduleQuery_S020601_ORDER_MODIFY_QRY = {
                     }
                     tRet_Docu.push(tObj);
                 });
-                tWRet.INFO_INVOICE_DOCU = tRet_Docu;
-            } else {
+            } 
+            if (tRet_Invoice_Docu.length > 0) {
                 tRet_Invoice_Docu.forEach((col, i) => {
                     var tObj = { ...col };
                     if (!tObj.SALES_DATE) tObj.SALES_DATE = tObj.SHIP_DATE;
@@ -808,8 +809,8 @@ const moduleQuery_S020601_ORDER_MODIFY_QRY = {
                     }
                     tRet_Docu.push(tObj);
                 });
-                tWRet.INFO_INVOICE_DOCU = tRet_Docu;
             }
+            tWRet.INFO_INVOICE_DOCU = tRet_Docu;
 
             // Price Update
             var orderObj = { ...tWRet.ORDER_MST_ARRAY[0].ORDER_MST };

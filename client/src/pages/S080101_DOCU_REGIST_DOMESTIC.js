@@ -661,6 +661,7 @@ const S080101_DOCU_REGIST_DOMESTIC = () => {
         setDataEDT_KSV_ORDER_SHIP(tObj0);
     };
 
+
     const process_ADD = () => {
         var tArray0 = [...selectedTBL_KSV_ORDER_SHIP];
         var tArray1 = [...datasTBL_KSV_ORDER_SHIP1];
@@ -740,6 +741,8 @@ const S080101_DOCU_REGIST_DOMESTIC = () => {
         setDatasTBL_KSV_ORDER_SHIP1(retArray1);
     };
 
+
+
     const process_REMOVE = () => {
         if (selectedTBL_KSV_ORDER_SHIP1.length <= 0) return;
 
@@ -801,6 +804,39 @@ const S080101_DOCU_REGIST_DOMESTIC = () => {
         // return  <AFColumn field={tCol} header={tHeaderStr} headerStyle={{ width: '10rem',height:'1.8rem' }} bodyStyle={{ width: '10rem',height:'1.8rem' }} editor={(options) => cellEditorKSV_ORDER_MEM(options)} onCellEditComplete={onCellEditCompleteKSV_ORDER_MEM}></AFColumn>
         //       return  <AFColumn field={col.field} header={tHeaderStr} headerStyle={{ width: '10rem',height:'1.8rem' }} bodyStyle={{ width: '10rem',height:'1.8rem' }} ></AFColumn>
     });
+
+    const process_FOC = () => {
+
+        var tInObj = [];
+        selectedTBL_KSV_ORDER_SHIP.forEach((col, i) => {
+            var tObj = {};
+            tObj.INVOICE_NO = col.INVOICE_NO;
+            tInObj.push(tObj);
+        });
+
+        setDatasTBL_KSV_ORDER_SHIP([]);
+        setSelectedTBL_KSV_ORDER_SHIP([]);
+
+        setLoadingTBL_KSV_ORDER_SHIP(true);
+        // 2
+        serviceS080101_DOCU_REGIST_DOMESTIC
+            .PROC_FOC(tInObj)
+            .then((data) => {
+                setLoadingTBL_KSV_ORDER_SHIP(false);
+                if (typeof data.graphQLErrors === "undefined") {
+                    if (data.length > 0) window.alert(data[0].CODE);
+                } else {
+                    console.log(
+                        "ServiceMgrKCD_VENDOR.mgr1KcdBuyer error => " +
+                            JSON.stringify(data.graphQLErrors),
+                    );
+                }
+                search_LIST_1();
+            });
+
+        // search_CODE();
+    };
+
 
     const search_LIST_1 = () => {
         var _tData = { ...dataQRY_KSV_ORDER_SHIP };
@@ -1474,7 +1510,7 @@ const S080101_DOCU_REGIST_DOMESTIC = () => {
         <div className="af-div-main">
             <div
                 className="af-div-first"
-                style={{ width: "123rem", height: "3rem" }}
+                style={{ width: "123rem", height: "6rem" }}
             >
                 <span className="af-span-3-0" style={{ width: "27rem" }}>
                     <p className="af-span-p" style={{ width: "6rem" }}>Ship Date</p>
@@ -1567,7 +1603,7 @@ const S080101_DOCU_REGIST_DOMESTIC = () => {
                         />
                     </div>
                 </span>
-                <span className="af-span-3-0" style={{ width: "16rem" }}>
+                <span className="af-span-3-0" style={{ width: "40rem" }}>
                     <p className="af-span-p" style={{ width: "6rem" }}>Order#</p>
                     <div className="af-span-div" style={{ width: "9rem" }}>
                         <InputText
@@ -1623,6 +1659,16 @@ const S080101_DOCU_REGIST_DOMESTIC = () => {
                             label="Add"
                             className="p-button-text"
                             onClick={process_ADD}
+                        />
+                    </div>
+                </span>
+                <span className="af-span-3" style={{ width: "8rem" }}>
+                    <div className="af-span-div-btn" style={{ width: "7rem" }}>
+                        <Button
+                            style={{ width: "7rem" }}
+                            label="무상처리"
+                            className="p-button-text"
+                            onClick={process_FOC}
                         />
                     </div>
                 </span>

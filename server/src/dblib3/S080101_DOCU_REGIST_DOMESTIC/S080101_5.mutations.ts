@@ -613,6 +613,105 @@ const moduleMutation_S080101_5 = {
 
             return tRetArray;
         },
+        mgrInsert_S080101_5_PROC_FOC: async (_, args, contextValue) => {
+            // Update Location
+            var tDateNew = new Date();
+            tDateNew.setMonth(tDateNew.getMonth() + 1);
+            var tZeroDate = '00';
+            var tDateNew_M =
+                tZeroDate.substring(
+                    0,
+                    2 - String(tDateNew.getMonth() + 1).length,
+                ) + String(tDateNew.getMonth() + 1);
+            var tDateNew_D =
+                tZeroDate.substring(0, 2 - String(tDateNew.getDate()).length) +
+                String(tDateNew.getMonth());
+            var tNewDateStr = tDateNew.getFullYear() + tDateNew_M + tDateNew_D;
+
+            var tDate = new Date();
+            var mm = tDate.getMonth() + 1;
+            var mm_str = '';
+            if (mm > 9) mm_str = mm.toString();
+            else mm_str = '0' + mm;
+
+            var dd = tDate.getDate();
+            var dd_str = '';
+            if (dd > 9) dd_str = dd;
+            else dd_str = '0' + dd;
+
+            var hours = tDate.getHours();
+            var hours_str = '';
+            if (hours > 9) hours_str = hours.toString();
+            else hours_str = '0' + hours;
+
+            var minutes = tDate.getMinutes();
+            var minutes_str = '';
+            if (minutes > 9) minutes_str = minutes.toString();
+            else minutes_str = '0' + minutes;
+
+            var seconds = tDate.getSeconds();
+            var seconds_str = '';
+            if (seconds > 9) seconds_str = seconds.toString();
+            else seconds_str = '0' + seconds;
+
+            var yyyy = tDate.getFullYear();
+
+            var tRetDate =
+                yyyy.toString() +
+                mm_str +
+                dd_str +
+                hours_str +
+                minutes_str +
+                seconds_str;
+            var tRetDate1 = tRetDate.substring(0, 8);
+            var tYY = 'B' + yyyy.toString().substring(2) + '-';
+
+            // let tPO = "POA2022S672";
+            var tUserInfo = AFLib.getUserInfo(contextValue);
+
+            var tSQLArray = [];
+
+            var tIdx = 0;
+            for (tIdx = 0; tIdx < args.datas.length; tIdx++) {
+                var col = { ...args.datas[tIdx] };
+
+                var tNeoeNo = `AF_${col.INVOICE_NO}`;
+
+                let tSQL99 = `
+                    update ksv_invoice_mst
+                    set
+                         DOCU_NO = '${tNeoeNo}'
+                    where
+                         invoice_no = '${col.INVOICE_NO}'
+                `;
+                const tSQL99_1 = prisma.$queryRaw(Prisma.raw(tSQL99));
+                tSQLArray.push(tSQL99_1);
+            }
+
+            try {
+                global.currentTransactionInfo = {
+                    contextValue: contextValue,
+                    functionName: AFLib.getFunctionName(),
+                };
+                await prisma.$transaction(tSQLArray);
+                delete global.currentTransactionInfo;
+            } catch (e) {
+                var tRetArray = [];
+                var tObj = {};
+                tObj.CODE = 'ERROR:Insert Tax Cd';
+                tObj.id = 0;
+                tRetArray.push(tObj);
+                return tRetArray;
+            }
+
+            var tRetArray = [];
+            var tObj = {};
+            tObj.CODE = `SUCCEED:Succeed Invoice FOC Process.`;
+            tObj.id = 0;
+            tRetArray.push(tObj);
+
+            return tRetArray;
+        },
     },
 };
 

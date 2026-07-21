@@ -68,10 +68,17 @@ const moduleTypedefs_S080101_5 = gql`
         id: Int
     }
 
+    input I_S080101_5_PROC_FOC {
+        INVOICE_NO: String
+    }
+
     type Mutation {
         mgrInsert_S080101_5(
             datas: [I_S080101_5!]!
             datas1: I_S080101_5_1!
+        ): [Ret_S080101_5!]!
+        mgrInsert_S080101_5_PROC_FOC(
+            datas: [I_S080101_5_PROC_FOC!]!
         ): [Ret_S080101_5!]!
     }
 `;

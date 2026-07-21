@@ -200,7 +200,7 @@ const moduleQuery_S080101_2 = {
                         )
                         or A1.NAT_CD not in ('kr', 'ko', 'ks')
                     )
-                    -- and (A5.DOCU_NO is null or A5.DOCU_NO = '')
+                    and (A5.DOCU_NO is null or A5.DOCU_NO = '')
                     -- and (A5.TAX_CD is null or A5.TAX_CD = '')
                 order by
                     A1.SHIP_DATE,
