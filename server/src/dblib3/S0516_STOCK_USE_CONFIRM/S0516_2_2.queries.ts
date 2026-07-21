@@ -184,19 +184,19 @@ const moduleQuery_S0516_2_2 = {
                     left join kcd_vendor e1 on e1.vendor_cd = c1.vendor_cd
                 where
                     a.po_cd like '%${args.data.PO_CD}%'
-                    and a.use_po_type = '2'
-                    and a.diff_po_type = '0'
+                    and a.use_po_type = '2' 
+                    and (a.diff_po_type = '0' or a.diff_po_type = '5')
                     and a.stock_idx = d.stock_idx
                     and a.po_cd = b.po_cd
-                    and a.po_seq = b.po_seq
+                    -- and a.po_seq = b.po_seq
                     and a.order_cd = b.order_cd
                     and a.po_matl_cd = b.matl_cd
                     -- and a.po_mrp_seq = b.mrp_seq
                     and b.use_po_type = '1'
                     and b.diff_po_type in ('0', '3')
                     and (
-                        c.matl_cd like '%${args.data.MATL_CD}%'
-                        or c1.matl_cd like '%${args.data.MATL_CD}%'
+                        a.matl_cd like '%${args.data.MATL_CD}%'
+                        or a.po_matl_cd like '%${args.data.MATL_CD}%'
                     )
                     and (
                         c.matl_name like '%${args.data.MATL_NAME}%'
@@ -222,7 +222,7 @@ const moduleQuery_S0516_2_2 = {
                         d.ware_cd like '%${args.data.WAREHOUSE}%'
                         or d.factory_cd like '%${args.data.WAREHOUSE}%'
                     )
-                    and h.use_datetime like '%${args.data.USE_DATE}%' ${tSQL}
+                    and isnull(h.use_datetime, '') like '%${args.data.USE_DATE}%' ${tSQL}
                 order by
                     b.po_cd,
                     b.order_cd,
