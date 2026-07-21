@@ -191,7 +191,8 @@ const moduleQuery_S0516_2_2 = {
                     and a.order_cd = b.order_cd
                     and a.po_matl_cd = b.matl_cd
                     -- and a.po_mrp_seq = b.mrp_seq
-                    and b.use_po_type <> '2'
+                    and b.use_po_type = '1'
+                    and b.diff_po_type in ('0', '3')
                     and (
                         a.matl_cd like '%${args.data.MATL_CD}%'
                         or a.po_matl_cd like '%${args.data.MATL_CD}%'
@@ -222,10 +223,10 @@ const moduleQuery_S0516_2_2 = {
                     )
                     and isnull(h.use_datetime, '') like '%${args.data.USE_DATE}%' ${tSQL}
                 order by
-                    a.stock_idx,
                     b.po_cd,
                     b.order_cd,
-                    b.matl_cd
+                    b.matl_cd,
+                    b.mrp_seq
             `;
             var tRet99 = await prisma.$queryRaw(Prisma.raw(sqlStr));
 
@@ -234,6 +235,8 @@ const moduleQuery_S0516_2_2 = {
             var save99 = {};
             var tRet = [];
             tRet99.forEach((col, i) => {
+                tRet.push(col);
+                /*
                 if (i === 0) {
                     save99 = { ...col };
                 } else {
@@ -246,6 +249,7 @@ const moduleQuery_S0516_2_2 = {
                         save99 = { ...col };
                     }
                 }
+                */
             });
             tRet.push(save99);
 
