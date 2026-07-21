@@ -108,6 +108,10 @@ const moduleQuery_S0517_2 = {
                 var tRetArray = [];
                 for (var tIdx = 0; tIdx < tRet1.length; tIdx++) {
                     var tOne = { ...tRet1[tIdx] };
+                    var tUseStockIdx = String(tOne.STOCK_IDX || '').trim();
+                    if (String(tOne.STOCK_STATUS_S_N || '').trim() === 'STOCK(Normal use)' && String(tOne.ORG_STOCK_IDX || '').trim() !== '') {
+                        tUseStockIdx = String(tOne.ORG_STOCK_IDX || '').trim();
+                    }
 
                     let sql2 = `
                         select
@@ -119,7 +123,7 @@ const moduleQuery_S0517_2 = {
                         from
                             ksv_stock_use
                         where
-                            stock_idx = '${tOne.STOCK_IDX}'
+                            stock_idx = '${tUseStockIdx}'
                         order by
                             use_datetime
                     `;
@@ -412,6 +416,10 @@ const moduleQuery_S0517_2 = {
             var tIdx = 0;
             for (tIdx = 0; tIdx < tRet1.length; tIdx++) {
                 var tOne = { ...tRet1[tIdx] };
+                var tUseStockIdx = String(tOne.STOCK_IDX || '').trim();
+                if (String(tOne.STOCK_STATUS_S_N || '').trim() === 'STOCK(Normal use)' && String(tOne.ORG_STOCK_IDX || '').trim() !== '') {
+                    tUseStockIdx = String(tOne.ORG_STOCK_IDX || '').trim();
+                }
 
                 let sql2 = `
                     select
@@ -423,7 +431,7 @@ const moduleQuery_S0517_2 = {
                     from
                         ksv_stock_use
                     where
-                        stock_idx = '${tOne.STOCK_IDX}'
+                        stock_idx = '${tUseStockIdx}'
                     order by
                         use_datetime
                 `;
