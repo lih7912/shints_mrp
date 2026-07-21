@@ -667,7 +667,7 @@ const moduleMutation_S0306_MRP_BY_ORDER_EDT_KSV_PROD_MEM = {
                     tObj.NET = col.NET;
                     tObj.LOSS = col.LOSS;
                     tObj.GROSS = col.GROSS;
-                    tObj.REMARK = String(col.REMARK || '').replace(/'/gi, "''");
+                    tObj.REMARK = col.REMARK;
                     tObj.USE_SIZE = col.USE_SIZE;
                     tObj.COUNTRY = col.COUNTRY;
 
