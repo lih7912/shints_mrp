@@ -797,7 +797,10 @@ const S0914_FAC_IN_OUT_MANAGER = () => {
                                 header="Purpose"
                                 body={(row) => row.PURPOSE ?? row.purpose ?? ""}
                             />
-                            <AFColumn field="REMARK" headerClassName="t-header" header="Remark" />
+                            <AFColumn field="REMARK" headerClassName="t-header" header="Remark" body={(row) => {
+                                const remark = row.REMARK || '';
+                                return remark.split('-').slice(1).join('-');
+                            }} />
                         </AFDataTable>
                     </div>
                     <div style={{ flex: 1 }}>
