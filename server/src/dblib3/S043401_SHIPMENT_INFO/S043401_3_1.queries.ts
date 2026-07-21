@@ -358,13 +358,18 @@ const moduleQuery_S043401_3_1 = {
                 });
 
                 /*
+                const blNoForLookup = `${tOne1.BL_NO || ''}`
+                    .trim()
+                    .replace(/^'+|'+$/g, '')
+                    .replace(/'/g, "''");
+
                 let sqlStr1 = `
                     select
                         *
                     from
                         ksv_blno_mst
                     where
-                        bl_no = '${tOne1.BL_NO}'
+                        bl_no = '${blNoForLookup}'
                 `;
                 var tRet1  =  await prisma.$queryRaw(Prisma.raw(sqlStr1));
                 if (tRet1.length > 0) {
@@ -372,6 +377,11 @@ const moduleQuery_S043401_3_1 = {
                     tOne1.F_ETA = tRet1.F_ETA;
                 }
                 */
+                const tradlinxBlNo = `${tOne1.BL_NO || ''}`
+                    .trim()
+                    .replace(/^'+|'+$/g, '')
+                    .replace(/'/g, "''");
+
                 var tradlinxResultArr = (await prisma.$queryRaw(
                     Prisma.raw(`
                         select
@@ -390,7 +400,7 @@ const moduleQuery_S043401_3_1 = {
                                     ksv_tradlinx
                                 where
                                     1 = 1
-                                    and bl_no = '${tOne1.BL_NO}'
+                                    and bl_no = '${tradlinxBlNo}'
                                     and route_order = 1
                                 order by
                                     update_datetime desc
@@ -402,14 +412,14 @@ const moduleQuery_S043401_3_1 = {
                                     ksv_tradlinx
                                 where
                                     1 = 1
-                                    and bl_no = '${tOne1.BL_NO}'
+                                    and bl_no = '${tradlinxBlNo}'
                                     and route_order = (
                                         select
                                             max(route_order)
                                         from
                                             ksv_tradlinx
                                         where
-                                            bl_no = '${tOne1.BL_NO}'
+                                            bl_no = '${tradlinxBlNo}'
                                     )
                                 order by
                                     update_datetime desc
