@@ -358,18 +358,13 @@ const moduleQuery_S043401_3_1 = {
                 });
 
                 /*
-                const blNoForLookup = `${tOne1.BL_NO || ''}`
-                    .trim()
-                    .replace(/^'+|'+$/g, '')
-                    .replace(/'/g, "''");
-
                 let sqlStr1 = `
                     select
                         *
                     from
                         ksv_blno_mst
                     where
-                        bl_no = '${blNoForLookup}'
+                        bl_no = '${tOne1.BL_NO}'
                 `;
                 var tRet1  =  await prisma.$queryRaw(Prisma.raw(sqlStr1));
                 if (tRet1.length > 0) {
@@ -600,13 +595,18 @@ const moduleQuery_S043401_3_1 = {
                     }
                 });
 
+                const blNoForLookup = `${tOne1.BL_NO || ''}`
+                    .trim()
+                    .replace(/^'+|'+$/g, '')
+                    .replace(/'/g, "''");
+
                 let sqlStr1 = `
                     select
                         *
                     from
                         ksv_blno_mst
                     where
-                        bl_no = '${tOne1.BL_NO}'
+                        bl_no = '${blNoForLookup}'
                 `;
                 var tRet1 = (await prisma.$queryRaw(
                     Prisma.raw(sqlStr1),

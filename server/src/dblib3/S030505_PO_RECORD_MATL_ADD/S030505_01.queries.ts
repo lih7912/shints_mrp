@@ -65,6 +65,7 @@ const moduleQuery_S030505_01 = {
                 tRet.unshift(tObj);
                 tWObj.PO_CD = tRet;
 
+                /*
                 let sqlStr = `
                     select distinct
                         a.FACTORY_CD,
@@ -76,6 +77,10 @@ const moduleQuery_S030505_01 = {
                         a.po_cd = '${args.data.PO_CD}'
                         and a.factory_cd = b.factory_cd
                 `;
+                */
+               let sqlStr = `
+                    select FACTORY_CD, FACTORY_NAME from KCD_FACTORY where FACTORY_CD in ('FC034', 'FC044')
+               `;
                 let tRet = await prisma.$queryRaw(Prisma.raw(sqlStr));
                 tWObj.FACTORY_CD = tRet;
 
