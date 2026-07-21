@@ -188,7 +188,18 @@ const moduleQuery_S0914_FAC_IN_OUT_MANAGER = {
                         isnull((select sum(out_qty) from ksv_stock_facout where po_cd = a.po_cd and matl_cd = a.matl_cd and remark like '%lost%'), 0) as LOST,
                         isnull((select sum(stock_qty) from ksv_stock_matl where po_cd = a.po_cd and matl_cd = a.matl_cd and reason_make='RETURN'), 0) as LINE_RETURN,
                         isnull((select sum(out_qty) from ksv_stock_facout where po_cd = a.po_cd and matl_cd = a.matl_cd), 0) as FACOUT,
-                        isnull((select sum(remain_qty) from ksv_stock_matl where po_cd = a.po_cd and matl_cd = a.matl_cd and stock_status in ('W','N')), 0) as MOQ_BASE,
+                        isnull((
+                            select
+                                sum(isnull(su.use_qty, 0))
+                            from
+                                ksv_stock_matl sm
+                                inner join ksv_stock_use su on su.stock_idx = sm.stock_idx
+                            where
+                                sm.po_cd = a.po_cd
+                                and sm.matl_cd = a.matl_cd
+                                and sm.stock_status in ('W', 'N')
+                                and su.use_po_cd <> a.po_cd
+                        ), 0) as MOQ_BASE,
                         isnull((select sum(po_qty) from ksv_stock_mem where po_cd = a.po_cd and matl_cd = a.matl_cd and po_seq in (98, 99)), 0) as OVERIN,
                         isnull(d.matl_price, 0) as PRICE,
                         isnull(a.remark_bvt, '') as DELAYREMARK
@@ -247,7 +258,7 @@ const moduleQuery_S0914_FAC_IN_OUT_MANAGER = {
                             tObj.KEEP_STOCK +
                             tObj.LOST)) - tObj.LINE_RETURN || 0);
                     tObj.MOQ_BASE = Number(tObj.MOQ_BASE || tObj.MOQ || 0);
-                    tObj.MOQ = Number(tObj.MOQ || 0); // OVER_IN 미포함
+                    tObj.MOQ = Number(tObj.MOQ_BASE || 0);
                     tObj.OVERIN = Number(tObj.OVERIN || 0);
                     tObj.PRICE = Number(tObj.PRICE || 0);
                     tObj.DELAYREMARK = tObj.DELAYREMARK || '';
@@ -256,7 +267,7 @@ const moduleQuery_S0914_FAC_IN_OUT_MANAGER = {
                     tObj.FACIN = Number(tObj.FACIN_BASE || 0) + Number(tObj.STOCK || 0);
                     tObj.DEFECT = Number(tObj.DEFECT || 0);
                     tObj.MAINUSE = Number(tObj.MAINUSE || 0);
-                    tObj.MOQ = Number(tObj.MOQ_BASE || 0);
+                    
 
                     if (!Number.isFinite(tObj.FACIN)) {
                         tObj.FACIN = Number(tObj.FACIN_BASE || 0) + Number(tObj.STOCK || 0);
