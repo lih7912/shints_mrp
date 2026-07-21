@@ -109,6 +109,7 @@ const moduleQuery_S0516_2_2 = {
             if (args.data.PO_SEQ === '' || args.data.PO_SEQ === 'All');
             else tSQL += `  and b.po_seq = '${args.data.PO_SEQ}'  `;
 
+            // Stock Cancel 내역( use_po_type =2, diff_po-type = 5  반영
             let sqlStr = `
                 select
                     b.po_cd as PO_CD,
