@@ -390,9 +390,49 @@ export class ServiceS0914_FAC_IN_OUT_MANAGER {
                 fetchPolicy: "no-cache",
             });
 
+            if (!data || !data.mgrQuery_S0914_FAC_IN_OUT_MANAGER_REPORT) {
+                throw new Error(
+                    "mgrQuery_S0914_FAC_IN_OUT_MANAGER_REPORT returned no data.",
+                );
+            }
+
             return data.mgrQuery_S0914_FAC_IN_OUT_MANAGER_REPORT;
         } catch (e) {
             console.error("FAC_IN_OUT_MANAGER_REPORT error:", e);
+            return e;
+        }
+    }
+
+    async exportReport2(args) {
+        apolloOption.cache = new InMemoryCache();
+
+        try {
+            const { data } = await this.client.query({
+                query: gql`
+                    query QmgrQuery_S0914_FAC_IN_OUT_MANAGER_REPORT2(
+                        $data: I_S0914_FAC_IN_OUT_MANAGER_REPORT!
+                    ) {
+                        mgrQuery_S0914_FAC_IN_OUT_MANAGER_REPORT2(data: $data) {
+                            id
+                            CODE
+                        }
+                    }
+                `,
+                variables: {
+                    data: args,
+                },
+                fetchPolicy: "no-cache",
+            });
+
+            if (!data || !data.mgrQuery_S0914_FAC_IN_OUT_MANAGER_REPORT2) {
+                throw new Error(
+                    "mgrQuery_S0914_FAC_IN_OUT_MANAGER_REPORT2 returned no data.",
+                );
+            }
+
+            return data.mgrQuery_S0914_FAC_IN_OUT_MANAGER_REPORT2;
+        } catch (e) {
+            console.error("FAC_IN_OUT_MANAGER_REPORT2 error:", e);
             return e;
         }
     }
