@@ -536,6 +536,169 @@ export class ServiceS040102_PURCHASER_INFO {
         try {
             const { loading, error, data } = await this.client.query({
                 query: gql`
+                    query MgrQueryS040102_4_1($data: I_S040101_4_1!) {
+                        mgrQueryS040102_4_1(data: $data) {
+                            PU_MST_NEW {
+                                VENDOR_CD
+                                VENDOR_NAME
+                                VENDOR_MATL_TYPE
+                                VENDOR_TYPE
+                                VENDOR_TYPE_N
+                                PAY_TERM
+                                PAY_TYPE
+                                PAY_CONDITION
+                                OVERSHORT_RATE
+                                PO_CD
+                                PU_CD
+                                PO_QTY
+                                MATL_AMT
+                                P_PU_CD
+                                P_CURR_CD
+                                P_PI_NO
+                                P_ORDER_DATE
+                                P_DUE_DATE
+                                P_EX_FACTORY
+                                P_NORMI
+                                P_BILL_TO
+                                P_PAY_DATE
+                                P_PLACE_CD
+                                P_SHIP_TO
+                                ORIGIN_PORT
+                                TRADE_TERM
+                                BUYER_CD
+                                BUYER_NAME
+                                MRP_DATE
+                                PLAN_FLAG
+                                PLAN_ETD
+                                FACTORY_CD
+                                FACTORY_NAME
+                                PROD_DUE_DATE
+                                MATL_DUE_DATE
+                                STOCK_QTY
+                                MRP_QTY
+                                OLD_PO_QTY
+                            }
+                            PU_MST {
+                                PU_CD
+                                VENDOR_CD
+                                BUYER_CD
+                                FACTORY_CD
+                                PU_DATE
+                                REG_USER
+                                REG_DATETIME
+                                PU_STATUS
+                                MATL_TYPE
+                                BILL_TO
+                                SHIP_TO
+                                CURR_CD
+                                DEPOSIT_AMT
+                                DEPOSIT_FIX
+                                LC_FLAG
+                                LC_AMT
+                                NORMI
+                                TRADE_TERM
+                                ORDER_DATE
+                                DELIVERY_DATE
+                                EXP_DELIVERY_DATE
+                                PAY_DATE
+                                FORWARD
+                                PI_NO
+                                PI_FILE
+                                SHIP_MODE
+                                PO_CD2
+                                TARGET_ETA
+                                PU_TYPE
+                                DEPOSIT_GW_STATUS
+                                ORIGIN_PORT
+                                MEMO
+                                PAY_TYPE
+                                PAY_CONDITION
+                            }
+                            STOCK_MEM {
+                                PU_STATUS
+                                PO_CD
+                                PO_SEQ
+                                ORDER_CD
+                                MATL_CD
+                                MRP_SEQ
+                                MATL_SEQ
+                                MATL_NAME
+                                COLOR
+                                SPEC
+                                UNIT
+                                MRP_QTY
+                                MRP_QTY1
+                                STOCK_QTY
+                                MOQ_QTY
+                                PO_QTY
+                                BEF_PO_QTY
+                                OVER_QTY
+                                FOC_QTY
+                                LEFTOVER_QTY
+                                DIFF_QTY
+                                PO_UPDATE_QTY
+                                CURR_CD
+                                FACTORY_CD
+                                MASTER_PRICE
+                                SURCHARGE_PRICE
+                                SURCHARGE_AMT
+                                SURCHARGE_REMARK
+                                PO_PRICE
+                                PU_CD
+                                MRP_QTY2
+                                DATAS {
+                                    PU_STATUS
+                                    PO_CD
+                                    PO_SEQ
+                                    ORDER_CD
+                                    MATL_CD
+                                    MRP_SEQ
+                                    MATL_SEQ
+                                    MATL_NAME
+                                    COLOR
+                                    SPEC
+                                    UNIT
+                                    MRP_QTY
+                                    MRP_QTY1
+                                    STOCK_QTY
+                                    MOQ_QTY
+                                    PO_QTY
+                                    BEF_PO_QTY
+                                    OVER_QTY
+                                    FOC_QTY
+                                    LEFTOVER_QTY
+                                    DIFF_QTY
+                                    PO_UPDATE_QTY
+                                    CURR_CD
+                                    FACTORY_CD
+                                    MASTER_PRICE
+                                    SURCHARGE_PRICE
+                                    SURCHARGE_AMT
+                                    SURCHARGE_REMARK
+                                    PO_PRICE
+                                    PU_CD
+                                    MRP_QTY2
+                                }
+                            }
+                        }
+                    }
+                `,
+                variables: {
+                    data: argQRY_KCD_VENDOR,
+                },
+            });
+            return data.mgrQueryS040102_4_1;
+        } catch (e) {
+            return e;
+        }
+    }
+
+    async mgrQuery_LIST_3_260722(argQRY_KCD_VENDOR) {
+        apolloOption.cache = new InMemoryCache();
+
+        try {
+            const { loading, error, data } = await this.client.query({
+                query: gql`
                     query MgrQueryS040101_4_1($data: I_S040101_4_1!) {
                         mgrQueryS040101_4_1(data: $data) {
                             PU_MST_NEW {
@@ -692,6 +855,7 @@ export class ServiceS040102_PURCHASER_INFO {
             return e;
         }
     }
+
 
     async mgrQuery_LIST_STOCK(argQRY_KCD_VENDOR) {
         apolloOption.cache = new InMemoryCache();
