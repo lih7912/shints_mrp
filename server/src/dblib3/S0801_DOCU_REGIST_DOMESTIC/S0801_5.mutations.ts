@@ -356,6 +356,105 @@ const moduleMutation_S0801_5 = {
             return tRetArray;
         },
 
+        mgrInsert_S0801_5_PROC_FOC: async (_, args, contextValue) => {
+
+            var tRetDate = AFLib.getCurrTime();
+            var tRetDate1 = tRetDate.substring(0, 8);
+            var tUserInfo = AFLib.getUserInfo(contextValue);
+
+            var tInput1 = { ...args.datas[0] };
+            var tInput2 = [ ...args.datas1  ];
+
+            var tSQLArray = [];
+
+            let sqlTax = `           
+                select * from ksv_tax_mst
+                where tax_cd = '${tInput1.TAX_CD}'
+              `;
+            var retTax = await prisma.$queryRaw(Prisma.raw(sqlTax));
+            if (retTax.length <= 0) {
+                var tRetArray = [];
+                var tObj = {};
+                tObj.CODE = 'ERROR:처리할 데이터가 없습니다';
+                tObj.id = 0;
+                tRetArray.push(tObj);
+                return tRetArray;
+            }
+            var objTax = { ...retTax[0] };
+
+            if (objTax.DOCU_NO)  {
+                var tRetArray = [];
+                var tObj = {};
+                tObj.CODE = 'ERROR:전표 처리된것은 처리할수 없습니다';
+                tObj.id = 0;
+                tRetArray.push(tObj);
+                return tRetArray;
+            }
+
+            var tIdx = 0;
+            for (tIdx = 0; tIdx < tInput2.length; tIdx++) {
+                var tOne = { ...tInput2[tIdx] };
+
+                let sql0 = `
+                    select
+                         *
+                    from
+                        ksv_invoice_mst
+                    where
+                        invoice_no = '${tOne.INVOICE_NO}'
+                `;
+                var tRet0 = await prisma.$queryRaw(Prisma.raw(sql0));
+                if (tRet0.length > 0) {
+                    if (tRet0[0].PAYMENT_TYPE && tRet0[0].PAYMENT_TYPE !== '2') {
+                        var tRetArray = [];
+                        var tObj = {};
+                        tObj.CODE =
+                            'ERROR:Payment Type이 FOC가 아닌 Invoice는 전표 생략 처리 할수 없습니다';
+                        tObj.id = 0;
+                        tRetArray.push(tObj);
+                        return tRetArray;
+                    }
+                }
+            }
+
+            var tDocuNo = `FOC_${objTax.TAX_CD}`;
+
+            let tSQL99 = `
+                update ksv_tax_mst
+                set
+                    docu_no = '${tDocuNo}',
+                    acc_user = '${tUserInfo.USER_ID}'
+                where
+                    tax_cd= '${objTax.TAX_CD}'
+            `;
+            const tSQL99_1 = prisma.$queryRaw(Prisma.raw(tSQL99));
+            tSQLArray.push(tSQL99_1);
+
+            try {
+                global.currentTransactionInfo = {
+                    contextValue: contextValue,
+                    functionName: AFLib.getFunctionName(),
+                };
+                await prisma.$transaction(tSQLArray);
+                delete global.currentTransactionInfo;
+            } catch (e) {
+                var tRetArray = [];
+                var tObj = {};
+                tObj.CODE = `ERROR:전표 생략 처리 오류.(${e.message})`;
+                tObj.id = 0;
+                tRetArray.push(tObj);
+                return tRetArray;
+            }
+
+            var tRetArray = [];
+            var tObj = {};
+            tObj.CODE = 'SUCCEED:전표 생략 처리';
+            tObj.id = 0;
+            tRetArray.push(tObj);
+
+            return tRetArray;
+        },
+
         mgrInsert_S0801_5_INSERT_DOCU: async (_, args, contextValue) => {
             var tRetDate = AFLib.getCurrTime();
             var tRetDate1 = tRetDate.substring(0, 8);

@@ -71,6 +71,10 @@ const moduleTypedefs_S0801_5 = gql`
         mgrInsert_S0801_5_DELETE_TAXBILL(
             datas: [I_S0801_5_DELETE_TAXBILL!]!
         ): [Ret_S0801_5!]!
+        mgrInsert_S0801_5_PROC_FOC(
+            datas: [I_S0801_5!]!
+            datas1: [I_S0801_5_1!]!
+        ): [Ret_S0801_5!]!
     }
 `;
 

@@ -79,6 +79,37 @@ export class ServiceS0801_DOCU_REGIST_DOMESTIC {
         }
     }
 
+    async mgrInsert_PROC_FOC(argData, argData1) {
+        apolloOption.cache = new InMemoryCache();
+        const client = new ApolloClient(apolloOption);
+
+        try {
+            const { loading, error, data } = await this.client.mutate({
+                mutation: gql`
+                    mutation MgrInsert_S0801_5_PROC_FOC(
+                        $datas: [I_S0801_5!]!
+                        $datas1: [I_S0801_5_1!]!
+                    ) {
+                        mgrInsert_S0801_5_PROC_FOC(
+                            datas: $datas
+                            datas1: $datas1
+                        ) {
+                            CODE
+                            id
+                        }
+                    }
+                `,
+                variables: {
+                    datas: argData,
+                    datas1: argData1,
+                },
+            });
+            return data.mgrInsert_S0801_5_PROC_FOC;
+        } catch (e) {
+            return e;
+        }
+    }
+
     async mgrInsert_DELETE_TAXBILL(argData) {
         apolloOption.cache = new InMemoryCache();
         const client = new ApolloClient(apolloOption);

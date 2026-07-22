@@ -348,6 +348,71 @@ const S0801_DOCU_REGIST_DOMESTIC = () => {
             });
     };
 
+    const process_PROC_FOC = () => {
+
+        if (selectedTBL_KSV_ORDER_SHIP.length <= 0) {
+            alert("작업할 데이타를 선택하세요 <br><br>Choose the data you want to work with");
+            return;
+        }
+        var tEdtObj = { ...dataEDT_KSV_ORDER_SHIP };
+        if (tEdtObj.DOCU_NO) {
+            alert(`전표 처리가 된것은 전표 생략 처리가 안됩니다. `);
+            return;
+        }
+
+        var _tInput0 = { ...selectedTBL_KSV_ORDER_SHIP[0] };
+        if (typeof _tInput0.__typename !== "undefined")
+            delete _tInput0.__typename;
+        if (typeof _tInput0.id !== "undefined") delete _tInput0.id;
+        var tIn1_Array = [];
+        tIn1_Array.push(_tInput0);
+
+        var tIn2_Array = [];
+        datasTBL_KSV_ORDER_SHIP1.forEach((col, i) => {
+            var tObj = { ...col };
+            if (typeof tObj.__typename !== "undefined") delete tObj.__typename;
+            if (typeof tObj.id !== "undefined") delete tObj.id;
+            tIn2_Array.push(tObj);
+        });
+
+        setLoadingTBL_KSV_ORDER_SHIP1(true);
+        serviceS0801_DOCU_REGIST_DOMESTIC
+            .mgrInsert_PROC_FOC(tIn1_Array, tIn2_Array)
+            .then((data) => {
+                setLoadingTBL_KSV_ORDER_SHIP1(false);
+                if (typeof data.graphQLErrors === "undefined") {
+                    if (typeof data.length === "undefined") {
+                    } else {
+                        alert(data[0].CODE);
+                        if (data[0].CODE.includes("SUCC")) {
+                            search_LIST_1();
+                        }
+                        console.log(
+                            "ServiceMgrKCD_BUYER.mgr1KcdStyle call => " +
+                                data.length,
+                        );
+                        toast.current.show({
+                            severity: "success",
+                            summary: "SUCCEED:Insert Order Ship",
+                            detail: data[0].CODE,
+                            life: 3000,
+                        });
+                    }
+                } else {
+                    console.log(
+                        "ServiceMgrKCD_VENDOR.mgr1KcdBuyer error => " +
+                            JSON.stringify(data.graphQLErrors),
+                    );
+                    toast.current.show({
+                        severity: "success",
+                        summary: "ERROR:Insert Order Ship",
+                        detail: "",
+                        life: 3000,
+                    });
+                }
+            });
+    };
+
     const process_DOCU_REGIST = () => {
         if (selectedTBL_KSV_ORDER_SHIP.length <= 0) {
             alert("작업할 데이타를 선택하세요 <br><br>Choose the data you want to work with");
@@ -1309,7 +1374,7 @@ const S0801_DOCU_REGIST_DOMESTIC = () => {
                 </span>
                 <span className="af-span-3" style={{ width: "30rem" }}>
                     <p className="af-span-p" style={{ width: "6rem" }}> </p>
-                    <div className="af-span-div-btn" style={{ width: "17rem" }}>
+                    <div className="af-span-div-btn" style={{ width: "27rem" }}>
                         <Button
                             style={{ width: "8rem" }}
                             label="전표등록"
@@ -1324,6 +1389,14 @@ const S0801_DOCU_REGIST_DOMESTIC = () => {
                             aria-label="전표취소"
                             className="p-button-text"
                             onClick={process_DOCU_CANCEL}
+                        />
+
+                        <Button
+                            style={{ width: "8rem" }}
+                            label="전표생략"
+                            aria-label="전표생략"
+                            className="p-button-text"
+                            onClick={process_PROC_FOC}
                         />
                     </div>
                 </span>
