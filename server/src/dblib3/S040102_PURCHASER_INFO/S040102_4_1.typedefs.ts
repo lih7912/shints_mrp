@@ -250,7 +250,7 @@ const moduleTypedefs_S040102_4_1 = gql`
     }
 
     type Query {
-        mgrQueryS040102_4_1(data: I_S040102_4_1!): T_S040102_4_2!
+        mgrQueryS040102_4_1(data: I_S040101_4_1!): T_S040101_4_2!
         mgrQueryS040102_4_2(data: I_S040102_4_2!): T_S040102_4_2!
         mgrQueryS040102_4_LOG(data: I_S040102_4_LOG!): T_S040102_4_2!
         mgrQueryS040102_4_LOG_bak(data: I_S040102_4_LOG!): T_S040102_4_2!
