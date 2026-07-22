@@ -45,6 +45,33 @@ export class ServiceS080101_DOCU_REGIST_DOMESTIC {
         }
     }
 
+    async PROC_FOC (argData) {
+        apolloOption.cache = new InMemoryCache();
+        const client = new ApolloClient(apolloOption);
+
+        try {
+            const { loading, error, data } = await this.client.mutate({
+                mutation: gql`
+                    mutation MgrInsert_S080101_5_PROC_FOC(
+                        $datas: [I_S080101_5_PROC_FOC!]!
+                    ) {
+                        mgrInsert_S080101_5_PROC_FOC(datas: $datas) {
+                            CODE
+                            id
+                        }
+                    }
+                `,
+                variables: {
+                    datas: argData
+                },
+            });
+            return data.mgrInsert_S080101_5_PROC_FOC;
+        } catch (e) {
+            return e;
+        }
+    }
+
+
     async mgrQuery_CODE(argQRY_KSV_STOCK_FACIN) {
         apolloOption.cache = new InMemoryCache();
         const client = new ApolloClient(apolloOption);
