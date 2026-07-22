@@ -1651,7 +1651,7 @@ const S0513_SHIPPING_LIST = () => {
                     <AFColumn field="ORD_AMT" header="Ship Amt" headerStyle={{ width: "5rem" }} bodyStyle={{ textAlign: "right" }} body={(rowData) => serviceLib.numWithCommas(rowData.ORD_AMT, 2) } ></AFColumn>
                     <AFColumn field="ADJ_AMT" header="Adjust Amt" headerStyle={{ width: "5rem" }} bodyStyle={{ textAlign: "right" }} body={(rowData) => serviceLib.numWithCommas(rowData.ADJ_AMT, 2) } ></AFColumn>
 
-                    <AFColumn field="SHIP_AMOUNT" header="Invoice Amt" headerStyle={{ width: "5rem" }} bodyStyle={{ textAlign: "right" }} body={(rowData) => serviceLib.numWithCommas(rowData.SHIP_AMOUNT, 2) } ></AFColumn>
+                    <AFColumn field="TOT_AMT" header="Invoice Amt" headerStyle={{ width: "5rem" }} bodyStyle={{ textAlign: "right" }} body={(rowData) => serviceLib.numWithCommas(rowData.TOT_AMT, 2) } ></AFColumn>
                     <AFColumn field="BILL_AMT" header="Received Amt" headerStyle={{ width: "5rem" }} bodyStyle={{ textAlign: "right" }} body={(rowData) => serviceLib.numWithCommas(rowData.BILL_AMT, 2) } ></AFColumn>
                     <AFColumn field="OA_NEGO" header="OA Nego" headerStyle={{ width: "5rem" }} bodyStyle={{ textAlign: "right" }} body={(rowData) => serviceLib.numWithCommas(rowData.OA_NEGO, 2) } ></AFColumn>
                     <AFColumn field="BL_NO" header="BL#" headerStyle={{ width: "5rem" }} ></AFColumn>
