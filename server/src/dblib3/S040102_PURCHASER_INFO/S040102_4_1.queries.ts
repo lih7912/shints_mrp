@@ -80,9 +80,9 @@ class S040102_COMM {
   
         var sql0 = `
             select 
-                  a1.PO_CD,
+                  a0.PO_CD,
                   A3.VENDOR_CD,
-                  A1.MATL_CD,
+                  A0.MATL_CD,
                   A3.MATL_NAME,
                   A3.COLOR,
                   A3.SPEC,
@@ -90,25 +90,28 @@ class S040102_COMM {
                   A4.CURR_CD,
                   A6.FACTORY_CD,
                   A4.MATL_PRICE,
-                  A1.PO_PRICE,
-                  A1.MASTER_PRICE,
-                  A1.SURCHARGE_AMT,
-                  A1.SURCHARGE_PRICE,
-                  A1.SURCHARGE_REMARK,
+                  isnull(A1.PO_PRICE, a4.matl_price) as  PO_PRICE,
+                  isnull(A1.MASTER_PRICE, a4.matl_price) as MASTER_PRICE,
+                  isnull(A1.SURCHARGE_AMT, 0) as SURCHARGE_AMT,
+                  isnull(A1.SURCHARGE_PRICE, 0) as SURCHARGE_PRICE,
+                  isnull(A1.SURCHARGE_REMARK, '') as SURCHARGE_REMARK,
                   isnull(max(A6.PO_SEQ), 1) as PO_SEQ
-            from  ksv_stock_mem2 A1,
+            from  ksv_stock_mem A0 
+                  left join ksv_stock_mem2 A1 on A1.pu_cd = A0.pu_cd
+                                             and A1.po_cd = A0.po_cd
+                                             and A1.matl_cd = A0.matl_cd,
                   KCD_MATL_MST A3,
                   KCD_MATL_MEM A4,
                   KSV_PO_MST A6
-            where a1.pu_cd = '${argData.PU_CD}'
-            and   a1.matl_cd = a3.matl_cd
-            and   a4.matl_cd = a1.matl_cd
-            and   a4.matl_seq =(select max(matl_seq) from kcd_matl_mem where matl_cd = a1.matl_cd)
-            and   a6.po_cd = a1.po_cd 
+            where a0.pu_cd = '${argData.PU_CD}'
+            and   a0.matl_cd = a3.matl_cd
+            and   a4.matl_cd = a0.matl_cd
+            and   a4.matl_seq =(select max(matl_seq) from kcd_matl_mem where matl_cd = a0.matl_cd)
+            and   a6.po_cd = a0.po_cd 
             group  by
-                  a1.PO_CD,
+                  a0.PO_CD,
                   A3.VENDOR_CD,
-                  A1.MATL_CD,
+                  A0.MATL_CD,
                   A3.MATL_NAME,
                   A3.COLOR,
                   A3.SPEC,
@@ -116,11 +119,11 @@ class S040102_COMM {
                   A4.CURR_CD,
                   A6.FACTORY_CD,
                   A4.MATL_PRICE,
-                  A1.PO_PRICE,
-                  A1.MASTER_PRICE,
-                  A1.SURCHARGE_AMT,
-                  A1.SURCHARGE_PRICE,
-                  A1.SURCHARGE_REMARK
+                  isnull(A1.PO_PRICE, a4.matl_price),
+                  isnull(A1.MASTER_PRICE, a4.matl_price),
+                  isnull(A1.SURCHARGE_AMT, 0),
+                  isnull(A1.SURCHARGE_PRICE, 0),
+                  isnull(A1.SURCHARGE_REMARK, '')
         `;
         var ret0  =  await prisma.$queryRaw(Prisma.raw(sql0));
         var idx0 = 0;
@@ -4829,6 +4832,50 @@ const moduleQuery_S040102_4_1 = {
         mgrQueryS040102_4_1: async (_, args, contextValue) => {
 
             var tInObj = { ...args.data };
+
+            // 새로 추가된 항목에 대해서 PU_CD 등록
+            var sqlCheckNew = `
+                select
+                     a.id, isnull(a.pu_cd, '') as pu_cd
+                from ksv_stock_mem a, kcd_matl_mst b, kcd_matl_mem b1
+                where a.po_cd in (select distinct po_cd from ksv_stock_mem2 where pu_cd = '${tInObj.PU_CD}')
+                and   b.vendor_cd in (select distinct vendor_cd from ksv_pu_mst2 where pu_cd = '${tInObj.PU_CD}')
+                and   b1.curr_cd in (select distinct curr_cd from ksv_pu_mst2 where pu_cd = '${tInObj.PU_CD}')
+                and   a.matl_cd = b.matl_cd
+                and   b.matl_cd = b1.matl_cd
+                and   b1.matl_seq = (select max(matl_seq) from kcd_matl_mem where matl_cd = b.matl_cd)
+                and   isnull(a.pu_cd, '') = ''
+            `;
+            var retCheckNew = await prisma.$queryRaw(Prisma.raw(sqlCheckNew));
+            if (retCheckNew.length > 0) {
+                var sqlUp = `
+                    update ksv_stock_mem set pu_cd = '${tInObj.PU_CD}'
+                    where  id = '${retCheckNew[0].id}'
+                `;
+                var retUp = await prisma.$queryRaw(Prisma.raw(sqlUp));
+            }
+
+            sqlCheckNew = `
+                select
+                     a.id, isnull(a.pu_cd, '') as pu_cd
+                from ksv_po_mrp a, kcd_matl_mst b, kcd_matl_mem b1
+                where a.po_cd in (select distinct po_cd from ksv_stock_mem2 where pu_cd = '${tInObj.PU_CD}')
+                and   b.vendor_cd in (select distinct vendor_cd from ksv_pu_mst2 where pu_cd = '${tInObj.PU_CD}')
+                and   b1.curr_cd in (select distinct curr_cd from ksv_pu_mst2 where pu_cd = '${tInObj.PU_CD}')
+                and   a.matl_cd = b.matl_cd
+                and   b.matl_cd = b1.matl_cd
+                and   b1.matl_seq = (select max(matl_seq) from kcd_matl_mem where matl_cd = b.matl_cd)
+                and   isnull(a.pu_cd, '') = ''
+            `;
+            retCheckNew = await prisma.$queryRaw(Prisma.raw(sqlCheckNew));
+            if (retCheckNew.length > 0) {
+                var sqlUp = `
+                    update ksv_po_mrp set pu_cd = '${tInObj.PU_CD}'
+                    where  id = '${retCheckNew[0].id}'
+                `;
+                var retUp = await prisma.$queryRaw(Prisma.raw(sqlUp));
+            }
+
 
             if (!args.data.PU_SEQ || args.data.PU_SEQ === 'W') {
                 var tFunc = new S040102_COMM();
