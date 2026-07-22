@@ -1229,12 +1229,7 @@ const S0513_SHIPPING_LIST = () => {
                 setDatasEDT_KSV_ORDER_SHIP_DELIVERY_TYPE(data.DELIVERY_TYPE);
                 setDataEDT_KSV_ORDER_SHIP_DELIVERY_TYPE(data.DELIVERY_TYPE[0]);
 
-                var tRetDate = serviceLib.getCurrDate().substring(0, 8);
                 var tObj0 = { ...dataQRY_KSV_ORDER_SHIP };
-                tObj0.S_SHIP_DATE = `${tRetDate.substring(0, 6)}01`;
-                tObj0.E_SHIP_DATE = `${tRetDate}`;
-                // tObj0.S_ATD = `${tRetDate.substring(0, 6)}01`;
-                // tObj0.E_ATD = `${tRetDate}`;
 
                 if (tInvoiceNo !== "") {
                     var tObj = loadFormFromSession();
