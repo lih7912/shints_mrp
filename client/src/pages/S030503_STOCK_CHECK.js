@@ -182,7 +182,9 @@ const S030503_STOCK_CHECK = () => {
             argData = { ...argData0 };
         }
 
+        // 선택 상태를 초기화하면서 테이블 데이터도 함께 초기화
         setSelectedTBL_KCD_MATL_MST([]);
+        setFlagSelectModeTBL_KCD_MATL_MST(false);
         setDatasTBL_KCD_MATL_MST([]);
 
         // if (argData.STOCK_CHK !== '*') return;
@@ -214,7 +216,17 @@ const S030503_STOCK_CHECK = () => {
                         tObj.id = i + 1;
                         return tObj;
                     });
-                    setDatasTBL_KCD_MATL_MST(addCompositeKeyToRows(tArray));
+                    // 중복 행 제거 (STOCK_IDX 기준)
+                    const uniqueRows = [];
+                    const seenKeys = new Set();
+                    tArray.forEach((row) => {
+                        const key = `${row.PO_CD || ''}|${row.MATL_CD || ''}|${row.STOCK_IDX || ''}|${row.LOCATION || ''}`;
+                        if (!seenKeys.has(key)) {
+                            seenKeys.add(key);
+                            uniqueRows.push(row);
+                        }
+                    });
+                    setDatasTBL_KCD_MATL_MST(addCompositeKeyToRows(uniqueRows));
                 } else {
                     console.log(
                         "mgrQueryTBL_KSV_PO_MRP error => " +
@@ -748,13 +760,21 @@ const S030503_STOCK_CHECK = () => {
 
     const onSelectionChangeTBL_KCD_MATL_MST = (event) => {
         setFlagSelectModeTBL_KCD_MATL_MST(true);
-        // 선택 상태만 변경 - 데이터는 수정하지 않음
-        setSelectedTBL_KCD_MATL_MST(event.value);
+        // 중복 제거: 동일한 COMPOSITE_KEY를 가진 항목만 유지
+        const uniqueSelected = event.value.reduce((acc, item) => {
+            const key = item.COMPOSITE_KEY;
+            if (!acc.find(existingItem => existingItem.COMPOSITE_KEY === key)) {
+                acc.push(item);
+            }
+            return acc;
+        }, []);
+        setSelectedTBL_KCD_MATL_MST(uniqueSelected);
     };
 
     const onSingleSelectAreaClickTBL_KCD_MATL_MST = (rowData) => {
         setFlagSelectModeTBL_KCD_MATL_MST(false);
-        onSelectionChangeTBL_KCD_MATL_MST({ value: [rowData] });
+        // 단일 선택: 항상 정확히 1개만 선택
+        setSelectedTBL_KCD_MATL_MST([rowData]);
     };
 
     const singleSelectAreaBodyTBL_KCD_MATL_MST = (field) => {
@@ -978,6 +998,8 @@ const S030503_STOCK_CHECK = () => {
             return;
         }
 
+        console.log(selectedTBL_KSV_ORDER_MEM);
+        console.log(selectedTBL_KCD_MATL_MST);
         if (
             selectedTBL_KSV_ORDER_MEM.length > 1 &&
             selectedTBL_KCD_MATL_MST.length > 1
