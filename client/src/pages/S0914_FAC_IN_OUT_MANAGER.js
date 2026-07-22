@@ -791,7 +791,7 @@ const S0914_FAC_IN_OUT_MANAGER = () => {
                     <AFColumn field="STSIN" headerClassName="t-header" header="STS IN" className="text-right" body={(row) => serviceLib.formatNumber(row.STSIN, 2)} />
                     <AFColumn field="STSOUT" headerClassName="t-header" header="STS OUT" className="text-right" body={(row) => serviceLib.formatNumber(row.STSOUT, 2)} />
                     {/*<AFColumn field="ERROR" headerClassName="t-header" header="ERROR" className="text-right" body={(row) => serviceLib.formatNumber(row.ERROR)} />*/}
-                    <AFColumn field="SHIPQTY" headerClassName="t-header" header="Ship Qty" className="text-right" body={(row) => serviceLib.formatNumber(row.SHIPQTY)} />
+                    <AFColumn field="SHIPQTY" headerClassName="t-header" header="Ship Qty" className="text-right" body={(row) => serviceLib.formatNumber(row.SHIPQTY, 2)} />
                     <AFColumn
                         field="STOCK"
                         headerClassName="t-header"
@@ -810,21 +810,21 @@ const S0914_FAC_IN_OUT_MANAGER = () => {
                             </div>
                         )}
                     />
-                    <AFColumn field="FACIN" headerClassName="t-header" header="FAC IN" className="text-right" body={(row) => serviceLib.formatNumber(row.FACIN)} />
-                    <AFColumn field="SHORTOVER" headerClassName="t-header" header="SHORT/OVER" className="text-right" body={(row) => serviceLib.formatNumber(row.SHORTOVER)} />
-                    <AFColumn field="DEFECT_A" headerClassName="t-header" header="DEFECT(A)" className="text-right" body={(row) => serviceLib.formatNumber(row.DEFECT_A)} />
-                    <AFColumn field="DEFECT" headerClassName="t-header" header="DEFECT(E)" className="text-right" body={(row) => serviceLib.formatNumber(row.DEFECT)} />
-                    <AFColumn field="MAINUSE" headerClassName="t-header" header="MAIN USE" className="text-right" body={(row) => serviceLib.formatNumber(row.MAINUSE)} />
-                    <AFColumn field="OTHER" headerClassName="t-header" header="OTHER" className="text-right" body={(row) => serviceLib.formatNumber(row.OTHER)} />
-                    <AFColumn field="TABLE_SHORT" headerClassName="t-header" header="Table Shortage" className="text-right" body={(row) => serviceLib.formatNumber(row.TABLE_SHORT)} />
-                    <AFColumn field="KEEP_STOCK" headerClassName="t-header" header="Keep Stock" className="text-right" body={(row) => serviceLib.formatNumber(row.KEEP_STOCK)} />
-                    <AFColumn field="MOVE_STOCK" headerClassName="t-header" header="Move Stock" className="text-right" body={(row) => serviceLib.formatNumber(row.MOVE_STOCK)} />
-                    <AFColumn field="LOST" headerClassName="t-header" header="Lost" className="text-right" body={(row) => serviceLib.formatNumber(row.LOST)} />
-                    <AFColumn field="LINE_RETURN" headerClassName="t-header" header="Line Return" className="text-right" body={(row) => serviceLib.formatNumber(row.LINE_RETURN)} />
-                    <AFColumn field="FACOUT" headerClassName="t-header" header="FAC OUT" className="text-right" body={(row) => serviceLib.formatNumber(row.FACOUT)} />
-                    <AFColumn field="MOQ" headerClassName="t-header" header="MOQ+OVERIN" className="text-right" body={(row) => serviceLib.formatNumber(row.MOQ)} />
-                    <AFColumn field="REMAIN_E" headerClassName="t-header" header="REMAIN(E)" className="text-right" body={(row) => serviceLib.formatNumber(row.REMAIN_E)} />
-                    <AFColumn field="REMAIN_A" headerClassName="t-header" header="REMAIN(A)" className="text-right" body={(row) => serviceLib.formatNumber(row.REMAIN_A)} />
+                    <AFColumn field="FACIN" headerClassName="t-header" header="FAC IN" className="text-right" body={(row) => serviceLib.formatNumber(row.FACIN, 2)} />
+                    <AFColumn field="SHORTOVER" headerClassName="t-header" header="SHORT/OVER" className="text-right" body={(row) => serviceLib.formatNumber(row.SHORTOVER, 2)} />
+                    <AFColumn field="DEFECT_A" headerClassName="t-header" header="DEFECT(A)" className="text-right" body={(row) => serviceLib.formatNumber(row.DEFECT_A, 2)} />
+                    <AFColumn field="DEFECT" headerClassName="t-header" header="DEFECT(E)" className="text-right" body={(row) => serviceLib.formatNumber(row.DEFECT, 2)} />
+                    <AFColumn field="MAINUSE" headerClassName="t-header" header="MAIN USE" className="text-right" body={(row) => serviceLib.formatNumber(row.MAINUSE, 2)} />
+                    <AFColumn field="OTHER" headerClassName="t-header" header="OTHER" className="text-right" body={(row) => serviceLib.formatNumber(row.OTHER, 2)} />
+                    <AFColumn field="TABLE_SHORT" headerClassName="t-header" header="Table Shortage" className="text-right" body={(row) => serviceLib.formatNumber(row.TABLE_SHORT, 2)} />
+                    <AFColumn field="KEEP_STOCK" headerClassName="t-header" header="Keep Stock" className="text-right" body={(row) => serviceLib.formatNumber(row.KEEP_STOCK, 2)} />
+                    <AFColumn field="MOVE_STOCK" headerClassName="t-header" header="Move Stock" className="text-right" body={(row) => serviceLib.formatNumber(row.MOVE_STOCK, 2)} />
+                    <AFColumn field="LOST" headerClassName="t-header" header="Lost" className="text-right" body={(row) => serviceLib.formatNumber(row.LOST, 2)} />
+                    <AFColumn field="LINE_RETURN" headerClassName="t-header" header="Line Return" className="text-right" body={(row) => serviceLib.formatNumber(row.LINE_RETURN, 2)} />
+                    <AFColumn field="FACOUT" headerClassName="t-header" header="FAC OUT" className="text-right" body={(row) => serviceLib.formatNumber(row.FACOUT, 2)} />
+                    <AFColumn field="MOQ" headerClassName="t-header" header="MOQ+OVERIN" className="text-right" body={(row) => serviceLib.formatNumber(row.MOQ, 2)} />
+                    <AFColumn field="REMAIN_E" headerClassName="t-header" header="REMAIN(E)" className="text-right" body={(row) => serviceLib.formatNumber(row.REMAIN_E, 2)} />
+                    <AFColumn field="REMAIN_A" headerClassName="t-header" header="REMAIN(A)" className="text-right" body={(row) => serviceLib.formatNumber(row.REMAIN_A, 2)} />
                     <AFColumn field="DELAYREMARK" headerClassName="t-header" header="Delay Report Remark" />
                     <AFColumn
                         field="REMARK_BVT"
@@ -890,10 +890,10 @@ const S0914_FAC_IN_OUT_MANAGER = () => {
                         <AFColumn field="DELIVERY" headerClassName="t-header" header="Delivery#" />
                         {/*<AFColumn field="CTNO" headerClassName="t-header" header="C/T#" />*/}
                         {/*<AFColumn field="UNIT" headerClassName="t-header" header="Unit" />*/}
-                        <AFColumn field="SHIPQTY" headerClassName="t-header" header="Ship Qty" className="text-right" body={(row) => serviceLib.formatNumber(row.SHIPQTY)} />
-                        <AFColumn field="SHORTOVER" headerClassName="t-header" header="Short/Over" className="text-right" body={(row) => serviceLib.formatNumber(row.SHORTOVER) } />
-                        <AFColumn field="DEFECT" headerClassName="t-header" header="Defect" className="text-right" body={(row) => serviceLib.formatNumber(row.DEFECT)} />
-                        <AFColumn field="FACINQTY" headerClassName="t-header" header="FacIn Qty" className="text-right" body={(row) => serviceLib.formatNumber(row.FACINQTY) } />
+                        <AFColumn field="SHIPQTY" headerClassName="t-header" header="Ship Qty" className="text-right" body={(row) => serviceLib.formatNumber(row.SHIPQTY, 2)} />
+                        <AFColumn field="SHORTOVER" headerClassName="t-header" header="Short/Over" className="text-right" body={(row) => serviceLib.formatNumber(row.SHORTOVER, 2) } />
+                        <AFColumn field="DEFECT" headerClassName="t-header" header="Defect(E)" className="text-right" body={(row) => serviceLib.formatNumber(row.DEFECT, 2)} />
+                        <AFColumn field="FACINQTY" headerClassName="t-header" header="FacIn Qty" className="text-right" body={(row) => serviceLib.formatNumber(row.FACINQTY, 2) } />
                         <AFColumn field="LOCATION" headerClassName="t-header" header="Location" />
                         <AFColumn field="MC" headerClassName="t-header" header="M/C" />
                     </AFDataTable>

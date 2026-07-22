@@ -178,7 +178,7 @@ const moduleQuery_S0914_FAC_IN_OUT_MANAGER = {
                         isnull((select sum(in_qty) from ksv_stock_facin where po_cd = a.po_cd and matl_cd = a.matl_cd), 0) as FACIN_BASE,
                         isnull((select sum(shortage_qty) from ksv_stock_facin where po_cd = a.po_cd and matl_cd = a.matl_cd), 0) as SHORTOVER,
                         isnull((select sum(defect_qty) from ksv_stock_facin where po_cd = a.po_cd and matl_cd = a.matl_cd), 0) as DEFECT,
-                        ---isnull((select sum(case when etc_type='Other' then etc_qty else 0 end) from ksv_stock_facetc where po_cd = a.po_cd and matl_cd = a.matl_cd), 0) as OTHER0,
+                        isnull((select sum(err_qty) from ksv_stock_facin where po_cd = a.po_cd and matl_cd = a.matl_cd), 0) as ERROR,
                         isnull((select sum(out_qty) from ksv_stock_facout where po_cd = a.po_cd and matl_cd = a.matl_cd and (remark like '%sasmple%' or remark like '%m_up%' or remark like '%test%')), 0) as OTHER,
                         isnull((select sum(out_qty) from ksv_stock_facout where po_cd = a.po_cd and matl_cd = a.matl_cd and remark like 'defect%'), 0) as DEFECT_A,
                         isnull((select sum(out_qty) from ksv_stock_facout where po_cd = a.po_cd and matl_cd = a.matl_cd and remark like '%main%'), 0) as MAINUSE,
@@ -229,7 +229,7 @@ const moduleQuery_S0914_FAC_IN_OUT_MANAGER = {
                     tObj.FACIN = Number(tObj.FACIN || 0);
                     tObj.SHORTOVER = Number(tObj.SHORTOVER || 0);
                     tObj.DEFECT = Number(tObj.DEFECT || 0);
-                    tObj.ERROR = Number(tObj.DEFECT || 0);
+                    tObj.ERROR = Number(tObj.ERROR || 0);
                     tObj.DEFECT_A = Number(tObj.DEFECT_A || 0);
                     tObj.MAINUSE = Number(tObj.MAINUSE || 0);
                     tObj.OTHER = Number(tObj.OTHER || 0);
@@ -476,7 +476,7 @@ const moduleQuery_S0914_FAC_IN_OUT_MANAGER = {
                             '${unit}' AS UNIT,
                             ISNULL(SQ.SHIPQTY, 0) AS SHIPQTY,
                             '${shortOver}' AS SHORTOVER,
-                            ISNULL(SQ.DEFECT, 0) AS DEFECT,
+                            ISNULL(F.DEFECT_QTY, 0) AS DEFECT,
                             CONVERT(VARCHAR(30), CAST(ISNULL(F.IN_QTY, 0) AS FLOAT)) AS FACINQTY,
                             ISNULL(F.LOCATION, '') AS LOCATION,
                             ISNULL(F.REG_USER, '') AS MC,
