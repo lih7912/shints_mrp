@@ -4835,8 +4835,7 @@ const moduleQuery_S040102_4_1 = {
 
             // 새로 추가된 항목에 대해서 PU_CD 등록
             var sqlCheckNew = `
-                select
-                     a.id, isnull(a.pu_cd, '') as pu_cd
+                update a set pu_cd = '${tInObj.PU_CD}'
                 from ksv_stock_mem a, kcd_matl_mst b, kcd_matl_mem b1
                 where a.po_cd in (select distinct po_cd from ksv_stock_mem2 where pu_cd = '${tInObj.PU_CD}')
                 and   b.vendor_cd in (select distinct vendor_cd from ksv_pu_mst2 where pu_cd = '${tInObj.PU_CD}')
@@ -4847,17 +4846,9 @@ const moduleQuery_S040102_4_1 = {
                 and   isnull(a.pu_cd, '') = ''
             `;
             var retCheckNew = await prisma.$queryRaw(Prisma.raw(sqlCheckNew));
-            if (retCheckNew.length > 0) {
-                var sqlUp = `
-                    update ksv_stock_mem set pu_cd = '${tInObj.PU_CD}'
-                    where  id = '${retCheckNew[0].id}'
-                `;
-                var retUp = await prisma.$queryRaw(Prisma.raw(sqlUp));
-            }
 
             sqlCheckNew = `
-                select
-                     a.id, isnull(a.pu_cd, '') as pu_cd
+                update a set pu_cd = '${tInObj.PU_CD}'
                 from ksv_po_mrp a, kcd_matl_mst b, kcd_matl_mem b1
                 where a.po_cd in (select distinct po_cd from ksv_stock_mem2 where pu_cd = '${tInObj.PU_CD}')
                 and   b.vendor_cd in (select distinct vendor_cd from ksv_pu_mst2 where pu_cd = '${tInObj.PU_CD}')
@@ -4868,13 +4859,6 @@ const moduleQuery_S040102_4_1 = {
                 and   isnull(a.pu_cd, '') = ''
             `;
             retCheckNew = await prisma.$queryRaw(Prisma.raw(sqlCheckNew));
-            if (retCheckNew.length > 0) {
-                var sqlUp = `
-                    update ksv_po_mrp set pu_cd = '${tInObj.PU_CD}'
-                    where  id = '${retCheckNew[0].id}'
-                `;
-                var retUp = await prisma.$queryRaw(Prisma.raw(sqlUp));
-            }
 
 
             if (!args.data.PU_SEQ || args.data.PU_SEQ === 'W') {
