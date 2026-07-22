@@ -176,34 +176,21 @@ const moduleQuery_S0914_FAC_IN_OUT_MANAGER = {
                             ), 0)
                         ) as STOCK,
                         isnull((select sum(in_qty) from ksv_stock_facin where po_cd = a.po_cd and matl_cd = a.matl_cd), 0) as FACIN_BASE,
-                        isnull((select sum(case when etc_type='Shortage' then etc_qty else 0 end) from ksv_stock_facetc where po_cd = a.po_cd and matl_cd = a.matl_cd), 0) as SHORTOVER,
-                        isnull((select sum(case when etc_type='Error' then etc_qty else 0 end) from ksv_stock_facetc where po_cd = a.po_cd and matl_cd = a.matl_cd), 0) as DEFECT,
-                        isnull((select sum(case when etc_type='Other' then etc_qty else 0 end) from ksv_stock_facetc where po_cd = a.po_cd and matl_cd = a.matl_cd), 0) as OTHER0,
+                        isnull((select sum(shortage_qty) from ksv_stock_facin where po_cd = a.po_cd and matl_cd = a.matl_cd), 0) as SHORTOVER,
+                        isnull((select sum(defect_qty) from ksv_stock_facin where po_cd = a.po_cd and matl_cd = a.matl_cd), 0) as DEFECT,
+                        ---isnull((select sum(case when etc_type='Other' then etc_qty else 0 end) from ksv_stock_facetc where po_cd = a.po_cd and matl_cd = a.matl_cd), 0) as OTHER0,
                         isnull((select sum(out_qty) from ksv_stock_facout where po_cd = a.po_cd and matl_cd = a.matl_cd and (remark like '%sasmple%' or remark like '%m_up%' or remark like '%test%')), 0) as OTHER,
                         isnull((select sum(out_qty) from ksv_stock_facout where po_cd = a.po_cd and matl_cd = a.matl_cd and remark like 'defect%'), 0) as DEFECT_A,
                         isnull((select sum(out_qty) from ksv_stock_facout where po_cd = a.po_cd and matl_cd = a.matl_cd and remark like '%main%'), 0) as MAINUSE,
                         isnull((select sum(out_qty) from ksv_stock_facout where po_cd = a.po_cd and matl_cd = a.matl_cd and remark like '%table_shortage%'), 0) as TABLE_SHORT,
                         isnull((select sum(out_qty) from ksv_stock_facout where po_cd = a.po_cd and matl_cd = a.matl_cd and remark like '%keep_stock%'), 0) as KEEP_STOCK,
-                        isnull((select sum(out_qty) from ksv_stock_facout where po_cd = a.po_cd and matl_cd = a.matl_cd and remark like '%move_stock%'), 0) as MOVE_STOCK,
                         isnull((select sum(out_qty) from ksv_stock_facout where po_cd = a.po_cd and matl_cd = a.matl_cd and remark like '%lost%'), 0) as LOST,
                         isnull((select sum(stock_qty) from ksv_stock_matl where po_cd = a.po_cd and matl_cd = a.matl_cd and reason_make='RETURN'), 0) as LINE_RETURN,
                         isnull((select sum(out_qty) from ksv_stock_facout where po_cd = a.po_cd and matl_cd = a.matl_cd), 0) as FACOUT,
-                        isnull((
-                            select
-                                sum(isnull(su.use_qty, 0))
-                            from
-                                ksv_stock_matl sm
-                                inner join ksv_stock_use su on su.stock_idx = sm.stock_idx
-                            where
-                                sm.po_cd = a.po_cd
-                                and sm.matl_cd = a.matl_cd
-                                and sm.stock_status in ('W', 'N')
-                                and su.use_po_cd <> a.po_cd
-                        ), 0) as MOQ_BASE,
+                        isnull((select sum(remain_qty) from ksv_stock_matl where po_cd = a.po_cd and matl_cd = a.matl_cd and stock_status in ('W','N')), 0) as MOQ_BASE,
                         isnull((select sum(po_qty) from ksv_stock_mem where po_cd = a.po_cd and matl_cd = a.matl_cd and po_seq in (98, 99)), 0) as OVERIN,
                         isnull(d.matl_price, 0) as PRICE,
-                        isnull(a.remark, '') as DELAYREMARK,
-                        isnull(a.remark_bvt, '') as REMARK_BVT
+                        isnull(a.remark_bvt, '') as DELAYREMARK
                     from ksv_po_matllist a
                     inner join kcd_vendor b on b.vendor_cd = a.vendor_cd
                     inner join kcd_matl_mst c on c.matl_cd = a.matl_cd
@@ -248,7 +235,6 @@ const moduleQuery_S0914_FAC_IN_OUT_MANAGER = {
                     tObj.OTHER = Number(tObj.OTHER || 0);
                     tObj.TABLE_SHORT = Number(tObj.TABLE_SHORT || 0);
                     tObj.KEEP_STOCK = Number(tObj.KEEP_STOCK || 0);
-                    tObj.MOVE_STOCK = Number(tObj.MOVE_STOCK || 0);
                     tObj.LOST = Number(tObj.LOST || 0);
                     tObj.LINE_RETURN = Number(tObj.LINE_RETURN || 0);
                     tObj.FACOUT = Number(((tObj.SHORTOVER +
@@ -259,17 +245,16 @@ const moduleQuery_S0914_FAC_IN_OUT_MANAGER = {
                             tObj.KEEP_STOCK +
                             tObj.LOST)) - tObj.LINE_RETURN || 0);
                     tObj.MOQ_BASE = Number(tObj.MOQ_BASE || tObj.MOQ || 0);
-                    tObj.MOQ = Number(tObj.MOQ_BASE || 0);
+                    tObj.MOQ = Number(tObj.MOQ || 0); // OVER_IN 미포함
                     tObj.OVERIN = Number(tObj.OVERIN || 0);
                     tObj.PRICE = Number(tObj.PRICE || 0);
                     tObj.DELAYREMARK = tObj.DELAYREMARK || '';
-                    tObj.REMARK_BVT = tObj.REMARK_BVT || tObj.remark_bvt || tObj.DELAYREMARK || '';
 
                     tObj.STOCK = Number(tObj.STOCK || 0);
                     tObj.FACIN = Number(tObj.FACIN_BASE || 0) + Number(tObj.STOCK || 0);
                     tObj.DEFECT = Number(tObj.DEFECT || 0);
                     tObj.MAINUSE = Number(tObj.MAINUSE || 0);
-                    
+                    tObj.MOQ = Number(tObj.MOQ_BASE || 0);
 
                     if (!Number.isFinite(tObj.FACIN)) {
                         tObj.FACIN = Number(tObj.FACIN_BASE || 0) + Number(tObj.STOCK || 0);
@@ -323,7 +308,6 @@ const moduleQuery_S0914_FAC_IN_OUT_MANAGER = {
                     where
                         a.po_cd = '${PO_CD}'
                         and a.order_cd = b.order_cd
-                        ${ORDER_CD ? `and a.order_cd = '${ORDER_CD}'` : ''}
                     order by
                         a.order_cd
                 `;
@@ -339,7 +323,6 @@ const moduleQuery_S0914_FAC_IN_OUT_MANAGER = {
                     where
                         po_cd = '${PO_CD}'
                         and use_po_type = '1'
-                        ${ORDER_CD ? `and order_cd = '${ORDER_CD}'` : ''}
                         -- and use_qty > 0
                         -- and diff_po_type in ('0', '3')
                     group by
@@ -360,7 +343,6 @@ const moduleQuery_S0914_FAC_IN_OUT_MANAGER = {
                     where
                         po_cd = '${PO_CD}'
                         and remark like '%main%'
-                        ${ORDER_CD ? `and order_cd = '${ORDER_CD}'` : ''}
                     group by
                         matl_cd,
                         order_cd
@@ -392,23 +374,20 @@ const moduleQuery_S0914_FAC_IN_OUT_MANAGER = {
                             }
                         });
 
-                        // ORDER_CD 지정 시에는 ORD_CNT 보정값 대신 실제 오더 매핑 데이터만 사용
-                        if (!ORDER_CD) {
-                            // Old C++ OnBnQuery 기준: ORD_CNT(8자리*오더수)에서 오더별 MRP 수량을 추출
-                            const ordCnt = (tOne.ORD_CNT || '').toString();
-                            const chunk = ordCnt.substring(i * 8, i * 8 + 8);
-                            if (
-                                chunk &&
-                                chunk !== '00000000' &&
-                                chunk !== '________'
-                            ) {
-                                const qtyByOrdCnt = parseInt(chunk, 10);
-                                if (Number.isFinite(qtyByOrdCnt) && qtyByOrdCnt > 0) {
-                                    tObj.ORDER_CD = (col as any).order_cd;
-                                    tObj.ORDER_QTY = qtyByOrdCnt.toFixed(2);
-                                    tObj.MAIN_USE = tMainUse;
-                                    tCheck = 1;
-                                }
+                        // Old C++ OnBnQuery 기준: ORD_CNT(8자리*오더수)에서 오더별 MRP 수량을 추출
+                        const ordCnt = (tOne.ORD_CNT || '').toString();
+                        const chunk = ordCnt.substring(i * 8, i * 8 + 8);
+                        if (
+                            chunk &&
+                            chunk !== '00000000' &&
+                            chunk !== '________'
+                        ) {
+                            const qtyByOrdCnt = parseInt(chunk, 10);
+                            if (Number.isFinite(qtyByOrdCnt) && qtyByOrdCnt > 0) {
+                                tObj.ORDER_CD = (col as any).order_cd;
+                                tObj.ORDER_QTY = qtyByOrdCnt.toFixed(2);
+                                tObj.MAIN_USE = tMainUse;
+                                tCheck = 1;
                             }
                         }
 
@@ -436,15 +415,8 @@ const moduleQuery_S0914_FAC_IN_OUT_MANAGER = {
                         }
                     });
                     tOne.DATAS = [...tDatas];
-                    if (ORDER_CD) {
-                        const orderRow = tOne.DATAS.find(
-                            (x: any) => x.ORDER_CD === ORDER_CD,
-                        );
-                        const orderQty = Number(orderRow?.ORDER_QTY || 0);
-                        const mainUseQty = Number(orderRow?.MAIN_USE || 0);
-                        if (!orderRow || (orderQty <= 0 && mainUseQty <= 0)) {
-                            continue;
-                        }
+                    if (ORDER_CD && !tOne.DATAS.some((x: any) => x.ORDER_CD === ORDER_CD)) {
+                        continue;
                     }
                     if (VENDOR_NAME && tOne.VENDOR_NAME.includes(VENDOR_NAME))
                         tRetArray1.push(tOne);
@@ -686,22 +658,30 @@ const moduleQuery_S0914_FAC_IN_OUT_MANAGER = {
                 const sqlStr = `
                     SELECT
                         ROW_NUMBER() OVER (
-                            ORDER BY A.STOCK_STATUS
+                            ORDER BY
+                                USE_DATETIME DESC
                         ) AS id,
-                        ISNULL(B.USE_PO_CD, '') AS USE_PO_CD,
-                        ISNULL(B.USE_ORDER_CD, '') AS USE_ORDER_CD,
-                        B.USE_QTY AS USE_QTY,
-                        B.USE_DATETIME AS USE_DATETIME
+                        ISNULL(USE_PO_CD, '') AS USE_PO_CD,
+                        ISNULL(USE_ORDER_CD, '') AS USE_ORDER_CD,
+                        USE_QTY,
+                        USE_DATETIME
                     FROM
-                        KSV_STOCK_MATL A
-                        INNER JOIN KSV_STOCK_USE B ON B.STOCK_IDX = A.STOCK_IDX
-                            AND B.USE_PO_CD <> '${poCd}'
+                        KSV_STOCK_USE
                     WHERE
-                        A.PO_CD LIKE '%${poCd}%'
-                        AND A.MATL_CD LIKE '%${matlCd}%'
-                        AND A.STOCK_STATUS IN ('W', 'N')
+                        STOCK_IDX IN (
+                            SELECT
+                                STOCK_IDX
+                            FROM
+                                KSV_PO_MRP
+                            WHERE
+                                1 = 1
+                                AND PO_CD like '%${poCd}%'
+                                AND MATL_CD like '%${matlCd}%'
+                                AND PO_SEQ IN ('97', '98', '99')
+                                AND PO_CD IS NOT NULL
+                        )
                     ORDER BY
-                        A.STOCK_STATUS
+                        USE_DATETIME DESC
                 `;
 
                 const ret = await prisma.$queryRaw(Prisma.sql([sqlStr]));
