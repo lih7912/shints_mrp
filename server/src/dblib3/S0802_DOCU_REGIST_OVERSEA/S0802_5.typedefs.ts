@@ -58,6 +58,8 @@ const moduleTypedefs_S0802_5 = gql`
         CRDB_CD: String
         DEPOSIT_AMT: String
         TOTAL_AMT: String
+        PAYMENT_TYPE: String
+        PAYMENT_TYPE_N: String
     }
 
     input I_S0802_5_1 {
@@ -110,6 +112,10 @@ const moduleTypedefs_S0802_5 = gql`
             datas: I_S0802_5_DEPOSIT!
         ): [Ret_S0802_5!]!
         mgrInsert_S0802_5_DELETE_DOCU(
+            datas: [I_S0802_5!]!
+            datas1: I_S0802_5_1!
+        ): [Ret_S0802_5!]!
+        mgrInsert_S0802_5_PROC_FOC(
             datas: [I_S0802_5!]!
             datas1: I_S0802_5_1!
         ): [Ret_S0802_5!]!

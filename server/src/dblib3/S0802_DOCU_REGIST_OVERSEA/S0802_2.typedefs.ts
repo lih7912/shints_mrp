@@ -57,6 +57,8 @@ const moduleTypedefs_S0802_2 = gql`
         RECEIVED_AMT: String
         CRDB_CD: String
         DEPOSIT_AMT: String
+        PAYMENT_TYPE: String
+        PAYMENT_TYPE_N: String
     }
 
     input I_S0802_2 {

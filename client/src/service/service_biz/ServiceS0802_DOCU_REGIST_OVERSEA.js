@@ -198,6 +198,38 @@ export class ServiceS0802_DOCU_REGIST_OVERSEA {
         }
     }
 
+
+    async mgrInsert_PROC_FOC(argData, argData1) {
+        apolloOption.cache = new InMemoryCache();
+        const client = new ApolloClient(apolloOption);
+
+        try {
+            const { loading, error, data } = await this.client.mutate({
+                mutation: gql`
+                    mutation MgrInsert_S0802_5_PROC_FOC(
+                        $datas: [I_S0802_5!]!
+                        $datas1: I_S0802_5_1!
+                    ) {
+                        mgrInsert_S0802_5_PROC_FOC(
+                            datas: $datas
+                            datas1: $datas1
+                        ) {
+                            CODE
+                            id
+                        }
+                    }
+                `,
+                variables: {
+                    datas: argData,
+                    datas1: argData1,
+                },
+            });
+            return data.mgrInsert_S0802_5_PROC_FOC;
+        } catch (e) {
+            return e;
+        }
+    }
+
     async mgrQuery_CODE(argQRY_KSV_STOCK_FACIN) {
         apolloOption.cache = new InMemoryCache();
         const client = new ApolloClient(apolloOption);
@@ -357,6 +389,8 @@ export class ServiceS0802_DOCU_REGIST_OVERSEA {
                             RECEIVED_AMT
                             CRDB_CD
                             DEPOSIT_AMT
+                            PAYMENT_TYPE
+                            PAYMENT_TYPE_N
                         }
                     }
                 `,

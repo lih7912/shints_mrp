@@ -260,6 +260,8 @@ const moduleQuery_S0802_2 = {
                     isnull(A6.INCOME_DATE3, '') as INCOME_DATE3,
                     isnull(A5.CRDB_CD, '') as CRDB_CD,
                     isnull(A5.DEPOSIT_AMT, '0') as DEPOSIT_AMT,
+                    isnull(A5.PAYMENT_TYPE, '') as PAYMENT_TYPE,
+                    isnull(A7.CD_NAME, '') as PAYMENT_TYPE_N,
                     isnull(
                         (
                             select top 1 c.CD_NAME
@@ -314,6 +316,7 @@ const moduleQuery_S0802_2 = {
                     KCD_BUYER A2,
                     KSV_INVOICE_MST A5
                     left join ksv_invoice_info A6 on A5.invoice_no = A6.invoice_no
+                    left join kcd_code A7 on A7.cd_group = 'PAYMENT_TYPE' and A7.cd_code  = A5.payment_type
                 where
                     (
                         A5.DUE_DATE is not null
@@ -386,13 +389,15 @@ const moduleQuery_S0802_2 = {
                     '' as SHIP_PTYPE,
                     A5.DELIVERY_TYPE,
                     '1' as SHIP_QTY,
-                    '1' as ORDER_QTY
+                    '1' as ORDER_QTY,
+                    isnull(A5.PAYMENT_TYPE, '') as PAYMENT_TYPE,
+                    isnull(A10.CD_NAME, '') as PAYMENT_TYPE_N
                 FROM
                     KSV_INVOICE_MST A5
                     left join ksv_invoice_mem A8 on A8.invoice_no = A5.invoice_no
                     left join ksv_invoice_info A6 on A5.invoice_no = A6.invoice_no
-                    left join KCD_CODE A4 on A5.delivery_type = A4.CD_CODE
-                    and A4.CD_GROUP = 'DELIVERY_TYPE',
+                    left join KCD_CODE A4 on A5.delivery_type = A4.CD_CODE and A4.CD_GROUP = 'DELIVERY_TYPE'
+                    left join KCD_CODE A10 on A5.payment_type = A10.CD_CODE and A10.cd_group = 'payment_type',
                     KCD_BUYER A2
                 where
                     (
@@ -562,6 +567,8 @@ const moduleQuery_S0802_2 = {
                 var tObj = {};
 
                 tObj.STATUS_NAME = '제품매출';
+                tObj.PAYMENT_TYPE = col.PAYMENT_TYPE;
+                tObj.PAYMENT_TYPE_N = col.PAYMENT_TYPE_N;
                 tObj.BUYER_NAME = col.BUYER_NAME;
                 tObj.BUYER_CD = col.BUYER_CD;
                 tObj.BUYER_NAT_CD = col.BUYER_NAT_CD;
@@ -703,6 +710,8 @@ const moduleQuery_S0802_2 = {
                 const col = tRet1[tIdx1];
                 var tObj = {};
                 tObj.STATUS_NAME = '기타매출';
+                tObj.PAYMENT_TYPE = col.PAYMENT_TYPE;
+                tObj.PAYMENT_TYPE_N = col.PAYMENT_TYPE_N;
                 tObj.BUYER_NAME = col.BUYER_NAME;
                 tObj.BUYER_CD = col.BUYER_CD;
                 tObj.BUYER_NAT_CD = col.BUYER_NAT_CD;

@@ -531,6 +531,65 @@ const S0802_DOCU_REGIST_OVERSEA = () => {
             });
     };
 
+    const process_PROC_FOC = () => {
+        if (selectedTBL_KSV_ORDER_SHIP.length <= 0) return;
+
+        var _tInput0_0 = [...selectedTBL_KSV_ORDER_SHIP];
+        var _tInput0 = [];
+        var tFlag = 0;
+        var tFlag1 = 0;
+        _tInput0_0.forEach((col, i) => {
+            var tObj = { ...col };
+            if (typeof tObj.__typename !== "undefined") delete tObj.__typename;
+            if (typeof tObj.id !== "undefined") delete tObj.id;
+            if (tObj.DOCU_NO) tFlag = 1;
+            if (tObj.PAYMENT_TYPE !== '2') tFlag1 = 1;
+            _tInput0.push(tObj);
+        });
+
+        if (tFlag === 1) {
+            alert("전표처리된 항목은 전표 처리할수 없습니다.<br><br>.Items that have already been processed as vouchers cannot be processed as vouchers again.");
+            return;
+        }
+        if (tFlag1 === 1) {
+            alert("Payment Type이 FOC인 것만 처리가능합니다.<br><br>Only items with a payment type of FOC can be processed.");
+            return;
+        }
+
+        var tObj = { ...dataEDT_KSV_ORDER_SHIP };
+
+        var tInObj = {};
+        tInObj.DOCU_NO = tObj.DOCU_NO;
+        tInObj.NEOE_CODE = tObj.NEOE_CODE;
+        tInObj.CURR_CD = tObj.CURR_CD;
+        tInObj.AMOUNT = tObj.AMOUNT;
+        tInObj.VAT = tObj.VAT;
+        tInObj.INCOME_DATE = tObj.INCOME_DATE;
+
+        setLoadingTBL_KSV_ORDER_SHIP(true);
+        serviceS0802_DOCU_REGIST_OVERSEA
+            .mgrInsert_PROC_FOC(_tInput0, tInObj)
+            .then((data) => {
+                setLoadingTBL_KSV_ORDER_SHIP(false);
+                if (typeof data.graphQLErrors === "undefined") {
+                    if (typeof data.length === "undefined") {
+                    } else {
+                        alert(data[0].CODE);
+                        if (data[0].CODE.includes("SUCC")) {
+                            var tCols1 = data[0].CODE.split(":");
+                            var tObj1 = { ...dataEDT_KSV_ORDER_SHIP };
+                            tObj1.DOCU_NO = "";
+                            setDataEDT_KSV_ORDER_SHIP(tObj1);
+                            search_LIST_1({});
+                        }
+                        alert("SUCCEED:Insert Order Ship\n" + data[0].CODE);
+                    }
+                } else {
+                    alert("ERROR:Insert Order Ship\n" + JSON.stringify(data.graphQLErrors));
+                }
+            });
+    };
+
     /*QRY KSV_STOCK_FACOUT */
     const [dataQRY_KSV_ORDER_SHIP, setDataQRY_KSV_ORDER_SHIP] = useState(
         emptyQRY_KSV_ORDER_SHIP,
@@ -1676,23 +1735,33 @@ const S0802_DOCU_REGIST_OVERSEA = () => {
                         ></Dropdown>
                     </div>
                 </span>
-                <span className="af-span-3" style={{ width: "13rem" }}>
-                    <div className="af-span-div-btn" style={{ width: "12rem" }}>
+                <span className="af-span-3" style={{ width: "9rem" }}>
+                    <div className="af-span-div-btn" style={{ width: "8rem" }}>
                         <Button
-                            style={{ width: "12rem" }}
+                            style={{ width: "8rem" }}
                             label="자동전표생성"
                             className="p-button-text"
                             onClick={process_DOCU_REGIST}
                         />
                     </div>
                 </span>
-                <span className="af-span-3" style={{ width: "13rem" }}>
-                    <div className="af-span-div-btn" style={{ width: "12rem" }}>
+                <span className="af-span-3" style={{ width: "9rem" }}>
+                    <div className="af-span-div-btn" style={{ width: "8rem" }}>
                         <Button
-                            style={{ width: "12rem" }}
+                            style={{ width: "8rem" }}
                             label="자동전표삭제"
                             className="p-button-text"
                             onClick={process_DOCU_DELETE}
+                        />
+                    </div>
+                </span>
+                <span className="af-span-3" style={{ width: "9rem" }}>
+                    <div className="af-span-div-btn" style={{ width: "8rem" }}>
+                        <Button
+                            style={{ width: "8rem" }}
+                            label="자동전표생략"
+                            className="p-button-text"
+                            onClick={process_PROC_FOC}
                         />
                     </div>
                 </span>
@@ -1924,6 +1993,7 @@ const S0802_DOCU_REGIST_OVERSEA = () => {
                     <AFColumn field="SHIP_DATE" header="ETD" headerStyle={{ width: "8rem", height: "1.8rem" }} bodyStyle={{ width: "10rem", height: "1.8rem" }} body={(rowData) => serviceLib.dateFormatHMS(rowData.SHIP_DATE) } ></AFColumn>
                     <AFColumn field="ATD" header="ATD" headerStyle={{ width: "8rem", height: "1.8rem" }} bodyStyle={{ width: "10rem", height: "1.8rem" }} body={(rowData) => serviceLib.dateFormatHMS(rowData.ATD) } ></AFColumn>
                     <AFColumn field="INCOME_DATE" header="입금예정일" headerStyle={{ width: "8rem", height: "1.8rem" }} bodyStyle={{ width: "10rem", height: "1.8rem" }} body={(rowData) => serviceLib.dateFormatHMS(rowData.INCOME_DATE) } ></AFColumn>
+                    <AFColumn field="PAYMENT_TYPE_N" header="Payment" headerStyle={{ width: "10rem", height: "1.8rem" }} bodyStyle={{ width: "10rem", height: "1.8rem" }} ></AFColumn>
                     <AFColumn field="DELIVERY_TYPE_N" header="Ship Mode" headerStyle={{ width: "10rem", height: "1.8rem" }} bodyStyle={{ width: "10rem", height: "1.8rem" }} ></AFColumn>
                     <AFColumn field="FROM_PORT_N" header="From" headerStyle={{ width: "5rem", height: "1.8rem" }} bodyStyle={{ width: "10rem", height: "1.8rem" }} ></AFColumn>
                     <AFColumn field="TO_PORT_N" header="To" headerStyle={{ width: "10rem", height: "1.8rem" }} bodyStyle={{ width: "10rem", height: "1.8rem" }} ></AFColumn>

@@ -234,6 +234,76 @@ const moduleMutation_S0802_5 = {
             return tRetArray;
         },
 
+        mgrInsert_S0802_5_PROC_FOC: async (_, args, contextValue) => {
+            var tRetDate = AFLib.getCurrTime();
+            var tRetDate1 = tRetDate.substring(0, 8);
+            var tUserInfo = AFLib.getUserInfo(contextValue);
+
+            var tInput1 = [...args.datas];
+
+            var tSQLArray = [];
+
+            var tIdx = 0;
+            for (tIdx = 0; tIdx < tInput1.length; tIdx++) {
+                var tRetDate0 = AFLib.getCurrTime();
+                var tInput2 = { ...tInput1[tIdx] };
+
+                // FOC가 아니면 처리불가
+                if (tInput2.PAYMENT_TYPE !== '2') continue;
+
+                let sql0= `
+                    select
+                        *
+                    from
+                        ksv_invoice_mst 
+                    where
+                        invoice_no = '${tInput2.INVOICE_NO}'
+                `;
+                var ret0  = await prisma.$queryRaw(Prisma.raw(sql0));
+                if (ret0.length <= 0) continue;
+                var tInvoiceObj = { ...ret0[0] };
+
+                // 전표가 처리되었으면  처리불가
+                if (tInvoiceObj.DOCU_NO) continue;
+
+                var tDocuNo = `FOC_${tInput2.INVOICE_NO}`;
+                let tSQL99 = `
+                    update ksv_invoice_mst
+                    set
+                        docu_no = '${tDocuNo}',
+                        income_date = '${tUserInfo.USER_ID}'
+                    where
+                        invoice_no = '${tInput2.INVOICE_NO}'
+                `;
+                const tSQL99_1 = prisma.$queryRaw(Prisma.raw(tSQL99));
+                tSQLArray.push(tSQL99_1);
+            }
+
+            try {
+                global.currentTransactionInfo = {
+                    contextValue: contextValue,
+                    functionName: AFLib.getFunctionName(),
+                };
+                await prisma.$transaction(tSQLArray);
+                delete global.currentTransactionInfo;
+            } catch (e) {
+                var tRetArray = [];
+                var tObj = {};
+                tObj.CODE = 'ERROR:무상전표 생략 처리';
+                tObj.id = 0;
+                tRetArray.push(tObj);
+                return tRetArray;
+            }
+
+            var tRetArray = [];
+            var tObj = {};
+            tObj.CODE = 'SUCCEED:무상전표 생략 처리';
+            tObj.id = 0;
+            tRetArray.push(tObj);
+
+            return tRetArray;
+        },
+
         mgrInsert_S0802_5_INSERT_DOCU: async (_, args, contextValue) => {
             var tRetDate = AFLib.getCurrTime();
             var tRetDate1 = tRetDate.substring(0, 8);
