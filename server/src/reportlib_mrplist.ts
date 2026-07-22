@@ -2,17 +2,194 @@ import { Prisma } from '@prisma/client';
 import prisma from './db'; //PrismaClient 사용하기 위해 불러오기
 import AFLib from './commlib'; //PrismaClient 사용하기 위해 불러오기
 import AFLib2 from './po_adjust'; //PrismaClient 사용하기 위해 불러오기
+import { MrpProcedureMigration } from './mrpProcedureMigration';
 const Excel = require('exceljs');
+const aws = require('aws-sdk');
 const {
     generateUploadURL,
+    generateDownloadURL,
     deleteUploadObject,
     upload,
 } = require('../routes/s3');
 const { MongoClient } = require('mongodb');
 
 const moment = require('moment');
+const mrpMigration = new MrpProcedureMigration(prisma);
 
 class RPT_S030513_QRY_COMM {
+    private isFlagOn(value: any): boolean {
+        return value === '1' || value === 1 || value === true;
+    }
+
+    private isMrpByStyle(args: any): boolean {
+        return this.isFlagOn(args?.data?.MRP_BY_STYLE);
+    }
+
+    private isMrpByOrder(args: any): boolean {
+        return this.isFlagOn(args?.data?.MRP_BY_ORDER);
+    }
+
+    private getMrpModeTag(args: any): string {
+        if (this.isMrpByStyle(args)) return 'S';
+        if (this.isMrpByOrder(args)) return 'M';
+        return '';
+    }
+
+    private setNumberCell4(sheet: any, row: number, col: number, rawValue: any) {
+        const num = Number(rawValue);
+        const value = Number.isFinite(num) ? parseFloat(num.toFixed(4)) : 0;
+        const cell = sheet.getCell(row, col);
+        cell.value = value;
+        cell.numFmt = '0.0000';
+    }
+
+    private normalizeCurrency(rawValue: any): string {
+        return String(rawValue || '').replace(/\*/g, '').trim();
+    }
+
+    private toSafeFileStem(rawValue: any, fallback: string = 'MRPLIST'): string {
+        const normalized = String(rawValue || '')
+            .replace(/[\\/:*?"<>|]/g, '-')
+            .replace(/[\r\n\t]/g, ' ')
+            .replace(/\s+/g, ' ')
+            .replace(/\.+$/g, '')
+            .trim();
+
+        return normalized || fallback;
+    }
+
+    private setSeqHeader1to10(sheet: any, headerRow: number) {
+        for (let seqHeader = 1; seqHeader <= 10; seqHeader++) {
+            const colIdx = 2 + seqHeader;
+            const cell = sheet.getCell(headerRow, colIdx);
+            cell.value = Number(seqHeader);
+            
+            cell.alignment = {
+                horizontal: 'center',
+                vertical: 'middle',
+            };
+        }
+    }
+
+    private async runMigratedMrpChain(args: any, userId: string, orderCd: string) {
+        if (this.isMrpByStyle(args)) {
+            const ret = await mrpMigration.runNetProduct({
+                poCd: args.data.PO_CD,
+                userId,
+            });
+            if (!ret.ok) throw new Error(ret.message || ret.step);
+        }
+
+        if (this.isMrpByOrder(args)) {
+            if (args.data.PO_SEQ !== 'temp') {
+                const ret1 = await mrpMigration.runNetTemp({
+                    poCd: args.data.PO_CD,
+                    userId,
+                    orderCd,
+                });
+                if (!ret1.ok) throw new Error(ret1.message || ret1.step);
+
+                const ret2 = await mrpMigration.runNetTempZip({
+                    poCd: args.data.PO_CD,
+                    userId,
+                    orderCd,
+                });
+                if (!ret2.ok) throw new Error(ret2.message || ret2.step);
+            } else {
+                const ret1 = await mrpMigration.runNetTempSeq({
+                    poCd: args.data.PO_CD,
+                    userId,
+                    orderMrpSeq: args.data.PO_SEQ,
+                });
+                if (!ret1.ok) throw new Error(ret1.message || ret1.step);
+            }
+        }
+
+        const ret3 = await mrpMigration.runMrpTemp({
+            poCd: args.data.PO_CD,
+            userId,
+        });
+        if (!ret3.ok) throw new Error(ret3.message || ret3.step);
+    }
+
+    private async runMigratedMrpChainCombined(args: any, userId: string, orderCd: string) {
+        if (this.isMrpByStyle(args)) {
+            const ret = await mrpMigration.runNetProduct({
+                poCd: args.data.PO_CD,
+                userId,
+            });
+            if (!ret.ok) throw new Error(ret.message || ret.step);
+        }
+
+        if (this.isMrpByOrder(args)) {
+            if (args.data.PO_SEQ !== 'temp') {
+                const ret1 = await mrpMigration.runNetTemp({
+                    poCd: args.data.PO_CD,
+                    userId,
+                });
+                if (!ret1.ok) throw new Error(ret1.message || ret1.step);
+
+                const sql2 = `
+                    select
+                        b.order_cd
+                    from
+                        ksv_po_mem a,
+                        ksv_order_mst b
+                    where
+                        a.po_cd = '${args.data.PO_CD}'
+                        and a.order_cd = left(b.order_cd, 10)
+                        and a.po_seq = '1'
+                        and left(b.order_cd, 10) = '${orderCd}'
+                        and b.order_type = '2'
+                    order by
+                        1
+                `;
+                const tRet2 = await prisma.$queryRaw(Prisma.raw(sql2));
+                for (let tIdx = 0; tIdx < tRet2.length; tIdx++) {
+                    const tOne: any = tRet2[tIdx];
+                    const retZip = await mrpMigration.runNetTempZipComb({
+                        poCd: args.data.PO_CD,
+                        userId,
+                        orderCd: tOne.order_cd,
+                    });
+                    if (!retZip.ok) throw new Error(retZip.message || retZip.step);
+                }
+            } else {
+                const ret1 = await mrpMigration.runNetTempSeq({
+                    poCd: args.data.PO_CD,
+                    userId,
+                    orderMrpSeq: args.data.PO_SEQ,
+                });
+                if (!ret1.ok) throw new Error(ret1.message || ret1.step);
+            }
+        }
+
+        const ret3 = await mrpMigration.runMrpTemp({
+            poCd: args.data.PO_CD,
+            userId,
+        });
+        if (!ret3.ok) throw new Error(ret3.message || ret3.step);
+    }
+
+    private async hasCombinedOrderChildren(poCd: string, orderCd: string) {
+        const sql = `
+            select
+                a.order_cd
+            from
+                ksv_order_mst a,
+                ksv_po_mem b
+            where
+                b.po_cd = '${poCd}'
+                and left(a.order_cd, 10) = b.order_cd
+                and a.order_cd like '${orderCd}-%'
+                and b.po_seq = '1'
+            order by
+                1
+        `;
+        const rows = (await prisma.$queryRaw(Prisma.raw(sql))) as any[];
+        return rows.length > 0;
+    }
+
     async REPORT_MRP_LIST(args0, contextValue, argOrderCds) {
         var args = {
             ...args0,
@@ -45,6 +222,8 @@ class RPT_S030513_QRY_COMM {
 
         console.log('REPORT_MRP_LIST step-1');
 
+        var tGeneratedFiles: any[] = [];
+
         var tIdx999 = 0;
         var argOrderCd = '';
         for (tIdx999 = 0; tIdx999 < argOrderCds.length; tIdx999++) {
@@ -60,97 +239,38 @@ class RPT_S030513_QRY_COMM {
             var tWExcelFile = '';
             var tRetExcelFile = '';
 
-            if (args.data.MRP_BY_STYLE === '1') {
-                let sql1 = `
-                  exec kspPoMrpNetProduct '${args.data.PO_CD}',  '${tUserInfo.USER_ID}'
-                   `;
-                var tRet_sql1 = await prisma.$queryRaw(Prisma.raw(sql1));
-            }
-
-            if (args.data.MRP_BY_ORDER === '1') {
-                // if (args.data.PO_SEQ === '') {
-                if (args.data.PO_SEQ !== 'temp') {
-                    let sql1 = `
-                      exec kspPoMrpNetTemp '${args.data.PO_CD}',  '${tUserInfo.USER_ID}'
-                       `;
-                    var tRet1 = await prisma.$queryRaw(Prisma.raw(sql1));
-
-                    let sql2 = `
-                        select distinct
-                            a.order_cd
-                        from
-                            ksv_po_mem a
-                        where
-                            a.po_cd = '${args.data.PO_CD}'
-                            and a.order_cd = '${argOrderCd}'
-                    `;
-                    var tRet2 = await prisma.$queryRaw(Prisma.raw(sql2));
-                    var tIdx = 0;
-                    for (tIdx = 0; tIdx < tRet2.length; tIdx++) {
-                        var tOne = {
-                            ...tRet2[tIdx],
-                        };
-                        if (tOne.order_cd.substring(5, 6) === 'C') {
-                            let sql11 = `
-                                select
-                                    a.order_cd
-                                from
-                                    ksv_order_mst a,
-                                    ksv_po_mem b
-                                where
-                                    b.po_cd = '${args.data.PO_CD}'
-                                    and left(a.order_cd, 10) = b.order_cd
-                                    and a.order_cd like '${tOne.order_cd}-%'
-                                    and b.po_seq = '1'
-                                order by
-                                    1
-                            `;
-                            var tRet_sql11 = await prisma.$queryRaw(
-                                Prisma.raw(sql11),
-                            );
-                            if (tRet_sql11.length <= 0) {
-                                let sql1 = `
-                                  exec kspPoMrpNetTempZip '${args.data.PO_CD}', '${tUserInfo.USER_ID}', '${tOne.order_cd}' 
-                              `;
-                                var sql1 = await prisma.$queryRaw(
-                                    Prisma.raw(sql1),
-                                );
-                            } else {
-                                var tIdx1 = 0;
-                                for (
-                                    tIdx1 = 0;
-                                    tIdx1 < tRet_sql11.length;
-                                    tIdx1++
-                                ) {
-                                    var tOne1 = tRet_sql11[tIdx1];
-                                    let sql1 = `
-                                        exec kspPoMrpNetTempZipComb '${args.data.PO_CD}','${tUserInfo.USER_ID}','${tOne1.order_cd}'
-                                  `;
-                                    var sql1 = await prisma.$queryRaw(
-                                        Prisma.raw(sql1),
-                                    );
-                                }
-                            }
-                        } else {
-                            let sql1 = `
-                              exec kspPoMrpNetTempZip '${args.data.PO_CD}', '${tUserInfo.USER_ID}', '${tOne.order_cd}' 
-                          `;
-                            var sql1 = await prisma.$queryRaw(Prisma.raw(sql1));
-                        }
-                    }
+            if (this.isMrpByOrder(args)) {
+                const hasCombinedChildren = await this.hasCombinedOrderChildren(
+                    args.data.PO_CD,
+                    argOrderCd,
+                );
+                if (hasCombinedChildren) {
+                    await this.runMigratedMrpChainCombined(
+                        args,
+                        tUserInfo.USER_ID,
+                        argOrderCd,
+                    );
                 } else {
-                    // 에러 수정할것 : args.data.PO_SEQ는 po_seq가 아니 order_mrp_seq임
-                    let sql1 = `
-                          exec kspPoMrpNetTempSeq '${args.data.PO_CD}','${tUserInfo.USER_ID}','${args.data.PO_SEQ}'
-                       `;
-                    var tRet1 = await prisma.$queryRaw(Prisma.raw(sql1));
+                    await this.runMigratedMrpChain(
+                        args,
+                        tUserInfo.USER_ID,
+                        argOrderCd,
+                    );
                 }
+            } else {
+                await this.runMigratedMrpChain(
+                    args,
+                    tUserInfo.USER_ID,
+                    argOrderCd,
+                );
             }
 
-            let sql40 = `
-               exec kspPoMrpTemp '${args.data.PO_CD}',  '${tUserInfo.USER_ID}'
-                `;
-            var tRet40 = await prisma.$queryRaw(Prisma.raw(sql40));
+            // Previous direct path kept for quick replacement if needed.
+            // await this.runMigratedMrpChain(
+            //     args,
+            //     tUserInfo.USER_ID,
+            //     argOrderCd,
+            // );
 
             try {
                 var tOrderCd = argOrderCd;
@@ -190,7 +310,8 @@ class RPT_S030513_QRY_COMM {
 
                 let sql4 = `
                     select
-                        e.style_name
+                        e.style_name,
+                        a.order_status
                     from
                         ksv_order_mst a,
                         kcd_style e
@@ -199,6 +320,12 @@ class RPT_S030513_QRY_COMM {
                         and e.style_cd = a.style_cd
                 `;
                 var tRet4 = await prisma.$queryRaw(Prisma.raw(sql4));
+                
+                // ORDER STATUS 확인
+                if (tRet4[0].order_status === 4 || tRet4[0].order_status === '4') {
+                    throw new Error('CANNOT DOWNLOAD FOR CANCEL ORDER. PLEASE CHECK THE ORDER STATUS');
+                }
+                
                 var tStyleName = tRet4[0].style_name;
                 var tStyleName_org = tStyleName;
                 tStyleName = tStyleName.replace(/ /gi, '_');
@@ -208,7 +335,7 @@ class RPT_S030513_QRY_COMM {
 
                 var tTemplateExcel = `${tPath0}/${tTemplateName}.xlsx`;
                 if (args.data.MRP_BY_STYLE === '1')
-                    tWExcelFile = `${tOrderCd}-${tStyleName}-${moment().format('YYYYMMDDHHmmss')}P`;
+                    tWExcelFile = `${tOrderCd}-${tStyleName}-${moment().format('YYYYMMDDHHmmss')}S`;
                 else if (args.data.MRP_BY_ORDER === '1')
                     tWExcelFile = `${tOrderCd}-${tStyleName}-${moment().format('YYYYMMDDHHmmss')}M`;
                 else
@@ -283,7 +410,7 @@ class RPT_S030513_QRY_COMM {
                 tSizeGroup = tOrderInfo.size_group.replace(/\[/, '[[');
 
                 var tHeader = AFLib.printF_Space(' ', 3, 'L');
-                tHeader += AFLib.printF_Space('SEQ', 5, 'L');
+                tHeader += AFLib.printF_Space('SEQ', 10, 'L');
                 tHeader += AFLib.printF_Space('COLOR', 30, 'L');
                 tHeader += AFLib.printF_Space('QTY', 10, 'L');
 
@@ -336,6 +463,8 @@ class RPT_S030513_QRY_COMM {
                 var tColSeq = 0;
                 var tRowIdx = 5;
                 var tSumTotCnt = 0;
+                const tColorSeqMap: { [key: string]: number } = {};
+                var tNextSeq = 1;
 
                 tRet5.forEach((col, i) => {
                     var tmpRow = [];
@@ -354,8 +483,17 @@ class RPT_S030513_QRY_COMM {
                         tProdCnt[tIdx2] += tSizeCnt;
                     }
 
+                    const tColorKey = String(col.color || '')
+                        .replace(/\s+/g, ' ')
+                        .trim()
+                        .toUpperCase();
+                    if (tColorSeqMap[tColorKey] === undefined) {
+                        tColorSeqMap[tColorKey] = tNextSeq;
+                        tNextSeq += 1;
+                    }
+
                     var tData = AFLib.printF_Space(col.add_flag, 3, 'L');
-                    tData += AFLib.printF_Space(i + 1, 5, 'L');
+                    tData += AFLib.printF_Space(tColorSeqMap[tColorKey], 10, 'L');
                     tData += AFLib.printF_Space(col.color, 30, 'L');
                     tData += AFLib.printF_Space(tTotCnt, 10, 'L');
                     tIdx2 = 0;
@@ -374,7 +512,7 @@ class RPT_S030513_QRY_COMM {
                 });
 
                 var tData = AFLib.printF_Space(' ', 3, 'L');
-                tData += AFLib.printF_Space(' ', 5, 'L');
+                tData += AFLib.printF_Space(' ', 10, 'L');
                 tData += AFLib.printF_Space('Total', 30, 'L');
                 tData += AFLib.printF_Space(tSumTotCnt, 10, 'L');
 
@@ -396,21 +534,24 @@ class RPT_S030513_QRY_COMM {
 
                 tRowIdx += 3;
 
-                let sql5 = '';
-                let tRet5 = '';
-                if (
-                    args.data.MRP_BY_ORDER === '0' &&
-                    args.data.MRP_BY_STYLE === '0'
-                ) {
-                    sql5 = `
-                            exec kspPrintMrp0 '${args.data.PO_CD}','${tOrderCd}','${tUserInfo.USER_ID}','${tRetDate1}'
-                        `;
-                    tRet5 = await prisma.$queryRaw(Prisma.raw(sql5));
+                if (!this.isMrpByOrder(args) && !this.isMrpByStyle(args)) {
+                    const retPrint = await mrpMigration.runPrintMrp0({
+                        poCd: args.data.PO_CD,
+                        orderCd: tOrderCd,
+                        userId: tUserInfo.USER_ID,
+                        currDate: tRetDate1,
+                    });
+                    if (!retPrint.ok)
+                        throw new Error(retPrint.message || retPrint.step);
                 } else {
-                    sql5 = `
-                            exec kspPrintMrp1 '${args.data.PO_CD}','${tOrderCd}','${tUserInfo.USER_ID}','${tRetDate1}'
-                        `;
-                    tRet5 = await prisma.$queryRaw(Prisma.raw(sql5));
+                    const retPrint = await mrpMigration.runPrintMrp1({
+                        poCd: args.data.PO_CD,
+                        orderCd: tOrderCd,
+                        userId: tUserInfo.USER_ID,
+                        currDate: tRetDate1,
+                    });
+                    if (!retPrint.ok)
+                        throw new Error(retPrint.message || retPrint.step);
                 }
 
                 let sql6 = `
@@ -421,7 +562,7 @@ class RPT_S030513_QRY_COMM {
                     where
                         po_cd = '${args.data.PO_CD}'
                         and po_seq > 1
-                        and po_seq < 98
+                        and po_seq < 97
                 `;
                 var tRet6 = await prisma.$queryRaw(Prisma.raw(sql6));
                 var tLastPoSeq1 = 0;
@@ -488,23 +629,28 @@ class RPT_S030513_QRY_COMM {
                         ex_seq
                 `;
                 var tRet8 = await prisma.$queryRaw(Prisma.raw(sql8));
+                let tRet8StartRow = tRowIdx;
+                let tRet8EndRow = tRowIdx - 1;
+                let tCurrSourceCol = 0;
+                let tAmtSourceCol = 0;
 
                 if (args.data.LOCAL_WORD === '1') {
                     if (args.data.WITHOUT_PRICE === '0') {
                         sheet.getCell(tRowIdx - 1, 32).value = 'Usd Price';
                         sheet.getCell(tRowIdx - 1, 33).value = 'Kind2';
                     } else {
-                        sheet.getCell(tRowIdx - 1, 26).value = 'Kind2';
-                        sheet.getCell(tRowIdx - 1, 27).value = 'Vendor';
+                        sheet.getCell(tRowIdx - 1, 26).value = 'NatName';
+                        sheet.getCell(tRowIdx - 1, 27).value = 'Kind2';
                     }
                 } else {
                     if (args.data.WITHOUT_PRICE === '0') {
                         //sheet.getCell(tRowIdx-1, 31).value = 'Usd Price';
                         //sheet.getCell(tRowIdx-1, 32).value = 'Kind2';
                     } else {
-                        sheet.getCell(tRowIdx - 1, 25).value = 'Kind2';
+                        sheet.getCell(tRowIdx - 1, 26).value = 'NatName';
                     }
                 }
+
 
                 tRet8.forEach((col, i) => {
                     var tUseCheck = col.ex29;
@@ -530,7 +676,7 @@ class RPT_S030513_QRY_COMM {
                     const isHighlighted = tRet7.some(
                         (row) => row.matl_cd === tMatlCd,
                     );
-                    if (isHighlighted) {
+                    if (isHighlighted && tLastPoSeq1 > 1) {
                         for (let colIdx = 1; colIdx <= 29; colIdx++) {
                             const cell = sheet.getCell(tRowIdx, colIdx);
                             cell.fill = {
@@ -606,6 +752,7 @@ class RPT_S030513_QRY_COMM {
                         if (args.data.LOCAL_WORD === '1') {
                             sheet.getCell(tRowIdx, j++).value = col.ex34; // Bvt-Usage
                             sheet.getCell(tRowIdx, j++).value = col.ex28; // Vendor
+                            sheet.getCell(tRowIdx, j++).value = tNatName; // NatName
                             sheet.getCell(tRowIdx, j++).value = col.ex37; // Kind2
                             sheet.getCell(tRowIdx, j++).value = col.cus_name; // CusName
                             sheet.getCell(tRowIdx, j++).value = col.cus_code; // CusCode
@@ -613,20 +760,27 @@ class RPT_S030513_QRY_COMM {
                         } else {
                             sheet.getCell(tRowIdx, j++).value = col.ex28; // Vendor
                             sheet.getCell(tRowIdx, j++).value = col.ex37; // Kind2
+                            sheet.getCell(tRowIdx, j++).value = tNatName; // NatName
                             sheet.getCell(tRowIdx, j++).value = col.cus_name; // CusName
                             sheet.getCell(tRowIdx, j++).value = col.cus_code; // CusCode
                             sheet.getCell(tRowIdx, j++).value = col.cus_unit; // CusUnit
                         }
                     } else {
-                        //sheet.getCell(tRowIdx, j++).value = col.ex21; // Price
-                        //sheet.getCell(tRowIdx, j++).value = col.ex22;// curr
+                        this.setNumberCell4(sheet, tRowIdx, j++, col.ex21); // Price
+                        const currColIdx = j;
+                        sheet.getCell(tRowIdx, currColIdx).value = this.normalizeCurrency(col.ex22); // curr
+                        if (tCurrSourceCol === 0) tCurrSourceCol = currColIdx;
+                        j++;
                         if (args.data.LOCAL_WORD === '1') {
-                            sheet.getCell(tRowIdx, j++).value = col.ex21; // Price
-                            sheet.getCell(tRowIdx, j++).value = col.ex22; // curr
+                            this.setNumberCell4(sheet, tRowIdx, j++, col.ex21); // Price
+                            sheet.getCell(tRowIdx, j++).value = this.normalizeCurrency(col.ex22); // curr
                             sheet.getCell(tRowIdx, j++).value = col.ex23; // Size
-                            sheet.getCell(tRowIdx, j++).value = col.ex24; // Amt
-                            sheet.getCell(tRowIdx, j++).value = col.ex25; // Amt(S)
-                            sheet.getCell(tRowIdx, j++).value = col.ex26; // Amt($/Unit)
+                            const amtColIdx = j;
+                            this.setNumberCell4(sheet, tRowIdx, amtColIdx, col.ex24); // Amt
+                            if (tAmtSourceCol === 0) tAmtSourceCol = amtColIdx;
+                            j++;
+                            this.setNumberCell4(sheet, tRowIdx, j++, col.ex25); // Amt(S)
+                            this.setNumberCell4(sheet, tRowIdx, j++, col.ex26); // Amt($/Unit)
                             sheet.getCell(tRowIdx, j++).value = col.ex27; // Usage
                             sheet.getCell(tRowIdx, j++).value = col.ex34; // Bvt Remark
                             sheet.getCell(tRowIdx, j++).value = col.ex28; // Vendor
@@ -637,13 +791,21 @@ class RPT_S030513_QRY_COMM {
                             sheet.getCell(tRowIdx, j++).value = col.cus_unit; // CusUnit
                         } else {
                             sheet.getCell(tRowIdx, j++).value = col.ex23; // Size
+                            const amtColIdx = j;
+                            this.setNumberCell4(sheet, tRowIdx, amtColIdx, col.ex24); // Amt
+                            if (tAmtSourceCol === 0) tAmtSourceCol = amtColIdx;
+                            j++;
+                            this.setNumberCell4(sheet, tRowIdx, j++, col.ex25); // Amt(S)
+                            this.setNumberCell4(sheet, tRowIdx, j++, col.ex26); // Amt($/Unit)
                             sheet.getCell(tRowIdx, j++).value = col.ex27; // Usage
                             sheet.getCell(tRowIdx, j++).value = col.ex28; // Vendor
+                            /*
                             sheet.getCell(tRowIdx, j++).value = col.ex37; // KInd2 (24-37)
                             sheet.getCell(tRowIdx, j++).value = '';
                             sheet.getCell(tRowIdx, j++).value = col.cus_name; // CusName
                             sheet.getCell(tRowIdx, j++).value = col.cus_code; // CusCode
                             sheet.getCell(tRowIdx, j++).value = col.cus_unit; // CusUnit
+                            */
                         }
                     }
 
@@ -665,6 +827,7 @@ class RPT_S030513_QRY_COMM {
                     }
                     tRowIdx += 1;
                 });
+                tRet8EndRow = tRowIdx - 1;
 
                 tRowIdx += 2;
 
@@ -702,7 +865,8 @@ class RPT_S030513_QRY_COMM {
                         ex27,
                         ex28,
                         ex36 as ex29,
-                        ex37 as ex30
+                        ex37 as ex30,
+                        ex35
                     from
                         kzz_excel
                     where
@@ -712,6 +876,7 @@ class RPT_S030513_QRY_COMM {
                         ex_seq
                 `;
                 var tRet9 = await prisma.$queryRaw(Prisma.raw(sql9));
+
                 tRet9.forEach((col, i) => {
                     var tUseCheck = col.ex29;
                     var tNatName = col.ex35;
@@ -730,6 +895,7 @@ class RPT_S030513_QRY_COMM {
                     sheet.getCell(tRowIdx, 11).value = col.ex10;
                     sheet.getCell(tRowIdx, 12).value = col.ex11;
                     sheet.getCell(tRowIdx, 13).value = col.ex12;
+
                     sheet.getCell(tRowIdx, 14).value = `'${col.ex13}`;
                     sheet.getCell(tRowIdx, 15).value = col.ex14.replace(
                         /=/,
@@ -746,13 +912,14 @@ class RPT_S030513_QRY_COMM {
                         sheet.getCell(tRowIdx, 23).value = col.ex27;
                         sheet.getCell(tRowIdx, 24).value = col.ex28;
                         sheet.getCell(tRowIdx, 25).value = col.ex30;
+                        sheet.getCell(tRowIdx, 26).value = tNatName;
                     } else {
-                        sheet.getCell(tRowIdx, 22).value = col.ex21;
-                        sheet.getCell(tRowIdx, 23).value = col.ex22;
+                        this.setNumberCell4(sheet, tRowIdx, 22, col.ex21);
+                        sheet.getCell(tRowIdx, 23).value = this.normalizeCurrency(col.ex22);
                         sheet.getCell(tRowIdx, 24).value = `'${col.ex23}`;
-                        sheet.getCell(tRowIdx, 25).value = col.ex24;
+                        this.setNumberCell4(sheet, tRowIdx, 25, col.ex24);
                         sheet.getCell(tRowIdx, 26).value = col.ex25;
-                        sheet.getCell(tRowIdx, 27).value = col.ex26;
+                        this.setNumberCell4(sheet, tRowIdx, 27, col.ex26);
                         sheet.getCell(tRowIdx, 28).value = col.ex27;
                         sheet.getCell(tRowIdx, 29).value = col.ex28;
                         sheet.getCell(tRowIdx, 30).value = col.ex29;
@@ -766,63 +933,120 @@ class RPT_S030513_QRY_COMM {
                 if (args.data.WITHOUT_PRICE !== '1') {
                     var j = 0;
                     if (args.data.LOCAL_WORD === '1') j = 1;
-                    sheet.getCell(tRowIdx, 24 + j).value = 'Curr';
-                    sheet.getCell(tRowIdx, 25 + j).value = 'Amount';
-                    sheet.getCell(tRowIdx, 26 + j).value = 'Rate';
-                    sheet.getCell(tRowIdx, 27 + j).value = 'ChgAmount';
+                    const currCol = 24 + j;
+                    const amtCol = 25 + j;
+                    const rateCol = 26 + j;
+                    const chgCol = 27 + j;
+                    const summaryStartRow = tRowIdx;
+
+                    sheet.getCell(tRowIdx, currCol).value = 'Curr';
+                    sheet.getCell(tRowIdx, amtCol).value = 'Amount';
+                    sheet.getCell(tRowIdx, rateCol).value = '$Rate';
+                    sheet.getCell(tRowIdx, chgCol).value = '$ChgAmount';
                     tRowIdx += 1;
 
-                    let sql91 = `
-                        select
-                            c.curr_cd,
-                            sum(a.use_qty * c.matl_price) as sum1,
-                            f.usd_rate,
-                            f.won_amt
-                        from
-                            ksv_po_mrp a,
-                            kcd_matl_mem c,
-                            kcd_currency f
-                        where
-                            a.po_cd = '${args.data.PO_CD}'
-                            and a.order_cd = '${tOrderCd}'
-                            and a.use_po_type = '1'
-                            and a.diff_po_type <> '2'
-                            and c.matl_cd = a.matl_cd
-                            and c.matl_seq = a.matl_seq
-                            and f.curr_cd = a.curr_cd
-                            and f.start_date = '${args.data.CURR_DATE}'
-                        group by
-                            c.curr_cd,
-                            f.usd_rate,
-                            f.won_amt
-                        order by
-                            c.curr_cd
-                    `;
-
-                    var tRet91 = await prisma.$queryRaw(Prisma.raw(sql91));
-                    var tDwAmt = 0;
-
-                    tRet91.forEach((col, i) => {
-                        sheet.getCell(tRowIdx, 24 + j).value = col.curr_cd;
-                        sheet.getCell(tRowIdx, 25 + j).value = col.sum1;
-                        sheet.getCell(tRowIdx, 26 + j).value = col.usd_rate;
-                        tDwAmt +=
-                            parseFloat(col.sum1) * parseFloat(col.usd_rate);
-                        sheet.getCell(tRowIdx, 27 + j).value = col.won_amt;
-                        tRowIdx += 1;
+                    // Extract distinct currencies from tRet8 (ex22) - remove '*'
+                    const currencyMap = new Map<string, boolean>();
+                    tRet8.forEach((col) => {
+                        const currStr = String(col.ex22 || '').trim();
+                        const cleanCurr = currStr.replace(/\*/g, '').trim();
+                        if (cleanCurr) {
+                            currencyMap.set(cleanCurr, true);
+                        }
                     });
+                    
+                    const distinctCurrencies = Array.from(currencyMap.keys());
+                    
+                    // Helper function to convert column number to letter
+                    const colNumToLetter = (col: number): string => {
+                        let letter = '';
+                        while (col > 0) {
+                            col--;
+                            letter = String.fromCharCode(65 + (col % 26)) + letter;
+                            col = Math.floor(col / 26);
+                        }
+                        return letter;
+                    };
 
-                    tRowIdx += 1;
-                    sheet.getCell(tRowIdx, 24 + j).value = 'Sum';
+                    const srcCurrCol = tCurrSourceCol > 0 ? tCurrSourceCol : 23;
+                    const srcAmtCol = tAmtSourceCol > 0 ? tAmtSourceCol : 24;
+                    const priceColLetter = colNumToLetter(srcAmtCol);
+                    const currColLetter = colNumToLetter(srcCurrCol);
+                    const amtColLetter = colNumToLetter(amtCol);
+                    const rateColLetter = colNumToLetter(rateCol);
+                    const chgColLetter = colNumToLetter(chgCol);
+                    const currDateRaw = String(args.data.CURR_DATE || '').trim();
+                    const currDateForRate =
+                        currDateRaw.length === 8
+                            ? currDateRaw
+                            : String(tRetDate1 || '').trim();
 
-                    tRowIdx += 1;
-                    sheet.getCell(tRowIdx, 26 + j).value = 'Total';
-                    sheet.getCell(tRowIdx, 27 + j).value = 'Price($)';
+                    // Process each distinct currency
+                    for (const currCd of distinctCurrencies) {
+                        // Query for exchange rate
+                        let sqlRate = `
+                            select top 1
+                                cc.usd_rate,
+                                cc.won_amt
+                            from
+                                kcd_currency cc
+                            where
+                                cc.curr_cd = '${currCd}'
+                                and replace(cast(cc.start_date as varchar(20)), '-', '') <= '${currDateForRate}'
+                            order by
+                                cc.start_date desc
+                        `;
+                        const tRateCurr = await prisma.$queryRaw(Prisma.raw(sqlRate));
+                        const fxRate =
+                            tRateCurr.length > 0
+                                ? Number(tRateCurr[0].won_amt) || Number(tRateCurr[0].usd_rate) || 0
+                                : 0;
 
+                        sheet.getCell(tRowIdx, currCol).value = currCd;
+                        
+                        // Amount formula: SUMIF over tRet8 data rows only.
+                        sheet.getCell(tRowIdx, amtCol).value = {
+                            formula: `SUMIF($${currColLetter}$${tRet8StartRow}:$${currColLetter}$${tRet8EndRow},"${currCd}",$${priceColLetter}$${tRet8StartRow}:$${priceColLetter}$${tRet8EndRow})`,
+                        };
+                        
+                        sheet.getCell(tRowIdx, rateCol).value = fxRate;
+                        
+                        // $ChgAmount = amount / rate
+                        sheet.getCell(tRowIdx, chgCol).value = {
+                            formula: `IF(${rateColLetter}${tRowIdx}=0,0,${amtColLetter}${tRowIdx}/${rateColLetter}${tRowIdx})`,
+                        };
+
+                        tRowIdx += 1;
+                    }
+
+                    // Sum row
+                    const sumRowIdx = tRowIdx;
+                    sheet.getCell(sumRowIdx, rateCol).value = 'Sum';
+                    const firstDataRow = summaryStartRow + 1;
+                    sheet.getCell(sumRowIdx, chgCol).value = { formula: `SUM(${chgColLetter}${firstDataRow}:${chgColLetter}${sumRowIdx - 1})` };
+                    const summaryEndRow = sumRowIdx;
+
+                    for (let c = currCol; c <= chgCol; c++) {
+                        // Header row: top and bottom horizontal lines
+                        sheet.getCell(summaryStartRow, c).border = {
+                            top: { style: 'thin' },
+                            bottom: { style: 'thin' },
+                        };
+                        // Sum row: top and bottom horizontal lines
+                        sheet.getCell(summaryEndRow, c).border = {
+                            top: { style: 'thin' },
+                            bottom: { style: 'thin' },
+                        };
+                    }
+
+                    tRowIdx += 2;
+
+                    // Total/Price($) row
+                    sheet.getCell(tRowIdx, rateCol).value = 'Total';
+                    sheet.getCell(tRowIdx, chgCol).value = 'Price($)';
                     tRowIdx += 1;
-                    sheet.getCell(tRowIdx, 26 + j).value = tSumTotCnt;
-                    sheet.getCell(tRowIdx, 27 + j).value =
-                        tDwAmt / parseFloat(tSumTotCnt);
+                    sheet.getCell(tRowIdx, rateCol).value = tSumTotCnt;
+                    sheet.getCell(tRowIdx, chgCol).value = { formula: `${chgColLetter}${summaryEndRow}/${tSumTotCnt}` };
                 }
 
                 // Order List
@@ -1142,19 +1366,16 @@ class RPT_S030513_QRY_COMM {
                     }
                 }
 
-                let pmTag = '';
-
-                if (args.data.MRP_BY_ORDER === '1') {
-                    pmTag = 'P';
-                } else if (args.data.MRP_BY_STYLE === '1') {
-                    pmTag = 'M';
-                }
+                const isWithoutPrice = args.data.WITHOUT_PRICE === '1';
+                const modeTag = this.getMrpModeTag(args);
+                const priceSuffix = isWithoutPrice ? '' : '(price)';
 
                 if (args.data.PO_SEQ === '') {
-                    tWExcelFile = `MRPLIST_${args.data.PO_CD}_ALL_${last_po_seq}_${tOrderCd}_${tStyleName}_${moment().format('YYYYMMDDHHmmss')}${pmTag}`;
+                    tWExcelFile = `MRPLIST_${args.data.PO_CD}_ALL_${last_po_seq}_${tOrderCd}_${tStyleName}_${moment().format('YYYYMMDDHHmmss')}${modeTag}${priceSuffix}`;
                 } else {
-                    tWExcelFile = `MRPLIST_${args.data.PO_CD}_${args.data.PO_SEQ}_${tOrderCd}_${tStyleName}_${moment().format('YYYYMMDDHHmmss')}${pmTag}`;
+                    tWExcelFile = `MRPLIST_${args.data.PO_CD}_${args.data.PO_SEQ}_${tOrderCd}_${tStyleName}_${moment().format('YYYYMMDDHHmmss')}${modeTag}${priceSuffix}`;
                 }
+                tWExcelFile = this.toSafeFileStem(tWExcelFile, 'MRPLIST');
 
                 var tTitle = '';
                 var tFileKey = '';
@@ -1178,18 +1399,32 @@ class RPT_S030513_QRY_COMM {
 
                 const uploadInfo = await generateUploadURL();
                 const uploadURL = uploadInfo.uploadURL;
-                const fileURL = uploadURL.split('?')[0];
+                const s3Key = uploadInfo.imageName;
+
+                await upload(`${tWExcelFile}.xlsx`, wb, uploadURL);
+
+                // 다운로드 URL 생성 (한글 파일명 포함)
+                const downloadURL = await generateDownloadURL(
+                    s3Key,
+                    `${tWExcelFile}.xlsx`,
+                    3600
+                );
 
                 var tInObj = {};
                 tInObj.NAME = tWExcelFile;
-                tInObj.URL = fileURL;
+                tInObj.URL = downloadURL;
                 tInObj.TITLE = tTitle;
                 tInObj.FILE_KEY = tFileKey;
                 tInObj.KIND = 'S030513';
                 var tSql11 = AFLib.createTableSql('KCD_FILEINFO', tInObj);
                 await prisma.$queryRaw(Prisma.raw(tSql11));
 
-                await upload(`${tWExcelFile}.xlsx`, wb, uploadURL);
+                tGeneratedFiles.push({
+                    ORDER_CD: tOrderCd,
+                    PO_SEQ: args.data.PO_SEQ,
+                    NAME: `${tWExcelFile}.xlsx`,
+                    URL: downloadURL,
+                });
             } catch (error) {
                 console.log(`ERROR:MRP LIST:${error.message}`);
 
@@ -1215,7 +1450,11 @@ class RPT_S030513_QRY_COMM {
         var tRetArray = [];
         var tObj = {};
         tObj.id = 1;
-        tObj.CODE = tRetExcelFile;
+        const tFilesEncoded = Buffer.from(
+            JSON.stringify(tGeneratedFiles),
+            'utf8',
+        ).toString('base64');
+        tObj.CODE = `SUCCESS:BATCH_FILES:${tFilesEncoded}`;
         tRetArray.push(tObj);
         return tRetArray;
     }
@@ -1281,97 +1520,31 @@ class RPT_S030513_QRY_COMM {
             var tWExcelFile = '';
             var tRetExcelFile = '';
 
-            if (args.data.MRP_BY_STYLE === '1') {
-                let sql1 = `
-                       exec kspPoMrpNetProduct '${args.data.PO_CD}',  '${tUserInfo.USER_ID}'
-                        `;
-                var tRet_sql1 = await prisma.$queryRaw(Prisma.raw(sql1));
-            }
-
-            if (args.data.MRP_BY_ORDER === '1') {
-                if (args.data.PO_SEQ !== 'temp') {
-                    // if (args.data.PO_SEQ === '') {
-                    let sql1 = `
-                           exec kspPoMrpNetTemp '${args.data.PO_CD}',  '${tUserInfo.USER_ID}'
-                            `;
-                    var tRet1 = await prisma.$queryRaw(Prisma.raw(sql1));
-
-                    let sql2 = `
-                        select distinct
-                            a.order_cd
-                        from
-                            ksv_po_mem a
-                        where
-                            a.po_cd = '${args.data.PO_CD}'
-                            and a.order_cd = '${argOrderCd}'
-                    `;
-                    var tRet2 = await prisma.$queryRaw(Prisma.raw(sql2));
-                    var tIdx = 0;
-                    for (tIdx = 0; tIdx < tRet2.length; tIdx++) {
-                        var tOne = {
-                            ...tRet2[tIdx],
-                        };
-                        if (tOne.order_cd.substring(5, 6) === 'C') {
-                            let sql11 = `
-                                select
-                                    a.order_cd
-                                from
-                                    ksv_order_mst a,
-                                    ksv_po_mem b
-                                where
-                                    b.po_cd = '${args.data.PO_CD}'
-                                    and left(a.order_cd, 10) = b.order_cd
-                                    and a.order_cd like '${tOne.order_cd}-%'
-                                    and b.po_seq = '1'
-                                order by
-                                    1
-                            `;
-                            var tRet_sql11 = await prisma.$queryRaw(
-                                Prisma.raw(sql11),
-                            );
-                            if (tRet_sql11.length <= 0) {
-                                let sql1 = `
-                                       exec kspPoMrpNetTempZip '${args.data.PO_CD}', '${tUserInfo.USER_ID}', '${tOne.order_cd}' 
-                                   `;
-                                var sql1 = await prisma.$queryRaw(
-                                    Prisma.raw(sql1),
-                                );
-                            } else {
-                                var tIdx1 = 0;
-                                for (
-                                    tIdx1 = 0;
-                                    tIdx1 < tRet_sql11.length;
-                                    tIdx1++
-                                ) {
-                                    var tOne1 = tRet_sql11[tIdx1];
-                                    let sql1 = `
-                                             exec kspPoMrpNetTempZipComb '${args.data.PO_CD}','${tUserInfo.USER_ID}','${tOne1.order_cd}'
-                                       `;
-                                    var sql1 = await prisma.$queryRaw(
-                                        Prisma.raw(sql1),
-                                    );
-                                }
-                            }
-                        } else {
-                            let sql1 = `
-                                   exec kspPoMrpNetTempZip '${args.data.PO_CD}', '${tUserInfo.USER_ID}', '${tOne.order_cd}' 
-                               `;
-                            var sql1 = await prisma.$queryRaw(Prisma.raw(sql1));
-                        }
-                    }
+            if (this.isMrpByOrder(args)) {
+                const hasCombinedChildren = await this.hasCombinedOrderChildren(
+                    args.data.PO_CD,
+                    argOrderCd,
+                );
+                if (hasCombinedChildren) {
+                    await this.runMigratedMrpChainCombined(
+                        args,
+                        tUserInfo.USER_ID,
+                        argOrderCd,
+                    );
                 } else {
-                    // 에러 수정할것
-                    let sql1 = `
-                               exec kspPoMrpNetTempSeq '${args.data.PO_CD}','${tUserInfo.USER_ID}','${args.data.PO_SEQ}'
-                            `;
-                    var tRet1 = await prisma.$queryRaw(Prisma.raw(sql1));
+                    await this.runMigratedMrpChain(
+                        args,
+                        tUserInfo.USER_ID,
+                        argOrderCd,
+                    );
                 }
+            } else {
+                await this.runMigratedMrpChain(
+                    args,
+                    tUserInfo.USER_ID,
+                    argOrderCd,
+                );
             }
-
-            let sql40 = `
-                    exec kspPoMrpTemp '${args.data.PO_CD}',  '${tUserInfo.USER_ID}'
-                     `;
-            var tRet40 = await prisma.$queryRaw(Prisma.raw(sql40));
 
             try {
                 var tOrderCd = argOrderCd;
@@ -1421,7 +1594,7 @@ class RPT_S030513_QRY_COMM {
 
                 var tTemplateExcel = `${tPath0}/${tTemplateName}.xlsx`;
                 if (args.data.MRP_BY_STYLE === '1')
-                    tWExcelFile = `${tOrderCd}-${tStyleName}-${moment().format('YYYYMMDDHHmmss')}P`;
+                    tWExcelFile = `${tOrderCd}-${tStyleName}-${moment().format('YYYYMMDDHHmmss')}S`;
                 else if (args.data.MRP_BY_ORDER === '1')
                     tWExcelFile = `${tOrderCd}-${tStyleName}-${moment().format('YYYYMMDDHHmmss')}M`;
                 else
@@ -1545,6 +1718,8 @@ class RPT_S030513_QRY_COMM {
                     var tColSeq = 0;
                     var tRowIdx = 5;
                     var tSumTotCnt = 0;
+                    const tColorSeqMap2: { [key: string]: number } = {};
+                    var tNextSeq2 = 1;
                     let sql5 = `
                         select
                             a.size_cnt,
@@ -1594,8 +1769,17 @@ class RPT_S030513_QRY_COMM {
                             sheet.getCell(tRowIdx, 8 + tIdx2).value = tSizeCnt;
                             tProdCnt[tIdx2] += tSizeCnt;
                         }
+                        const tColorKey2 = String(col.color || '')
+                            .replace(/\s+/g, ' ')
+                            .trim()
+                            .toUpperCase();
+                        if (tColorSeqMap2[tColorKey2] === undefined) {
+                            tColorSeqMap2[tColorKey2] = tNextSeq2;
+                            tNextSeq2 += 1;
+                        }
+
                         sheet.getCell(tRowIdx, 4).value = col.add_flag;
-                        sheet.getCell(tRowIdx, 5).value = i + 1;
+                        sheet.getCell(tRowIdx, 5).value = tColorSeqMap2[tColorKey2];
                         sheet.getCell(tRowIdx, 6).value = col.color;
                         sheet.getCell(tRowIdx, 7).value = tTotCnt;
                         tSumTotCnt += tTotCnt;
@@ -1658,21 +1842,26 @@ class RPT_S030513_QRY_COMM {
 
                     tRowIdx += 3;
 
-                    let sql5 = '';
-                    let tRet5 = '';
-                    if (
-                        args.data.MRP_BY_ORDER === '0' &&
-                        args.data.MRP_BY_STYLE === '0'
-                    ) {
-                        sql5 = `
-                                    exec kspPrintMrpP0 '${args.data.PO_CD}','${tOrderCd}','${tProdInfo.prod_cd}', '${tProdInfo.add_flag}', '${tUserInfo.USER_ID}','${tRetDate1}'
-                                `;
-                        tRet5 = await prisma.$queryRaw(Prisma.raw(sql5));
+                    if (!this.isMrpByOrder(args) && !this.isMrpByStyle(args)) {
+                        const retPrint = await mrpMigration.runPrintMrpP0({
+                            poCd: args.data.PO_CD,
+                            orderCd: tOrderCd,
+                            prodCd: tProdInfo.prod_cd,
+                            addFlag: tProdInfo.add_flag,
+                            userId: tUserInfo.USER_ID,
+                            currDate: tRetDate1,
+                        });
+                        if (!retPrint.ok) throw new Error(retPrint.message || retPrint.step);
                     } else {
-                        sql5 = `
-                                    exec kspPrintMrpP1 '${args.data.PO_CD}','${tOrderCd}','${tProdInfo.prod_cd}', '${tProdInfo.add_flag}', '${tUserInfo.USER_ID}','${tRetDate1}'
-                                `;
-                        tRet5 = await prisma.$queryRaw(Prisma.raw(sql5));
+                        const retPrint = await mrpMigration.runPrintMrpP1({
+                            poCd: args.data.PO_CD,
+                            orderCd: tOrderCd,
+                            prodCd: tProdInfo.prod_cd,
+                            addFlag: tProdInfo.add_flag,
+                            userId: tUserInfo.USER_ID,
+                            currDate: tRetDate1,
+                        });
+                        if (!retPrint.ok) throw new Error(retPrint.message || retPrint.step);
                     }
 
                     let sql6 = `
@@ -1683,7 +1872,7 @@ class RPT_S030513_QRY_COMM {
                         where
                             po_cd = '${args.data.PO_CD}'
                             and po_seq > 1
-                            and po_seq < 98
+                            and po_seq < 97
                     `;
                     var tRet6 = await prisma.$queryRaw(Prisma.raw(sql6));
                     var tLastPoSeq1 = 1;
@@ -1740,63 +1929,58 @@ class RPT_S030513_QRY_COMM {
                     tRet8.forEach((col, i) => {
                         var j = 1;
                         sheet.getCell(tRowIdx, j).value = col.ex00;
-                        j = j + 1; // No
+                        j++; // No
                         sheet.getCell(tRowIdx, j).value = col.ex01;
-                        j = j + 1; // Matl_Code
+                        j++; // Matl_Code
                         sheet.getCell(tRowIdx, j).value = col.ex02;
-                        j = j + 1; // Star-1
+                        j++; // Star-1
                         sheet.getCell(tRowIdx, j).value = col.ex03;
-                        j = j + 1; // Desc
+                        j++; // Desc
                         sheet.getCell(tRowIdx, j).value = `'${col.ex04}`;
-                        j = j + 1; // color
+                        j++; // color
                         sheet.getCell(tRowIdx, j).value = col.ex05;
-                        j = j + 1; // spec
+                        j++; // spec
                         sheet.getCell(tRowIdx, j).value = col.ex06;
-                        j = j + 1; // unit
+                        j++; // unit
                         sheet.getCell(tRowIdx, j).value = parseFloat(
                             parseFloat(col.ex07).toFixed(4),
                         );
-                        j = j + 1; // net
+                        j++; // net
                         sheet.getCell(tRowIdx, j).value = parseFloat(
                             parseFloat(col.ex08).toFixed(4),
                         );
-                        j = j + 1; // Loss
+                        j++; // Loss
                         sheet.getCell(tRowIdx, j).value = parseFloat(
                             parseFloat(col.ex09).toFixed(4),
                         );
-                        j = j + 1; // Gross
+                        j++; // Gross
                         sheet.getCell(tRowIdx, j).value = Math.round(col.ex10);
-                        j = j + 1; // qty
+                        j++; // qty
                         sheet.getCell(tRowIdx, j).value = Math.ceil(col.ex11);
-                        j = j + 1; // total
+                        j++; // total
                         if (args.data.WITHOUT_PRICE === '1') {
-                            sheet.getCell(tRowIdx, j).value = col.ex14;
-                            j = j + 1; //  amount
+                            this.setNumberCell4(sheet, tRowIdx, j++, col.ex14); //  amount
                             sheet.getCell(tRowIdx, j).value = col.ex18;
-                            j = j + 1; // Vendor
+                            j++; // Vendor
                             sheet.getCell(tRowIdx, j).value = col.ex19;
-                            j = j + 1; //   Kind2
+                            j++; //   Kind2
                         } else {
-                            sheet.getCell(tRowIdx, j).value = col.ex12;
-                            j = j + 1; // price
+                            this.setNumberCell4(sheet, tRowIdx, j++, col.ex12); // price
                             sheet.getCell(tRowIdx, j).value = col.ex13;
-                            j = j + 1; // size
-                            sheet.getCell(tRowIdx, j).value = col.ex14;
-                            j = j + 1; //  amount
-                            sheet.getCell(tRowIdx, j).value = col.ex15;
-                            j = j + 1; // amt$
-                            sheet.getCell(tRowIdx, j).value = col.ex16;
-                            j = j + 1; // amt($ /Unit)
+                            j++; // size
+                            this.setNumberCell4(sheet, tRowIdx, j++, col.ex14); //  amount
+                            this.setNumberCell4(sheet, tRowIdx, j++, col.ex15); // amt$
+                            this.setNumberCell4(sheet, tRowIdx, j++, col.ex16); // amt($ /Unit)
                             sheet.getCell(tRowIdx, j).value = col.ex17;
-                            j = j + 1; // Usage
+                            j++; // Usage
                             sheet.getCell(tRowIdx, j).value = col.ex18;
-                            j = j + 1; // Vendor
+                            j++; // Vendor
                             sheet.getCell(tRowIdx, j).value = col.ex19;
-                            j = j + 1; //   Kind2
+                            j++; //   Kind2
                             sheet.getCell(tRowIdx, j).value = col.ex20;
-                            j = j + 1; //   Use Check
+                            j++; //   Use Check
                             sheet.getCell(tRowIdx, j).value = col.ex21;
-                            j = j + 1; //   Usd Price
+                            j++; //   Usd Price
                         }
                         tRowIdx += 1;
                     });
@@ -1842,40 +2026,40 @@ class RPT_S030513_QRY_COMM {
                     tRet8.forEach((col, i) => {
                         var j = 1;
                         sheet.getCell(tRowIdx, j).value = col.ex00;
-                        j = j + 1; // No
+                        j++; // No
                         sheet.getCell(tRowIdx, j).value = col.ex01;
-                        j = j + 1; // Matl_Code
+                        j++; // Matl_Code
                         sheet.getCell(tRowIdx, j).value = col.ex02;
-                        j = j + 1; // Star-1
+                        j++; // Star-1
                         sheet.getCell(tRowIdx, j).value = col.ex03;
-                        j = j + 1; // Desc
+                        j++; // Desc
                         sheet.getCell(tRowIdx, j).value = `'${col.ex04}`;
-                        j = j + 1; // color
+                        j++; // color
                         sheet.getCell(tRowIdx, j).value = col.ex05;
-                        j = j + 1; // spec
+                        j++; // spec
                         sheet.getCell(tRowIdx, j).value = col.ex06;
-                        j = j + 1; // unit
+                        j++; // unit
                         // Net
                         let net = parseFloat(parseFloat(col.ex07).toFixed(4));
                         let netCell = sheet.getCell(tRowIdx, j);
                         netCell.value = net;
-                        j = j + 1;
+                        j++;
                         sheet.getCell(tRowIdx, j).value = parseFloat(
                             parseFloat(col.ex08).toFixed(4),
                         );
-                        j = j + 1; // Loss
+                        j++; // Loss
                         sheet.getCell(tRowIdx, j).value = parseFloat(
                             parseFloat(col.ex09).toFixed(4),
                         );
-                        j = j + 1; // Gross
+                        j++; // Gross
                         sheet.getCell(tRowIdx, j).value = Math.round(col.ex10);
-                        j = j + 1; // qty
+                        j++; // qty
 
                         // Total
                         let total = Math.ceil(col.ex11);
                         let totalCell = sheet.getCell(tRowIdx, j);
                         totalCell.value = total;
-                        j = j + 1;
+                        j++;
 
                         // 스타일 적용 (Net이 0일 경우)
                         if (net === 0) {
@@ -1897,31 +2081,26 @@ class RPT_S030513_QRY_COMM {
                             };
                         }
                         if (args.data.WITHOUT_PRICE === '1') {
-                            sheet.getCell(tRowIdx, j).value = col.ex14;
-                            j = j + 1; //  amount
+                            this.setNumberCell4(sheet, tRowIdx, j++, col.ex14); //  amount
                             sheet.getCell(tRowIdx, j).value = col.ex18;
-                            j = j + 1; // Vendor
+                            j++; // Vendor
                             sheet.getCell(tRowIdx, j).value = col.ex19;
-                            j = j + 1; //   Kind2
+                            j++; //   Kind2
                         } else {
-                            sheet.getCell(tRowIdx, j).value = col.ex12;
-                            j = j + 1; // price
+                            this.setNumberCell4(sheet, tRowIdx, j++, col.ex12); // price
                             sheet.getCell(tRowIdx, j).value = col.ex13;
-                            j = j + 1; // size
-                            sheet.getCell(tRowIdx, j).value = col.ex14;
-                            j = j + 1; //  amount
-                            sheet.getCell(tRowIdx, j).value = col.ex15;
-                            j = j + 1; // amt$
-                            sheet.getCell(tRowIdx, j).value = col.ex16;
-                            j = j + 1; // amt($ /Unit)
+                            j++; // size
+                            this.setNumberCell4(sheet, tRowIdx, j++, col.ex14); //  amount
+                            this.setNumberCell4(sheet, tRowIdx, j++, col.ex15); // amt$
+                            this.setNumberCell4(sheet, tRowIdx, j++, col.ex16); // amt($ /Unit)
                             sheet.getCell(tRowIdx, j).value = col.ex17;
-                            j = j + 1; // Usage
+                            j++; // Usage
                             sheet.getCell(tRowIdx, j).value = col.ex18;
-                            j = j + 1; // Vendor
+                            j++; // Vendor
                             sheet.getCell(tRowIdx, j).value = col.ex19;
-                            j = j + 1; //   Kind2
+                            j++; //   Kind2
                             sheet.getCell(tRowIdx, j).value = col.ex20;
-                            j = j + 1; //   Usd Price
+                            j++; //   Usd Price
                         }
                         tRowIdx += 1;
                     });
@@ -1967,39 +2146,39 @@ class RPT_S030513_QRY_COMM {
                     tRet8.forEach((col, i) => {
                         var j = 1;
                         sheet.getCell(tRowIdx, j).value = col.ex00;
-                        j = j + 1; // No
+                        j++; // No
                         sheet.getCell(tRowIdx, j).value = col.ex01;
-                        j = j + 1; // Matl_Code
+                        j++; // Matl_Code
                         sheet.getCell(tRowIdx, j).value = col.ex02;
-                        j = j + 1; // Star-1
+                        j++; // Star-1
                         sheet.getCell(tRowIdx, j).value = col.ex03;
-                        j = j + 1; // Desc
+                        j++; // Desc
                         sheet.getCell(tRowIdx, j).value = `'${col.ex04}`;
-                        j = j + 1; // color
+                        j++; // color
                         sheet.getCell(tRowIdx, j).value = col.ex05;
-                        j = j + 1; // spec
+                        j++; // spec
                         sheet.getCell(tRowIdx, j).value = col.ex06;
-                        j = j + 1; // unit
+                        j++; // unit
                         // Net
                         let net = parseFloat(parseFloat(col.ex07).toFixed(4));
                         let netCell = sheet.getCell(tRowIdx, j);
                         netCell.value = net;
-                        j = j + 1;
+                        j++;
                         sheet.getCell(tRowIdx, j).value = parseFloat(
                             parseFloat(col.ex08).toFixed(4),
                         );
-                        j = j + 1; // Loss
+                        j++; // Loss
                         sheet.getCell(tRowIdx, j).value = parseFloat(
                             parseFloat(col.ex09).toFixed(4),
                         );
-                        j = j + 1; // Gross
+                        j++; // Gross
                         sheet.getCell(tRowIdx, j).value = Math.round(col.ex10);
-                        j = j + 1; // qty
+                        j++; // qty
                         // Total
                         let total = Math.ceil(col.ex11);
                         let totalCell = sheet.getCell(tRowIdx, j);
                         totalCell.value = total;
-                        j = j + 1;
+                        j++;
 
                         // 스타일 적용: Net 값이 0일 경우 Net과 Total을 빨간색 BOLD로
                         if (net === 0) {
@@ -2021,31 +2200,26 @@ class RPT_S030513_QRY_COMM {
                             };
                         }
                         if (args.data.WITHOUT_PRICE === '1') {
-                            sheet.getCell(tRowIdx, j).value = col.ex14;
-                            j = j + 1; //  amount
+                            this.setNumberCell4(sheet, tRowIdx, j++, col.ex14); //  amount
                             sheet.getCell(tRowIdx, j).value = col.ex18;
-                            j = j + 1; // Vendor
+                            j++; // Vendor
                             sheet.getCell(tRowIdx, j).value = col.ex19;
-                            j = j + 1; //   Kind2
+                            j++; //   Kind2
                         } else {
-                            sheet.getCell(tRowIdx, j).value = col.ex12;
-                            j = j + 1; // price
+                            this.setNumberCell4(sheet, tRowIdx, j++, col.ex12); // price
                             sheet.getCell(tRowIdx, j).value = col.ex13;
-                            j = j + 1; // size
-                            sheet.getCell(tRowIdx, j).value = col.ex14;
-                            j = j + 1; //  amount
-                            sheet.getCell(tRowIdx, j).value = col.ex15;
-                            j = j + 1; // amt$
-                            sheet.getCell(tRowIdx, j).value = col.ex16;
-                            j = j + 1; // amt($ /Unit)
+                            j++; // size
+                            this.setNumberCell4(sheet, tRowIdx, j++, col.ex14); //  amount
+                            this.setNumberCell4(sheet, tRowIdx, j++, col.ex15); // amt$
+                            this.setNumberCell4(sheet, tRowIdx, j++, col.ex16); // amt($ /Unit)
                             sheet.getCell(tRowIdx, j).value = col.ex17;
-                            j = j + 1; // Usage
+                            j++; // Usage
                             sheet.getCell(tRowIdx, j).value = col.ex18;
-                            j = j + 1; // Vendor
+                            j++; // Vendor
                             sheet.getCell(tRowIdx, j).value = col.ex19;
-                            j = j + 1; //   Kind2
+                            j++; //   Kind2
                             sheet.getCell(tRowIdx, j).value = col.ex20;
-                            j = j + 1; //   Usd Price
+                            j++; //   Usd Price
                         }
                         tRowIdx += 1;
                     });
@@ -2053,31 +2227,47 @@ class RPT_S030513_QRY_COMM {
                     // Total
                     if (args.data.WITHOUT_PRICE !== '1') {
                         var j = 0;
-                        sheet.getCell(tRowIdx, 15 + j).value = 'Curr';
-                        sheet.getCell(tRowIdx, 16 + j).value = 'Amount';
-                        sheet.getCell(tRowIdx, 17 + j).value = 'Rate';
-                        sheet.getCell(tRowIdx, 18 + j).value = 'ChgAmount';
+                        const currCol = 15 + j;
+                        const amtCol = 16 + j;
+                        const rateCol = 17 + j;
+                        const chgCol = 18 + j;
+                        const summaryStartRow = tRowIdx;
+
+                        sheet.getCell(tRowIdx, currCol).value = 'Curr';
+                        sheet.getCell(tRowIdx, amtCol).value = 'Amount';
+                        sheet.getCell(tRowIdx, rateCol).value = 'Rate';
+                        sheet.getCell(tRowIdx, chgCol).value = 'ChgAmount';
                         tRowIdx += 1;
 
                         let sql91 = `
                             select
                                 c.curr_cd,
                                 sum(a.use_qty * c.matl_price) as sum1,
-                                f.usd_rate,
-                                f.won_amt
+                                isnull(f.usd_rate, 0) as usd_rate,
+                                isnull(f.won_amt, 0) as won_amt
                             from
-                                ksv_po_mrp a,
-                                kcd_matl_mem c,
-                                kcd_currency f
+                                ksv_po_mrp a
+                                inner join kcd_matl_mem c on (
+                                    c.matl_cd = a.matl_cd
+                                    and c.matl_seq = a.matl_seq
+                                )
+                                outer apply (
+                                    select top 1
+                                        cc.usd_rate,
+                                        cc.won_amt
+                                    from
+                                        kcd_currency cc
+                                    where
+                                        cc.curr_cd = a.curr_cd
+                                        and cc.start_date <= '${args.data.CURR_DATE}'
+                                    order by
+                                        cc.start_date desc
+                                ) f
                             where
                                 a.po_cd = '${args.data.PO_CD}'
                                 and a.order_cd = '${tOrderCd}'
                                 and a.use_po_type = '1'
                                 and a.diff_po_type <> '2'
-                                and c.matl_cd = a.matl_cd
-                                and c.matl_seq = a.matl_seq
-                                and f.curr_cd = a.curr_cd
-                                and f.start_date = '${args.data.CURR_DATE}'
                             group by
                                 c.curr_cd,
                                 f.usd_rate,
@@ -2087,38 +2277,66 @@ class RPT_S030513_QRY_COMM {
                         `;
                         var tRet91 = await prisma.$queryRaw(Prisma.raw(sql91));
                         var tDwAmt = 0;
+                        var tChgAmt = 0;
+
                         tRet91.forEach((col, i) => {
-                            sheet.getCell(tRowIdx, 15 + j).value = col.curr_cd;
-                            sheet.getCell(tRowIdx, 16 + j).value = col.sum1;
-                            sheet.getCell(tRowIdx, 17 + j).value = col.usd_rate;
-                            tDwAmt +=
-                                parseFloat(col.sum1) * parseFloat(col.usd_rate);
-                            sheet.getCell(tRowIdx, 18 + j).value = col.won_amt;
+                            const amount = Number(col.sum1) || 0;
+                            const usdRate = Number(col.usd_rate) || 0;
+                            const wonRate = Number(col.won_amt) || 0;
+                            const chgAmount = parseFloat((amount * wonRate).toFixed(4));
+
+                            sheet.getCell(tRowIdx, currCol).value = this.normalizeCurrency(col.curr_cd);
+                            sheet.getCell(tRowIdx, amtCol).value = amount;
+                            sheet.getCell(tRowIdx, rateCol).value = usdRate;
+                            sheet.getCell(tRowIdx, chgCol).value = chgAmount;
+
+                            tDwAmt += amount * usdRate;
+                            tChgAmt += chgAmount;
                             tRowIdx += 1;
                         });
 
                         console.log(`MRP_LIST2:Step-3:${tSheetName}`);
 
-                        tRowIdx += 1;
-                        sheet.getCell(tRowIdx, 15 + j).value = 'Sum';
+                        sheet.getCell(tRowIdx, rateCol).value = 'Sum';
+                        sheet.getCell(tRowIdx, chgCol).value = parseFloat(
+                            tChgAmt.toFixed(4),
+                        );
+                        const summaryEndRow = tRowIdx;
+
+                        for (let c = currCol; c <= chgCol; c++) {
+                            // Header row: top and bottom horizontal lines
+                            sheet.getCell(summaryStartRow, c).border = {
+                                top: { style: 'thin' },
+                                bottom: { style: 'thin' },
+                            };
+                            // Sum row: top and bottom horizontal lines
+                            sheet.getCell(summaryEndRow, c).border = {
+                                top: { style: 'thin' },
+                                bottom: { style: 'thin' },
+                            };
+                        }
 
                         tRowIdx += 1;
-                        sheet.getCell(tRowIdx, 16 + j).value = 'Total';
-                        sheet.getCell(tRowIdx, 17 + j).value = 'Price($)';
+                        sheet.getCell(tRowIdx, rateCol).value = 'Total';
+                        sheet.getCell(tRowIdx, chgCol).value = 'Price($)';
 
                         tRowIdx += 1;
-                        sheet.getCell(tRowIdx, 16 + j).value = tSumTotCnt;
-                        sheet.getCell(tRowIdx, 17 + j).value =
-                            tDwAmt / parseFloat(tSumTotCnt);
+                        sheet.getCell(tRowIdx, rateCol).value = tSumTotCnt;
+                        sheet.getCell(tRowIdx, chgCol).value =
+                            tSumTotCnt > 0 ? tDwAmt / parseFloat(tSumTotCnt) : 0;
                         console.log(`MRP_LIST2:Step-4:${tSheetName}`);
                     }
                 }
 
+                const isWithoutPrice2 = args.data.WITHOUT_PRICE === '1';
+                const modeTag2 = this.getMrpModeTag(args);
+                const priceSuffix2 = isWithoutPrice2 ? '' : '(price)';
                 if (args.data.PO_SEQ === '') {
-                    tWExcelFile = `MRPLIST2_${args.data.PO_CD}_ALL_${last_po_seq}_${tOrderCd}_${tStyleName}_${moment().format('YYYYMMDDHHmmss')}`;
+                    tWExcelFile = `MRPLIST2_${args.data.PO_CD}_ALL_${last_po_seq}_${tOrderCd}_${tStyleName}_${moment().format('YYYYMMDDHHmmss')}${modeTag2}${priceSuffix2}`;
                 } else {
-                    tWExcelFile = `MRPLIST2_${args.data.PO_CD}_${args.data.PO_SEQ}_${tOrderCd}_${tStyleName}_${moment().format('YYYYMMDDHHmmss')}`;
+                    tWExcelFile = `MRPLIST2_${args.data.PO_CD}_${args.data.PO_SEQ}_${tOrderCd}_${tStyleName}_${moment().format('YYYYMMDDHHmmss')}${modeTag2}${priceSuffix2}`;
                 }
+                tWExcelFile = this.toSafeFileStem(tWExcelFile, 'MRPLIST2');
 
                 var tTitle = '';
                 var tFileKey = '';
@@ -2141,18 +2359,27 @@ class RPT_S030513_QRY_COMM {
 
                 const uploadInfo = await generateUploadURL();
                 const uploadURL = uploadInfo.uploadURL;
-                const fileURL = uploadURL.split('?')[0];
+                const s3Key = uploadInfo.imageName;
+
+                await upload(`${tWExcelFile}.xlsx`, wb, uploadURL);
+
+                // 다운로드 URL 생성 (한글 파일명 포함)
+                const downloadURL = await generateDownloadURL(
+                    s3Key,
+                    `${tWExcelFile}.xlsx`,
+                    3600
+                );
 
                 var tInObj = {};
                 tInObj.NAME = tWExcelFile;
-                tInObj.URL = fileURL;
+                tInObj.URL = downloadURL;
                 tInObj.TITLE = tTitle;
                 tInObj.FILE_KEY = tFileKey;
                 tInObj.KIND = 'S030513';
                 var tSql11 = AFLib.createTableSql('KCD_FILEINFO', tInObj);
                 var tRet11 = await prisma.$queryRaw(Prisma.raw(tSql11));
 
-                return await upload(`${tWExcelFile}.xlsx`, wb, uploadURL);
+                return [{ id: 0, CODE: `SUCCEED:?${tWExcelFile}.xlsx?${downloadURL}` }];
             } catch (error) {
                 console.log(`ERROR(MRP Excel):${error.message}`);
 
@@ -2242,75 +2469,24 @@ class RPT_S030513_QRY_COMM {
             var tWExcelFile = '';
             var tRetExcelFile = '';
 
-            if (args.data.MRP_BY_STYLE === '1') {
-                let sql1 = `
-                      exec kspPoMrpNetProduct '${args.data.PO_CD}', '${tUserInfo.USER_ID}'
-                       `;
-                var tRet_sql1 = await prisma.$queryRaw(Prisma.raw(sql1));
-            }
-
-            if (args.data.MRP_BY_ORDER === '1') {
-                if (args.data.PO_SEQ === '') {
-                    let sql1 = `
-                          exec kspPoMrpNetTempCombined '${args.data.PO_CD}',  '${tUserInfo.USER_ID}', '${argOrderCd}'
-                           `;
-                    var tRet1 = await prisma.$queryRaw(Prisma.raw(sql1));
-
-                    let sql2 = `
-                        select
-                            b.order_cd
-                        from
-                            ksv_po_mem a,
-                            ksv_order_mst b
-                        where
-                            a.po_cd = '${args.data.PO_CD}'
-                            and a.order_cd = left(b.order_cd, 10)
-                            and a.po_seq = '1'
-                            and left(b.order_cd, 10) = '${argOrderCd}'
-                            and b.order_type = '2'
-                        order by
-                            1
-                    `;
-                    var tRet2 = await prisma.$queryRaw(Prisma.raw(sql2));
-                    var tIdx = 0;
-                    for (tIdx = 0; tIdx < tRet2.length; tIdx++) {
-                        var tOne = {
-                            ...tRet2[tIdx],
-                        };
-                        let sql1 = `
-                                      exec kspPoMrpNetTempCombinedZip '${args.data.PO_CD}', '${tUserInfo.USER_ID}', '${tOne.order_cd}' 
-                             `;
-                        var sql1 = await prisma.$queryRaw(Prisma.raw(sql1));
-                    }
-                } else {
-                    // 에러 수정할것
-                    let sql1 = `
-                              exec kspPoMrpNetTempSeq '${args.data.PO_CD}','${tUserInfo.USER_ID}','${args.data.PO_SEQ}'
-                           `;
-                    var tRet1 = await prisma.$queryRaw(Prisma.raw(sql1));
-                }
-            }
-
-            let sql40 = `
-                   exec kspPoMrpTemp '${args.data.PO_CD}',  '${tUserInfo.USER_ID}'
-                    `;
-            var tRet40 = await prisma.$queryRaw(Prisma.raw(sql40));
+            await this.runMigratedMrpChainCombined(
+                args,
+                tUserInfo.USER_ID,
+                argOrderCd,
+            );
 
             let sql41 = `
                 select
-                    a.order_cd,
-                    b.nat_name
+                    distinct a.order_cd
                 from
-                    ksv_order_mst a,
-                    kcd_nation b
+                    ksv_po_mem a
                 where
-                    a.nat_cd = b.nat_cd
-                    and a.order_cd like '${argOrderCd}%'
-                    and a.order_type = '2'
+                    a.po_cd = '${args.data.PO_CD}'
+                order by
+                    1
             `;
             var tRet41 = await prisma.$queryRaw(Prisma.raw(sql41));
 
-            console.log('---------------------0');
             try {
                 for (tIdx0 = 0; tIdx0 < tRet41.length; tIdx0++) {
                     var tOrderCd = tRet41[tIdx0].order_cd;
@@ -2331,7 +2507,6 @@ class RPT_S030513_QRY_COMM {
                         }
                     });
 
-                    console.log('---------------------1');
                     var tTemplateName = '';
                     var tFileName = '';
                     if (args.data.WITHOUT_PRICE === '1') {
@@ -2359,11 +2534,9 @@ class RPT_S030513_QRY_COMM {
                     tStyleName = tStyleName.replace(/\*/gi, '_');
                     tStyleName = tStyleName.replace(/;/gi, '_');
 
-                    console.log('---------------------2');
-
                     var tTemplateExcel = `${tPath0}/${tTemplateName}.xlsx`;
                     if (args.data.MRP_BY_STYLE === '1')
-                        tWExcelFile = `${tOrderCd}-${tStyleName}-${moment().format('YYYYMMDDHHmmss')}P`;
+                        tWExcelFile = `${tOrderCd}-${tStyleName}-${moment().format('YYYYMMDDHHmmss')}S`;
                     else if (args.data.MRP_BY_ORDER === '1')
                         tWExcelFile = `${tOrderCd}-${tStyleName}-${moment().format('YYYYMMDDHHmmss')}M`;
                     else
@@ -2372,12 +2545,9 @@ class RPT_S030513_QRY_COMM {
                     const wb = new Excel.Workbook();
                     await wb.xlsx.readFile(tTemplateExcel);
 
-                    console.log('---------------------3');
                     var tSheetName = `MRPByOrder`;
                     var sheet = wb.getWorksheet(tSheetName);
                     // const sheet = wb.getWorksheet(1);
-
-                    console.log('---------------------4');
 
                     var tRowIdx = 10;
 
@@ -2472,6 +2642,8 @@ class RPT_S030513_QRY_COMM {
                     var tColSeq = 0;
                     var tRowIdx = 5;
                     var tSumTotCnt = 0;
+                    const tColorSeqMap3: { [key: string]: number } = {};
+                    var tNextSeq3 = 1;
                     tRet5.forEach((col, i) => {
                         var tmpRow = [];
                         tmpRow[13] = 0;
@@ -2492,7 +2664,16 @@ class RPT_S030513_QRY_COMM {
                             sheet.getCell(tRowIdx, 16 + tIdx2).value = tSizeCnt;
                             tProdCnt[tIdx2] += tSizeCnt;
                         }
-                        sheet.getCell(tRowIdx, 13).value = i + 1;
+                        const tColorKey3 = String(col.color || '')
+                            .replace(/\s+/g, ' ')
+                            .trim()
+                            .toUpperCase();
+                        if (tColorSeqMap3[tColorKey3] === undefined) {
+                            tColorSeqMap3[tColorKey3] = tNextSeq3;
+                            tNextSeq3 += 1;
+                        }
+
+                        sheet.getCell(tRowIdx, 13).value = tColorSeqMap3[tColorKey3];
                         sheet.getCell(tRowIdx, 14).value = col.color;
                         sheet.getCell(tRowIdx, 15).value = tTotCnt;
                         tSumTotCnt += tTotCnt;
@@ -2507,21 +2688,24 @@ class RPT_S030513_QRY_COMM {
 
                     tRowIdx += 3;
 
-                    let sql5 = '';
-                    let tRet5 = '';
-                    if (
-                        args.data.MRP_BY_ORDER === '0' &&
-                        args.data.MRP_BY_STYLE === '0'
-                    ) {
-                        sql5 = `
-                               exec kspPrintMrp0 '${args.data.PO_CD}','${tOrderCd}','${tUserInfo.USER_ID}','${tRetDate1}'
-                           `;
-                        tRet5 = await prisma.$queryRaw(Prisma.raw(sql5));
+                    if (!this.isMrpByOrder(args) && !this.isMrpByStyle(args)) {
+                        const retPrint = await mrpMigration.runPrintMrp0({
+                            poCd: args.data.PO_CD,
+                            orderCd: tOrderCd,
+                            userId: tUserInfo.USER_ID,
+                            currDate: tRetDate1,
+                        });
+                        if (!retPrint.ok)
+                            throw new Error(retPrint.message || retPrint.step);
                     } else {
-                        sql5 = `
-                               exec kspPrintMrp1 '${args.data.PO_CD}','${tOrderCd}','${tUserInfo.USER_ID}','${tRetDate1}'
-                           `;
-                        tRet5 = await prisma.$queryRaw(Prisma.raw(sql5));
+                        const retPrint = await mrpMigration.runPrintMrp1({
+                            poCd: args.data.PO_CD,
+                            orderCd: tOrderCd,
+                            userId: tUserInfo.USER_ID,
+                            currDate: tRetDate1,
+                        });
+                        if (!retPrint.ok)
+                            throw new Error(retPrint.message || retPrint.step);
                     }
 
                     let sql6 = `
@@ -2532,7 +2716,7 @@ class RPT_S030513_QRY_COMM {
                         where
                             po_cd = '${args.data.PO_CD}'
                             and po_seq > 1
-                            and po_seq < 98
+                            and po_seq < 97
                     `;
                     var tRet6 = await prisma.$queryRaw(Prisma.raw(sql6));
                     var tLastPoSeq1 = 1;
@@ -2610,60 +2794,61 @@ class RPT_S030513_QRY_COMM {
                         var tMatlCd = col.ex01;
                         var j = 1;
                         sheet.getCell(tRowIdx, j).value = col.ex00;
-                        j = j + 1; // No
+                        j++; // No
                         sheet.getCell(tRowIdx, j).value = col.ex01;
-                        j = j + 1; // Matl_Code
+                        j++; // Matl_Code
                         sheet.getCell(tRowIdx, j).value = col.ex02;
-                        j = j + 1; // Star-1
+                        j++; // Star-1
                         sheet.getCell(tRowIdx, j).value = col.ex03;
-                        j = j + 1; // S-2
+                        j++; // S-2
                         sheet.getCell(tRowIdx, j).value = col.ex04;
-                        j = j + 1; // S-3
+                        j++; // S-3
                         sheet.getCell(tRowIdx, j).value = col.ex05;
-                        j = j + 1; // S-4
+                        j++; // S-4
                         sheet.getCell(tRowIdx, j).value = col.ex06;
-                        j = j + 1; // S-5
+                        j++; // S-5
                         sheet.getCell(tRowIdx, j).value = col.ex07;
-                        j = j + 1; // S-6
+                        j++; // S-6
                         sheet.getCell(tRowIdx, j).value = col.ex08;
-                        j = j + 1; // S-7
+                        j++; // S-7
                         sheet.getCell(tRowIdx, j).value = col.ex09;
-                        j = j + 1; // S-8
+                        j++; // S-8
                         sheet.getCell(tRowIdx, j).value = col.ex10;
-                        j = j + 1; // S-9
+                        j++; // S-9
                         sheet.getCell(tRowIdx, j).value = col.ex11;
-                        j = j + 1; // S-10
+                        j++; // S-10
                         sheet.getCell(tRowIdx, j).value = col.ex12;
-                        j = j + 1; // Desc
+                        j++; // Desc
+
                         sheet.getCell(tRowIdx, j).value = `'${col.ex13}`;
-                        j = j + 1; // color
+                        j++; // color
                         sheet.getCell(tRowIdx, j).value = col.ex14.replace(
                             /=/,
                             '',
                         );
-                        j = j + 1; // Spec
+                        j++; // Spec
                         sheet.getCell(tRowIdx, j).value = col.ex15;
-                        j = j + 1; // Unit
+                        j++; // Unit
                         // Net
                         let net = parseFloat(parseFloat(col.ex16).toFixed(4));
                         let netCell = sheet.getCell(tRowIdx, j);
                         netCell.value = net;
-                        j = j + 1;
+                        j++;
                         sheet.getCell(tRowIdx, j).value = parseFloat(
                             parseFloat(col.ex17).toFixed(4),
                         );
-                        j = j + 1; // Loss
+                        j++; // Loss
                         sheet.getCell(tRowIdx, j).value = parseFloat(
                             parseFloat(col.ex18).toFixed(4),
                         );
-                        j = j + 1; // Gross
+                        j++; // Gross
                         sheet.getCell(tRowIdx, j).value = Math.round(col.ex19);
-                        j = j + 1; // Qty
+                        j++; // Qty
                         // Total
                         let total = Math.ceil(col.ex20);
                         let totalCell = sheet.getCell(tRowIdx, j);
                         totalCell.value = total;
-                        j = j + 1;
+                        j++;
 
                         // 스타일 적용: Net 값이 0일 경우 Net과 Total을 빨간색 BOLD로
                         if (net === 0) {
@@ -2687,38 +2872,36 @@ class RPT_S030513_QRY_COMM {
 
                         if (args.data.WITHOUT_PRICE === '1') {
                             sheet.getCell(tRowIdx, j).value = `'${col.ex23}`;
-                            j = j + 1; // Size
+                            j++; // Size
                             sheet.getCell(tRowIdx, j).value = col.ex27;
-                            j = j + 1; // Usage
+                            j++; // Usage
                             sheet.getCell(tRowIdx, j).value = col.ex37;
-                            j = j + 1; // Vendor
+                            j++; // Vendor
                             sheet.getCell(tRowIdx, j).value = col.ex36;
-                            j = j + 1; // usd_price
+                            j++; // usd_price
                             sheet.getCell(tRowIdx, j).value = col.ex28;
-                            j = j + 1; // Kind2
+                            j++; // Kind2
                         } else {
-                            sheet.getCell(tRowIdx, j).value = col.ex21;
-                            j = j + 1; // Price
-                            sheet.getCell(tRowIdx, j).value = col.ex22;
-                            j = j + 1; // curr
+                            this.setNumberCell4(sheet, tRowIdx, j++, col.ex21); // Price
+                            sheet.getCell(tRowIdx, j).value = this.normalizeCurrency(col.ex22);
+                            j++; // curr
                             sheet.getCell(tRowIdx, j).value = col.ex23;
-                            j = j + 1; // Size
+                            j++; // Size
                             sheet.getCell(tRowIdx, j).value = col.ex37;
-                            j = j + 1; // KInd2 (24-37)
+                            j++; // KInd2 (24-37)
                             sheet.getCell(tRowIdx, j).value = col.ex25;
-                            j = j + 1; // Amt(S)
-                            sheet.getCell(tRowIdx, j).value = col.ex26;
-                            j = j + 1; // Amt($/Unit)
+                            j++; // Amt(S)
+                            this.setNumberCell4(sheet, tRowIdx, j++, col.ex26); // Amt($/Unit)
                             sheet.getCell(tRowIdx, j).value = col.ex27;
-                            j = j + 1; // Usage
+                            j++; // Usage
                             sheet.getCell(tRowIdx, j).value = col.ex28;
-                            j = j + 1; // Vendor
+                            j++; // Vendor
                             sheet.getCell(tRowIdx, j).value = col.ex35;
-                            j = j + 1; //
+                            j++; //
                             sheet.getCell(tRowIdx, j).value = col.ex36;
-                            j = j + 1; // Usd-Price
+                            j++; // Usd-Price
                             sheet.getCell(tRowIdx, j).value = col.ex37;
-                            j = j + 1; // KInd2
+                            j++; // KInd2
                         }
                         tRowIdx += 1;
                     });
@@ -2769,6 +2952,7 @@ class RPT_S030513_QRY_COMM {
                             ex_seq
                     `;
                     var tRet9 = await prisma.$queryRaw(Prisma.raw(sql9));
+
                     tRet9.forEach((col, i) => {
                         var tUseCheck = col.ex29;
                         var tNatName = col.ex35;
@@ -2787,6 +2971,7 @@ class RPT_S030513_QRY_COMM {
                         sheet.getCell(tRowIdx, 11).value = col.ex10;
                         sheet.getCell(tRowIdx, 12).value = col.ex11;
                         sheet.getCell(tRowIdx, 13).value = col.ex12;
+
                         sheet.getCell(tRowIdx, 14).value = `'${col.ex13}`;
                         sheet.getCell(tRowIdx, 15).value = col.ex14.replace(
                             /=/,
@@ -2804,12 +2989,12 @@ class RPT_S030513_QRY_COMM {
                             sheet.getCell(tRowIdx, 24).value = col.ex28;
                             sheet.getCell(tRowIdx, 25).value = col.ex30;
                         } else {
-                            sheet.getCell(tRowIdx, 22).value = col.ex21;
-                            sheet.getCell(tRowIdx, 23).value = col.ex22;
+                            this.setNumberCell4(sheet, tRowIdx, 22, col.ex21);
+                            sheet.getCell(tRowIdx, 23).value = this.normalizeCurrency(col.ex22);
                             sheet.getCell(tRowIdx, 24).value = `'${col.ex23}`;
-                            sheet.getCell(tRowIdx, 25).value = col.ex24;
+                            this.setNumberCell4(sheet, tRowIdx, 25, col.ex24);
                             sheet.getCell(tRowIdx, 26).value = col.ex25;
-                            sheet.getCell(tRowIdx, 27).value = col.ex26;
+                            this.setNumberCell4(sheet, tRowIdx, 27, col.ex26);
                             sheet.getCell(tRowIdx, 28).value = col.ex27;
                             sheet.getCell(tRowIdx, 29).value = col.ex28;
                             sheet.getCell(tRowIdx, 30).value = col.ex29;
@@ -2823,31 +3008,47 @@ class RPT_S030513_QRY_COMM {
                     if (args.data.WITHOUT_PRICE !== '1') {
                         var j = 0;
                         if (args.data.LOCAL_WORD === '1') j = 1;
-                        sheet.getCell(tRowIdx, 24 + j).value = 'Curr';
-                        sheet.getCell(tRowIdx, 25 + j).value = 'Amount';
-                        sheet.getCell(tRowIdx, 26 + j).value = 'Rate';
-                        sheet.getCell(tRowIdx, 27 + j).value = 'ChgAmount';
+                        const currCol = 24 + j;
+                        const amtCol = 25 + j;
+                        const rateCol = 26 + j;
+                        const chgCol = 27 + j;
+                        const summaryStartRow = tRowIdx;
+
+                        sheet.getCell(tRowIdx, currCol).value = 'Curr';
+                        sheet.getCell(tRowIdx, amtCol).value = 'Amount';
+                        sheet.getCell(tRowIdx, rateCol).value = 'Rate';
+                        sheet.getCell(tRowIdx, chgCol).value = 'ChgAmount';
                         tRowIdx += 1;
 
                         let sql91 = `
                             select
                                 c.curr_cd,
                                 sum(a.use_qty * c.matl_price) as sum1,
-                                f.usd_rate,
-                                f.won_amt
+                                isnull(f.usd_rate, 0) as usd_rate,
+                                isnull(f.won_amt, 0) as won_amt
                             from
-                                ksv_po_mrp a,
-                                kcd_matl_mem c,
-                                kcd_currency f
+                                ksv_po_mrp a
+                                inner join kcd_matl_mem c on (
+                                    c.matl_cd = a.matl_cd
+                                    and c.matl_seq = a.matl_seq
+                                )
+                                outer apply (
+                                    select top 1
+                                        cc.usd_rate,
+                                        cc.won_amt
+                                    from
+                                        kcd_currency cc
+                                    where
+                                        cc.curr_cd = a.curr_cd
+                                        and cc.start_date <= '${args.data.CURR_DATE}'
+                                    order by
+                                        cc.start_date desc
+                                ) f
                             where
                                 a.po_cd = '${args.data.PO_CD}'
                                 and a.order_cd = '${tOrderCd}'
                                 and a.use_po_type = '1'
                                 and a.diff_po_type <> '2'
-                                and c.matl_cd = a.matl_cd
-                                and c.matl_seq = a.matl_seq
-                                and f.curr_cd = a.curr_cd
-                                and f.start_date = '${args.data.CURR_DATE}'
                             group by
                                 c.curr_cd,
                                 f.usd_rate,
@@ -2857,34 +3058,62 @@ class RPT_S030513_QRY_COMM {
                         `;
                         var tRet91 = await prisma.$queryRaw(Prisma.raw(sql91));
                         var tDwAmt = 0;
+                        var tChgAmt = 0;
+
                         tRet91.forEach((col, i) => {
-                            sheet.getCell(tRowIdx, 24 + j).value = col.curr_cd;
-                            sheet.getCell(tRowIdx, 25 + j).value = col.sum1;
-                            sheet.getCell(tRowIdx, 26 + j).value = col.usd_rate;
-                            tDwAmt +=
-                                parseFloat(col.sum1) * parseFloat(col.usd_rate);
-                            sheet.getCell(tRowIdx, 27 + j).value = col.won_amt;
+                            const amount = Number(col.sum1) || 0;
+                            const usdRate = Number(col.usd_rate) || 0;
+                            const wonRate = Number(col.won_amt) || 0;
+                            const chgAmount = parseFloat((amount * wonRate).toFixed(4));
+
+                            sheet.getCell(tRowIdx, currCol).value = this.normalizeCurrency(col.curr_cd);
+                            sheet.getCell(tRowIdx, amtCol).value = amount;
+                            sheet.getCell(tRowIdx, rateCol).value = usdRate;
+                            sheet.getCell(tRowIdx, chgCol).value = chgAmount;
+
+                            tDwAmt += amount * usdRate;
+                            tChgAmt += chgAmount;
                             tRowIdx += 1;
                         });
 
-                        tRowIdx += 1;
-                        sheet.getCell(tRowIdx, 24 + j).value = 'Sum';
+                        sheet.getCell(tRowIdx, rateCol).value = 'Sum';
+                        sheet.getCell(tRowIdx, chgCol).value = parseFloat(
+                            tChgAmt.toFixed(4),
+                        );
+                        const summaryEndRow = tRowIdx;
+
+                        for (let c = currCol; c <= chgCol; c++) {
+                            // Header row: top and bottom horizontal lines
+                            sheet.getCell(summaryStartRow, c).border = {
+                                top: { style: 'thin' },
+                                bottom: { style: 'thin' },
+                            };
+                            // Sum row: top and bottom horizontal lines
+                            sheet.getCell(summaryEndRow, c).border = {
+                                top: { style: 'thin' },
+                                bottom: { style: 'thin' },
+                            };
+                        }
 
                         tRowIdx += 1;
-                        sheet.getCell(tRowIdx, 26 + j).value = 'Total';
-                        sheet.getCell(tRowIdx, 27 + j).value = 'Price($)';
+                        sheet.getCell(tRowIdx, rateCol).value = 'Total';
+                        sheet.getCell(tRowIdx, chgCol).value = 'Price($)';
 
                         tRowIdx += 1;
-                        sheet.getCell(tRowIdx, 26 + j).value = tSumTotCnt;
-                        sheet.getCell(tRowIdx, 27 + j).value =
-                            tDwAmt / parseFloat(tSumTotCnt);
+                        sheet.getCell(tRowIdx, rateCol).value = tSumTotCnt;
+                        sheet.getCell(tRowIdx, chgCol).value =
+                            tSumTotCnt > 0 ? tDwAmt / parseFloat(tSumTotCnt) : 0;
                     }
 
+                    const isWithoutPrice3 = args.data.WITHOUT_PRICE === '1';
+                    const modeTag3 = this.getMrpModeTag(args);
+                    const priceSuffix3 = isWithoutPrice3 ? '' : '(price)';
                     if (args.data.PO_SEQ === '') {
-                        tWExcelFile = `MRPLIST3_${args.data.PO_CD}_ALL_${last_po_seq}_${tOrderCd}_${tStyleName}_${moment().format('YYYYMMDDHHmmss')}`;
+                        tWExcelFile = `MRPLIST3_${args.data.PO_CD}_ALL_${last_po_seq}_${tOrderCd}_${tStyleName}_${moment().format('YYYYMMDDHHmmss')}${modeTag3}${priceSuffix3}`;
                     } else {
-                        tWExcelFile = `MRPLIST3_${args.data.PO_CD}_${args.data.PO_SEQ}_${tOrderCd}_${tStyleName}_${moment().format('YYYYMMDDHHmmss')}`;
+                        tWExcelFile = `MRPLIST3_${args.data.PO_CD}_${args.data.PO_SEQ}_${tOrderCd}_${tStyleName}_${moment().format('YYYYMMDDHHmmss')}${modeTag3}${priceSuffix3}`;
                     }
+                    tWExcelFile = this.toSafeFileStem(tWExcelFile, 'MRPLIST3');
 
                     var tTitle = '';
                     var tFileKey = '';
@@ -2907,18 +3136,25 @@ class RPT_S030513_QRY_COMM {
 
                     const uploadInfo = await generateUploadURL();
                     const uploadURL = uploadInfo.uploadURL;
-                    const fileURL = uploadURL.split('?')[0];
+                    const s3Key = uploadInfo.imageName;
+
+                    await upload(`${tWExcelFile}.xlsx`, wb, uploadURL);
+
+                    // 다운로드 URL 생성 (한글 파일명 포함)
+                    const downloadURL = await generateDownloadURL(
+                        s3Key,
+                        `${tWExcelFile}.xlsx`,
+                        3600
+                    );
 
                     var tInObj = {};
                     tInObj.NAME = tWExcelFile;
-                    tInObj.URL = fileURL;
+                    tInObj.URL = downloadURL;
                     tInObj.TITLE = tTitle;
                     tInObj.FILE_KEY = tFileKey;
                     tInObj.KIND = 'S030513';
                     var tSql11 = AFLib.createTableSql('KCD_FILEINFO', tInObj);
                     var tRet11 = await prisma.$queryRaw(Prisma.raw(tSql11));
-
-                    await upload(`${tWExcelFile}.xlsx`, wb, uploadURL);
                 }
             } catch (error) {
                 console.log(`ERROR(MRP Excel):${error.message}`);
