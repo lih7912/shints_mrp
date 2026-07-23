@@ -1,4 +1,6 @@
-import * as moment from 'moment';
+const momentRaw = require('moment');
+const moment =
+    typeof momentRaw === 'function' ? momentRaw : momentRaw.default;
 import { applyPortInfo } from './portUtil';
 
 export default async function shints(ctx) {

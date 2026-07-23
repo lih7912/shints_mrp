@@ -1,5 +1,7 @@
 import { Prisma } from '@prisma/client';
-import * as moment from 'moment';
+const momentRaw = require('moment');
+const moment =
+    typeof momentRaw === 'function' ? momentRaw : momentRaw.default;
 import { setBodyFont, applyBorder, safeMerge } from './util';
 
 export default async function dInv(ctx) {
