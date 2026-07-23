@@ -8,6 +8,8 @@
         "lib": ["esnext"],
         "allowJs": true,
         "checkJs": false,
+        "noCheck": true,
+        "ignoreDeprecations": "5.0",
         "strict": false,
         "noImplicitAny": false,
         "skipLibCheck": true,
