@@ -659,8 +659,12 @@ const moduleMutation_S0306_MRP_BY_ORDER_EDT_KSV_PROD_MEM = {
                     const tWhereMatlCd = col.MATL_CD || col.S_MATL_CD;
                     // datas1로 넘어온 대상(prod/order/order_mrp_seq) 각각에 동일 편집을 적용
                     const tWhereProdCd = tOne.PROD_CD;
-                    const tWhereOrderCd = tOne.ORDER_CD;
-                    const tWhereOrderMrpSeq = tOne.ORDER_MRP_SEQ;
+                    // usage popup 저장 데이터는 ORDER_CD / ORDER_MRP_SEQ 가 비어올 수 있어
+                    // row 값으로 보정하고, 없으면 최신 order_mrp_seq 를 대상으로 갱신한다.
+                    const tWhereOrderCd =
+                        tOne.ORDER_CD || col.ORDER_CD || '';
+                    const tWhereOrderMrpSeq =
+                        tOne.ORDER_MRP_SEQ || col.ORDER_MRP_SEQ || '';
                     tObj.STD_NET = col.STD_NET;
                     tObj.STD_LOSS = col.STD_LOSS;
                     tObj.STD_GROSS = col.STD_GROSS;
@@ -677,8 +681,23 @@ const moduleMutation_S0306_MRP_BY_ORDER_EDT_KSV_PROD_MEM = {
                     */
                     tSQL99 += `where matl_cd = '${tWhereMatlCd}' `;
                     tSQL99 += `and prod_cd = '${tWhereProdCd}' `;
-                    tSQL99 += `and order_cd = '${tWhereOrderCd}' `;
-                    tSQL99 += `and order_mrp_seq = '${tWhereOrderMrpSeq}' `;
+                    if (tWhereOrderCd !== '') {
+                        tSQL99 += `and order_cd = '${tWhereOrderCd}' `;
+                    }
+                    if (tWhereOrderMrpSeq !== '') {
+                        tSQL99 += `and order_mrp_seq = '${tWhereOrderMrpSeq}' `;
+                    } else {
+                        tSQL99 += `and order_mrp_seq = ( `;
+                        tSQL99 += `select max(a2.order_mrp_seq) `;
+                        tSQL99 += `from ksv_order_mrp a2 `;
+                        tSQL99 += `where a2.prod_cd = '${tWhereProdCd}' `;
+                        tSQL99 += `and a2.matl_cd = '${tWhereMatlCd}' `;
+                        tSQL99 += `and a2.seq = '${col.SEQ}' `;
+                        if (tWhereOrderCd !== '') {
+                            tSQL99 += `and a2.order_cd = '${tWhereOrderCd}' `;
+                        }
+                        tSQL99 += `) `;
+                    }
                     tSQL99 += `and  seq = '${col.SEQ}' `;
                     
                     /*
