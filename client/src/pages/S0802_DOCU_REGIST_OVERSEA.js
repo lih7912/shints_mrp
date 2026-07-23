@@ -985,6 +985,22 @@ const S0802_DOCU_REGIST_OVERSEA = () => {
         setDataEDT_KSV_ORDER_SHIP(_dataEDT_KSV_ORDER_SHIP);
     };
 
+    const toNumber = (value) => {
+        if (value === null || typeof value === "undefined" || value === "") {
+            return 0;
+        }
+        const parsed = parseFloat(String(value).replace(/,/g, ""));
+        return Number.isNaN(parsed) ? 0 : parsed;
+    };
+
+    const calcAmount1FromSplit = (totalAmt, amount2, amount3) => {
+        const tTotal = toNumber(totalAmt);
+        const tAmount2 = toNumber(amount2);
+        const tAmount3 = toNumber(amount3);
+        const tAmount1 = tTotal - tAmount2 - tAmount3;
+        return tAmount1.toFixed(2);
+    };
+
     const onInputChangeEDT_KSV_ORDER_SHIP_AMOUNT1 = (e, name) => {
         let val = (e.target && e.target.value) || "";
 
@@ -1010,6 +1026,12 @@ const S0802_DOCU_REGIST_OVERSEA = () => {
         else if (typeof tTypeVal === "number")
             _dataEDT_KSV_ORDER_SHIP[`${name}`] = parseInt(val);
 
+        _dataEDT_KSV_ORDER_SHIP.AMOUNT1 = calcAmount1FromSplit(
+            _dataEDT_KSV_ORDER_SHIP.AMOUNT,
+            _dataEDT_KSV_ORDER_SHIP.AMOUNT2,
+            _dataEDT_KSV_ORDER_SHIP.AMOUNT3,
+        );
+
         setDataEDT_KSV_ORDER_SHIP(_dataEDT_KSV_ORDER_SHIP);
     };
     const onInputChangeEDT_KSV_ORDER_SHIP_AMOUNT3 = (e, name) => {
@@ -1022,6 +1044,12 @@ const S0802_DOCU_REGIST_OVERSEA = () => {
             _dataEDT_KSV_ORDER_SHIP[`${name}`] = val;
         else if (typeof tTypeVal === "number")
             _dataEDT_KSV_ORDER_SHIP[`${name}`] = parseInt(val);
+
+        _dataEDT_KSV_ORDER_SHIP.AMOUNT1 = calcAmount1FromSplit(
+            _dataEDT_KSV_ORDER_SHIP.AMOUNT,
+            _dataEDT_KSV_ORDER_SHIP.AMOUNT2,
+            _dataEDT_KSV_ORDER_SHIP.AMOUNT3,
+        );
 
         setDataEDT_KSV_ORDER_SHIP(_dataEDT_KSV_ORDER_SHIP);
     };
@@ -1123,13 +1151,18 @@ const S0802_DOCU_REGIST_OVERSEA = () => {
             editEDT_KSV_ORDER_SHIP_CURR_CD("");
             editEDT_KSV_ORDER_SHIP_NEOE_CODE("");
         } else {
+            const tAmount1FromInfo = parseFloat(argData.TOT_AMT1 || 0) > 0;
+            const tDefaultAmount1 = tAmount1FromInfo
+                ? argData.TOT_AMT1
+                : argData.TOTAL_AMT || argData.TOT_AMT || argData.ORD_AMT || "";
+
             _tObj.INVOICE_NO = argData.INVOICE_NO;
             _tObj.DOCU_NO = argData.DOCU_NO;
             _tObj.NEOE_CODE = argData.NEOE_A23;
             _tObj.CURR_CD = argData.CURR_CD;
             _tObj.AMOUNT = argData.TOT_AMT;
             _tObj.AMOUNT = argData.ORD_AMT;
-            _tObj.AMOUNT1 = argData.TOT_AMT1;
+            _tObj.AMOUNT1 = tDefaultAmount1;
             _tObj.AMOUNT2 = argData.TOT_AMT2;
             _tObj.AMOUNT3 = argData.TOT_AMT3;
             _tObj.VAT = argData.VAT_AMT;
@@ -1139,6 +1172,14 @@ const S0802_DOCU_REGIST_OVERSEA = () => {
             _tObj.INCOME_DATE3 = argData.INCOME_DATE3;
             _tObj.CRDB_CD = argData.CRDB_CD;
             _tObj.DEPOSIT_AMT = argData.DEPOSIT_AMT;
+
+            if (toNumber(_tObj.AMOUNT2) > 0 || toNumber(_tObj.AMOUNT3) > 0) {
+                _tObj.AMOUNT1 = calcAmount1FromSplit(
+                    _tObj.AMOUNT,
+                    _tObj.AMOUNT2,
+                    _tObj.AMOUNT3,
+                );
+            }
 
             editEDT_KSV_ORDER_SHIP_CURR_CD(argData.CURR_CD);
             editEDT_KSV_ORDER_SHIP_NEOE_CODE(_tObj.NEOE_CODE);
