@@ -6,6 +6,9 @@ const fs = require('fs');
 const moduleQuery_S043101_3_1 = {
     Query: {
         mgrQueryS043101_3_1: async (_, args) => {
+            const esc = (v) => String(v || '').replace(/'/g, "''");
+            const hasVal = (v) => String(v || '').trim() !== '';
+
             var tSQL = '';
             if (args.data.STYLE_CD !== '') {
                 tSQL += `AND STYLE_NAME like '%${args.data.STYLE_CD}%' `;
@@ -34,6 +37,53 @@ const moduleQuery_S043101_3_1 = {
                 sqlOutDate += `or   (left(F.SHIP_DATE, 8) between '${sDate}' and '${eDate}')) `;
             }
 
+            const whereConds = [];
+            whereConds.push(`LEFT(F.STSOUT_CD, 6) <> 'SOTMP-'`);
+            whereConds.push(`LEFT(F.ORDER_CD, 2) = E.BUYER_CD`);
+            whereConds.push(`F.MATL_CD = G.MATL_CD`);
+            whereConds.push(`G.VENDOR_CD = B.VENDOR_CD`);
+
+            if (hasVal(args.data.PACK_CD)) {
+                const packCd = esc(args.data.PACK_CD);
+                // PACK_CD 조회는 contains 대신 = / prefix 중심으로 인덱스 사용 유도
+                whereConds.push(`(
+                    SMST.INVOICE_NO = '${packCd}'
+                )`);
+            }
+
+            if (hasVal(args.data.BUYER_CD)) {
+                const buyerCd = esc(args.data.BUYER_CD);
+                whereConds.push(`LEFT(F.ORDER_CD, 2) LIKE '%${buyerCd}%'`);
+            }
+
+            if (hasVal(args.data.PO_CD)) {
+                const poCd = esc(args.data.PO_CD);
+                whereConds.push(`F.PO_CD LIKE '%${poCd}%'`);
+            }
+
+            if (hasVal(args.data.PU_CD)) {
+                const puCd = esc(args.data.PU_CD);
+                whereConds.push(`F.PU_CD LIKE '%${puCd}%'`);
+            }
+
+            if (hasVal(args.data.VENDOR_CD)) {
+                const vendorCd = esc(args.data.VENDOR_CD);
+                whereConds.push(`(
+                    B.VENDOR_CD LIKE '%${vendorCd}%'
+                    OR B.VENDOR_NAME LIKE '%${vendorCd}%'
+                )`);
+            }
+
+            const joinCondsStockOutMst = [`F.STSOUT_CD = C.STSOUT_CD`];
+            if (hasVal(args.data.ORIGIN_PORT)) {
+                const originPort = esc(args.data.ORIGIN_PORT);
+                joinCondsStockOutMst.push(`C.ORIGIN_PORT LIKE '%${originPort}%'`);
+            }
+            if (hasVal(args.data.DESTINATION)) {
+                const destination = esc(args.data.DESTINATION);
+                joinCondsStockOutMst.push(`C.DESTINATION LIKE '%${destination}%'`);
+            }
+
             let sqlStr = `
                 SELECT
                     B.VENDOR_CD,
@@ -60,27 +110,16 @@ const moduleQuery_S043101_3_1 = {
                     ISNULL(C.GROSS_WEIGHT, '0') AS GROSS_WEIGHT
                 FROM
                     ksv_stock_out F
-                    LEFT JOIN ksv_stock_out_mst C ON F.STSOUT_CD = C.STSOUT_CD
-                    AND C.ORIGIN_PORT LIKE '%${args.data.ORIGIN_PORT}%'
-                    AND C.DESTINATION LIKE '%${args.data.DESTINATION}%'
+                    LEFT JOIN ksv_stock_out_mst C ON ${joinCondsStockOutMst.join(
+                        ' AND ',
+                    )}
                     LEFT JOIN ksv_shipment_mem SM ON F.STSOUT_CD = SM.STSOUT_CD
                     LEFT JOIN ksv_shipment_mst SMST ON SM.SHIPMENT_CD = SMST.SHIPMENT_CD,
                     kcd_vendor B,
                     kcd_buyer E,
                     kcd_matl_mst G
                 WHERE
-                    isnull(SMST.INVOICE_NO, '') LIKE '%${args.data.PACK_CD}%'
-                    AND LEFT(F.STSOUT_CD, 6) <> 'SOTMP-'
-                    AND LEFT(F.ORDER_CD, 2) LIKE '%${args.data.BUYER_CD}%'
-                    AND LEFT(F.ORDER_CD, 2) = E.BUYER_CD
-                    AND F.MATL_CD = G.MATL_CD
-                    AND G.VENDOR_CD = B.VENDOR_CD
-                    AND F.PO_CD LIKE '%${args.data.PO_CD}%'
-                    AND F.PU_CD LIKE '%${args.data.PU_CD}%'
-                    AND (
-                        B.VENDOR_CD LIKE '%${args.data.VENDOR_CD}%'
-                        OR B.VENDOR_NAME LIKE '%${args.data.VENDOR_CD}%'
-                    ) ${sqlOutDate}
+                    ${whereConds.join('\n                    AND ')} ${sqlOutDate}
                 ORDER BY
                     B.VENDOR_CD,
                     ISNULL(F.STSOUT_CD, ''),
