@@ -1,0 +1,38 @@
+[
+    {
+        "id": 0,
+        "ORDER_CD": "CR26-S0093",
+        "TYPE": "Main",
+        "CURR_CD": "USD",
+        "NAT_CD": "vt",
+        "NAT_NAME": "Vietnam",
+        "BUYER_PO": "PP",
+        "EXF_DATE": "20260720",
+        "ETD_DATE": "20260721",
+        "IS_DL": "X",
+        "ORDER_QTY": "1",
+        "ADD_QTY": 0,
+        "ORDER_QTY_ONLY": "1",
+        "REMARK1": "",
+        "REMARK2": "",
+        "NOTE": "",
+        "MID_SIZE1": "M",
+        "mid_size1": "M",
+        "MID_SIZE": "M",
+        "MID_SIZE_QTY": "M",
+        "IS_OLD_COMBINED": "0",
+        "ORDER_MEM": [
+            {
+                "id": 1,
+                "PROD_CD": "CR26-P0006",
+                "ADD_FLAG": "0",
+                "COLOR": "NAVY",
+                "TOT_CNT": "1",
+                "PRICE": "0.00",
+                "SIZE_CNT": "000000000000000001000000000000000000",
+                "MID_SIZE": "M",
+                "MID_SIZE_QTY": "1"
+            }
+        ]
+    }
+]
