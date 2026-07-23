@@ -108,6 +108,7 @@ class S040102_COMM {
             and   a4.matl_cd = a0.matl_cd
             and   a4.matl_seq =(select max(matl_seq) from kcd_matl_mem where matl_cd = a0.matl_cd)
             and   a6.po_cd = a0.po_cd 
+            and   a6.po_seq < 97
             group  by
                   a0.PO_CD,
                   A3.VENDOR_CD,
