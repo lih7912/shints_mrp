@@ -43,13 +43,13 @@ class S040102_COMM {
         var ret_moq  =  await prisma.$queryRaw(Prisma.raw(sql1_1));
   
         var sql2 = `
-            select po_cd, matl_cd, sum(po_qty) as po_qty, sum(use_qty) as use_qty
+            select po_cd , po_matl_cd as matl_cd, sum(po_qty) as po_qty, sum(use_qty) as use_qty
             from  ksv_po_mrp 
             where pu_cd = '${argData.PU_CD}'
             and   use_po_type = '2'
-            group by po_cd, matl_cd
+            group by po_cd, po_matl_cd
         `   ;
-        var ret_stock  =  await prisma.$queryRaw(Prisma.raw(sql2));
+       var ret_stock  =  await prisma.$queryRaw(Prisma.raw(sql2));
   
         var sql3 = `
             select po_cd, matl_cd, sum(po_qty) as po_qty, sum(use_qty) as use_qty
