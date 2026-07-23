@@ -418,6 +418,16 @@ const moduleQuery_S0914_FAC_IN_OUT_MANAGER = {
                     if (ORDER_CD && !tOne.DATAS.some((x: any) => x.ORDER_CD === ORDER_CD)) {
                         continue;
                     }
+                    if (ORDER_CD) {
+                        const orderRow = tOne.DATAS.find(
+                            (x: any) => x.ORDER_CD === ORDER_CD,
+                        );
+                        const orderQty = Number(orderRow?.ORDER_QTY || 0);
+                        const mainUseQty = Number(orderRow?.MAIN_USE || 0);
+                        if (!orderRow || (orderQty <= 0 && mainUseQty <= 0)) {
+                            continue;
+                        }
+                    }
                     if (VENDOR_NAME && tOne.VENDOR_NAME.includes(VENDOR_NAME))
                         tRetArray1.push(tOne);
                     else if (!VENDOR_NAME) tRetArray1.push(tOne);
