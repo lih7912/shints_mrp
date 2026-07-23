@@ -348,31 +348,14 @@ const S030513_MRP_LIST = () => {
                 setLoadingTBL_KSV_PO_MST(false);
                 if (typeof data.graphQLErrors === "undefined") {
                     if (data.length > 0) {
-                        if (
-                            typeof data[0].CODE === "string" &&
-                            data[0].CODE.includes("ERROR")
-                        ) {
-                            alert(data[0].CODE);
+                        const { files, error } = collectDownloadFiles(data);
+                        if (error) {
+                            alert(error);
                             return;
                         }
 
-                        if (
-                            typeof data[0].CODE === "string" &&
-                            data[0].CODE.startsWith("SUCCESS:BATCH_FILES:")
-                        ) {
-                            const encoded = data[0].CODE.replace(
-                                "SUCCESS:BATCH_FILES:",
-                                "",
-                            );
-                            try {
-                                const decoded = atob(encoded);
-                                const batchFiles = JSON.parse(decoded);
-                                if (Array.isArray(batchFiles)) {
-                                    downloadBatchFilesSequentially(batchFiles);
-                                }
-                            } catch (e) {
-                                console.log("BATCH_FILES parse error", e);
-                            }
+                        if (files.length > 0) {
+                            downloadBatchFilesSequentially(files);
                         }
                         if (data[0].CODE.includes("SUCC")) {
                             // downloadFile(data[0].CODE.split('?')[2].toString(), data[0].CODE.split('?')[1].toString());
@@ -531,7 +514,15 @@ const S030513_MRP_LIST = () => {
                 setLoadingTBL_KSV_PO_MST(false);
                 if (typeof data.graphQLErrors === "undefined") {
                     if (data.length > 0) {
-                        alert(data[0].CODE);
+                        const { files, error } = collectDownloadFiles(data);
+                        if (error) {
+                            alert(error);
+                            return;
+                        }
+
+                        if (files.length > 0) {
+                            downloadBatchFilesSequentially(files);
+                        }
                         if (data[0].CODE.includes("SUCC")) {
                             // downloadFile(data[0].CODE.split('?')[2].toString(), data[0].CODE.split('?')[1].toString());
                             var tQryObj = { ...dataQRY_KSV_PO_MST };
@@ -687,7 +678,15 @@ const S030513_MRP_LIST = () => {
                 setLoadingTBL_KSV_PO_MST(false);
                 if (typeof data.graphQLErrors === "undefined") {
                     if (data.length > 0) {
-                        alert(data[0].CODE);
+                        const { files, error } = collectDownloadFiles(data);
+                        if (error) {
+                            alert(error);
+                            return;
+                        }
+
+                        if (files.length > 0) {
+                            downloadBatchFilesSequentially(files);
+                        }
                         if (data[0].CODE.includes("SUCC")) {
                             // downloadFile(data[0].CODE.split('?')[2].toString(), data[0].CODE.split('?')[1].toString());
                             var tQryObj = { ...dataQRY_KSV_PO_MST };
@@ -710,11 +709,53 @@ const S030513_MRP_LIST = () => {
         serviceLib.downloadFile(argFileUrl, argFileName);
     };
 
+    const collectDownloadFiles = (rows) => {
+        const files = [];
+        if (!Array.isArray(rows)) {
+            return { files, error: "" };
+        }
+
+        for (const row of rows) {
+            const code = typeof row?.CODE === "string" ? row.CODE : "";
+            if (!code) continue;
+
+            if (code.includes("ERROR")) {
+                return { files: [], error: code };
+            }
+
+            if (code.startsWith("SUCCESS:BATCH_FILES:")) {
+                const encoded = code.replace("SUCCESS:BATCH_FILES:", "");
+                try {
+                    const decoded = atob(encoded);
+                    const batchFiles = JSON.parse(decoded);
+                    if (Array.isArray(batchFiles)) {
+                        batchFiles.forEach((f) => {
+                            if (f && f.URL && f.NAME) {
+                                files.push({ URL: f.URL, NAME: f.NAME });
+                            }
+                        });
+                    }
+                } catch (e) {
+                    console.log("BATCH_FILES parse error", e);
+                }
+            }
+
+            if (code.includes("SUCC") && code.includes("?")) {
+                const cols = code.split("?");
+                if (cols.length >= 3 && cols[1] && cols[2]) {
+                    files.push({ NAME: cols[1].toString(), URL: cols[2].toString() });
+                }
+            }
+        }
+
+        return { files, error: "" };
+    };
+
     const downloadBatchFilesSequentially = async (batchFiles) => {
         for (const f of batchFiles) {
             if (f && f.URL && f.NAME) {
-                downloadFile(f.URL, f.NAME);
-                await new Promise((resolve) => setTimeout(resolve, 350));
+                await downloadFile(f.URL, f.NAME);
+                await new Promise((resolve) => setTimeout(resolve, 500));
             }
         }
     };

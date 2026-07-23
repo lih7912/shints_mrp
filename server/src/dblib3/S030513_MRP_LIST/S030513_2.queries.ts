@@ -1291,19 +1291,47 @@ const moduleQuery_S030513_2 = {
                 title3: `MRPLIST3_${row.PO_CD}_${row.ORDER_CD}`,
             }));
 
-            // 4. 한 번에 파일 목록 조회
-            let allTitles = titles.flatMap((t) => [
-                t.title1,
-                t.title2,
-                t.title3,
-            ]);
-            let fileSql = `
-            SELECT title, name, url
-            FROM kcd_fileinfo 
-            WHERE ${allTitles.map((title) => `title LIKE '${title}%'`).join(' OR ')}
-            ORDER BY id DESC
-        `;
-            let fileList = await prisma.$queryRaw(Prisma.raw(fileSql));
+            // 4. 파일 목록 조회 (긴 OR 조건 대신 VALUES JOIN + chunk 처리)
+            const escapeSqlString = (value) => String(value || '').replace(/'/g, "''");
+            const allTitles = Array.from(
+                new Set(
+                    titles
+                        .flatMap((t) => [t.title1, t.title2, t.title3])
+                        .filter((x) => !!x),
+                ),
+            );
+
+            let fileList = [];
+            const chunkSize = 200;
+            for (let i = 0; i < allTitles.length; i += chunkSize) {
+                const chunk = allTitles.slice(i, i + chunkSize);
+                const prefixSql = chunk
+                    .map((title, idx) => {
+                        const escaped = escapeSqlString(title);
+                        return idx === 0
+                            ? `SELECT '${escaped}' AS prefix`
+                            : `UNION ALL SELECT '${escaped}'`;
+                    })
+                    .join(' ');
+
+                if (!prefixSql) continue;
+
+                const fileSql = `
+                    SELECT
+                        f.title,
+                        f.name,
+                        f.url
+                    FROM
+                        kcd_fileinfo f
+                        JOIN (${prefixSql}) p
+                            ON f.title LIKE p.prefix + '%'
+                    ORDER BY
+                        f.id DESC
+                `;
+
+                const partial = await prisma.$queryRaw(Prisma.raw(fileSql));
+                fileList = fileList.concat(partial || []);
+            }
 
             // 5. 타이틀별 파일 매핑
             let fileMap = {};
