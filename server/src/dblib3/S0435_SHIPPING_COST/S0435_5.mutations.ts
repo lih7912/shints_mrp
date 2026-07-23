@@ -17,6 +17,8 @@ import AFLib from '../../commlib'; //PrismaClient 사용하기 위해 불러오�
 // export default로 Mutation 내용 내보내기
 class S0435_5_COMM {
     async query_SHIP_LIST (argData, contextValue) {
+
+
             //------------------------------------------------------
             // 1. 메인 조회 쿼리
             //------------------------------------------------------
@@ -46,7 +48,8 @@ class S0435_5_COMM {
                     f.MATL_PRICE,
                     a.OUT_QTY, 
                     e.TARGET_ETA,
-                    e.TRADE_TERM
+                    e.TRADE_TERM,
+                    e.WEIGHT as WEIGHT3
                 from
                     ksv_stock_out a,
                     kcd_matl_mst b,
@@ -186,6 +189,8 @@ class S0435_5_COMM {
                         } else {
                             tSaveObj.WEIGHT = tSumWeight.toFixed(4);
                         }
+                        // Shipment의 Weight우선.   won. 20260521
+                        tSaveObj.WEIGHT = tSaveObj.WEIGHT3;
 
                         tPoCds = '';
                         // tSaveObj.CBM              = '0';
@@ -231,6 +236,8 @@ class S0435_5_COMM {
                 } else {
                     tSaveObj.WEIGHT = tSumWeight.toFixed(4);
                 }
+                // Shipment의 Weight우선.   won. 20260521
+                tSaveObj.WEIGHT = tSaveObj.WEIGHT3;
 
                 /*
                 if (tSumWeight <= 0 && tSumWeight2 > 0) tSaveObj.WEIGHT  = tSumWeight2;
@@ -437,6 +444,31 @@ class S0435_5_COMM {
                 ];
             }
 
+            var sumWeight = 0;
+            tRetArray3.forEach((col, i) => {
+                var tStr = '';
+                tStr += `,${col.REG_USER}`;
+                tStr += `,${col.BUYER_CD}`;
+                tStr += `,${col.BUYER_NAME}`;
+                tStr += `,${col.PO_CD2}`;
+                tStr += `,${col.VENDOR_CD}`;
+                tStr += `,${col.VENDOR_NAME}`;
+                tStr += `,${col.TRADE_TERM}`;
+                tStr += `,${col.ORIGIN_PORT}`;
+                tStr += `,${col.CT_QTY}`;
+                tStr += `,${col.WEIGHT}`;
+                tStr += `,${col.CBM}`;
+                tStr += `,${col.PU_CD}`;
+                tStr += `,${col.STSOUT_CD}`;
+                tStr += `,${col.OUT_QTY}`;
+                sumWeight += parseFloat(col.WEIGHT);
+                console.log(tStr);
+            });
+            console.log(`Total => ${sumWeight}`);
+
+            //
+
+
             var tRetArray4 = [];
             var tIdx4 = 0;
             for (tIdx4 = 0; tIdx4 < tRetArray3.length; tIdx4++) {
@@ -506,6 +538,16 @@ class S0435_5_COMM {
 const moduleMutation_S0435_5 = {
     Mutation: {
         mgrUpdate_S0435_5: async (_, args, contextValue) => {
+
+            /*
+            Shipping Cost 분배 규칙.
+            1. shipment mst 에 금액 입력
+            2. shipment mem(shipment내 화물)의 중량단위로 shipment mem의 금액 할당
+            4. shipment mem에 할당된 금액을 shipment men 내의 stsout 에 중량단위로 금액 할당
+               4.1 stsout에 할당된 금액이 0인경우 강제로 1을 부여함. 
+            5. shipment 에 포함된 stsout 내역을 바이어별로 합산하여 cost mst 에 저장
+            */
+
             var tRetDate = AFLib.getCurrTime();
             var tRetDate1 = tRetDate.substring(0, 8);
             var tUserInfo = AFLib.getUserInfo(contextValue);
@@ -628,8 +670,12 @@ const moduleMutation_S0435_5 = {
                     order by
                         kk.WEIGHT
                 `;
-
                 var tRet2 = await prisma.$queryRaw(Prisma.raw(sql2));
+
+                var tStsOutWeight = 0;
+                tRet2.forEach((col, i) => {
+                    tStsOutWeight += parseFloat(col.WEIGHT);
+                });
 
                 var tRemain = parseFloat(tShipCost);
                 var tIdx2 = 0;
@@ -639,9 +685,10 @@ const moduleMutation_S0435_5 = {
                     };
                     var tWeight2 = parseFloat(tOne2.WEIGHT);
                     var tShipCost2 = 0;
-                    if (tWeight > 0)
-                        tShipCost2 =
-                            parseFloat(tShipCost) * (tWeight2 / tWeight);
+                    /*
+                    if (tWeight > 0) tShipCost2 = parseFloat(tShipCost) * (tWeight2 / tWeight);
+                    */
+                    if (tStsOutWeight > 0) tShipCost2 = parseFloat(tShipCost) * (tWeight2 / tStsOutWeight);
 
                     tShipCost2 = parseFloat(tShipCost2).toFixed(2);
                     if (tIdx2 === tRet2.length - 1) {
@@ -763,6 +810,24 @@ const moduleMutation_S0435_5 = {
             var totalWeight1 = 0;
             tRet3_0.forEach((col, i) => {
                 totalWeight1 += parseFloat(col.WEIGHT);
+
+                var tStr = '';
+                tStr += `${col.REG_USER}`;
+                tStr += `,${col.BUYER_CD}`;
+                tStr += `,${col.BUYER_NAME}`;
+                tStr += `,${col.PO_CD}`;
+                tStr += `,${col.VENDOR_CD}`;
+                tStr += `,${col.TRADE_TERM}`;
+                tStr += `,${col.ORIGIN_PORT}`;
+                tStr += `,${col.CT_QTY}`;
+                tStr += `,${col.WEIGHT}`;
+                tStr += `,${col.CBM}`;
+                tStr += `,${col.PU_CD}`;
+                tStr += `,${col.STSOUT_CD}`;
+                tStr += `,${col.INVOICE_DATE}`;
+                tStr += `,${col.DESTINATION}`;
+                tStr += `,${col.OUT_QTY}`;
+                console.log(tStr);
             });
 
             if (totalWeight1 <= 0) {
@@ -780,9 +845,11 @@ const moduleMutation_S0435_5 = {
                 tObj.buyer_cd =  col.BUYER_CD;
 
                 // var tCost = parseFloat(tShipCost) * parseFloat(col.s_weight) / totalWeight1;
-                var tCost = parseFloat(tInput.SHIPPING_COST) * parseFloat(col.WEIGHT) / totalWeight1;
-
-                console.log(`${col.BUYER_CD} :  ${tCost} = ${tInput.SHIPPING_COST} * ${col.WEIGHT} / ${totalWeight1} `)
+                var tCost = 0; 
+                if (totalWeight1 > 0) {
+                    tCost = parseFloat(tInput.SHIPPING_COST) * parseFloat(col.WEIGHT) / totalWeight1;
+                    console.log(`${col.BUYER_CD} :  ${tCost} = ${tInput.SHIPPING_COST} * ${col.WEIGHT} / ${totalWeight1} `)
+                }
 
                 if (tInput.CURR_CD === 'KRW') tCost = parseFloat(parseFloat(tCost).toFixed(0));
                 else  tCost = parseFloat(parseFloat(tCost).toFixed(2));
