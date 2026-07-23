@@ -787,7 +787,7 @@ const make_docu_domestic = async (argData, argIdx, tCompanyCode) => {
                 strDocuNo = tOne.DOCU_NO;
 
                 /*
-                let tSQL99 = `
+                tSQL99 = `
                     update ksv_invoice_mst
                     set
                         docu_no = '${tOne.DOCU_NO}',
@@ -1689,7 +1689,7 @@ const make_docu_domestic_taxbill = async (argData, argIdx, tCompanyCode) => {
                 strDocuNo = tOne.DOCU_NO;
 
                 /*
-                let tSQL99 = `
+                tSQL99 = `
                     update ksv_invoice_mst
                     set
                         docu_no = '${tOne.DOCU_NO}',
@@ -2679,7 +2679,7 @@ const make_docu_domestic_deposit = async (argData, argIdx) => {
                 strDocuNo = tOne.DOCU_NO;
 
                 /*
-                let tSQL99 = `
+                tSQL99 = `
                     update ksv_invoice_mst
                     set
                         docu_no = '${tOne.DOCU_NO}',
@@ -2819,8 +2819,8 @@ const make_docu_domestic_deposit = async (argData, argIdx) => {
     tInObj.neoe_line = tRowNo1;
     tInObj.reg_user = argData.REG_USER;
     tInObj.cd_acct = strCdAcct;
-    let tSQL99 = AFLib.createTableSql('kcd_app_import', tInObj);
-    const tSQL99_1 = prisma.$queryRaw(Prisma.raw(tSQL99));
+    tSQL99 = AFLib.createTableSql('kcd_app_import', tInObj);
+    tSQL99_1 = prisma.$queryRaw(Prisma.raw(tSQL99));
     if (isProcess === 0) tSQLArray.push(tSQL99_1);
 
     try {
@@ -3359,7 +3359,7 @@ const make_docu_import = async (argData, argIdx, tCompanyCode) => {
                 strDocuNo = tOne.DOCU_NO;
 
                 /*
-                let tSQL99 = `
+                tSQL99 = `
                     update ksv_invoice_mst
                     set
                         docu_no = '${tOne.DOCU_NO}',
@@ -3402,8 +3402,8 @@ const make_docu_import = async (argData, argIdx, tCompanyCode) => {
             };
             tInObj.row_id = strDocuNo;
             tInObj.no_docu = strDocuNo;
-            let tSQL99 = AFLib.createTableSql('neoe_fi_adocu', tInObj);
-            let tSQL99_1 = prisma.$queryRaw(Prisma.raw(tSQL99));
+            tSQL99 = AFLib.createTableSql('neoe_fi_adocu', tInObj);
+            tSQL99_1 = prisma.$queryRaw(Prisma.raw(tSQL99));
             tSQLArray.push(tSQL99_1);
 
             tInObj = {
@@ -3447,8 +3447,8 @@ const make_docu_import = async (argData, argIdx, tCompanyCode) => {
             };
             tInObj.row_id = strDocuNo;
             tInObj.no_docu = strDocuNo;
-            let tSQL99 = AFLib.createTableSql('neoe_fi_adocu', tInObj);
-            let tSQL99_1 = prisma.$queryRaw(Prisma.raw(tSQL99));
+            tSQL99 = AFLib.createTableSql('neoe_fi_adocu', tInObj);
+            tSQL99_1 = prisma.$queryRaw(Prisma.raw(tSQL99));
             tSQLArray.push(tSQL99_1);
 
             tInObj = {
@@ -3479,7 +3479,7 @@ const make_docu_import = async (argData, argIdx, tCompanyCode) => {
     tInObj.neoe_line = tRowNo1;
     tInObj.reg_user = argData.REG_USER;
     tInObj.cd_acct = strCdacct;
-    let tSQL99 = AFLib.createTableSql('kcd_app_import', tInObj);
+    tSQL99 = AFLib.createTableSql('kcd_app_import', tInObj);
     const tSQL99_1 = prisma.$queryRaw(Prisma.raw(tSQL99));
     if (isProcess === 0) tSQLArray.push(tSQL99_1);
 
@@ -4012,7 +4012,7 @@ const make_docu_import_deposit = async (argData, argIdx) => {
                 strDocuNo = tOne.DOCU_NO;
 
                 /*
-                let tSQL99 = `
+                tSQL99 = `
                     update ksv_invoice_mst
                     set
                         docu_no = '${tOne.DOCU_NO}',
@@ -4055,8 +4055,8 @@ const make_docu_import_deposit = async (argData, argIdx) => {
             };
             tInObj.row_id = strDocuNo;
             tInObj.no_docu = strDocuNo;
-            let tSQL99 = AFLib.createTableSql('neoe_fi_adocu', tInObj);
-            let tSQL99_1 = prisma.$queryRaw(Prisma.raw(tSQL99));
+            tSQL99 = AFLib.createTableSql('neoe_fi_adocu', tInObj);
+            tSQL99_1 = prisma.$queryRaw(Prisma.raw(tSQL99));
             tSQLArray.push(tSQL99_1);
 
             tInObj = {
@@ -4099,8 +4099,8 @@ const make_docu_import_deposit = async (argData, argIdx) => {
         };
         tInObj.row_id = strDocuNo;
         tInObj.no_docu = strDocuNo;
-        let tSQL99 = AFLib.createTableSql('neoe_fi_adocu', tInObj);
-        let tSQL99_1 = prisma.$queryRaw(Prisma.raw(tSQL99));
+        tSQL99 = AFLib.createTableSql('neoe_fi_adocu', tInObj);
+        tSQL99_1 = prisma.$queryRaw(Prisma.raw(tSQL99));
         tSQLArray.push(tSQL99_1);
 
         tInObj = {
@@ -4130,7 +4130,7 @@ const make_docu_import_deposit = async (argData, argIdx) => {
     tInObj.neoe_line = tRowNo1;
     tInObj.reg_user = argData.REG_USER;
     tInObj.cd_acct = strCdacct;
-    let tSQL99 = AFLib.createTableSql('kcd_app_import', tInObj);
+    tSQL99 = AFLib.createTableSql('kcd_app_import', tInObj);
     const tSQL99_1 = prisma.$queryRaw(Prisma.raw(tSQL99));
     if (isProcess === 0) tSQLArray.push(tSQL99_1);
 
