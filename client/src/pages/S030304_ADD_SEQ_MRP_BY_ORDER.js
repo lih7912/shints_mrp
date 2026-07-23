@@ -77,10 +77,16 @@ const S030304_ADD_SEQ_MRP_BY_ORDER = () => {
     const addProdMem = () => {
         let _insertObj = [];
 
-        const sourceRows = Array.isArray(datasTBL_KSV_ORDER_MEM)
-            ? datasTBL_KSV_ORDER_MEM
+        if (selectedTBL_KSV_ORDER_MEM.length <= 0) {
+            window.alert('작업할 데이터를 선택하세요,');
+            return;
+        }
+
+        const sourceRows = Array.isArray(selectedTBL_KSV_ORDER_MEM)
+            ? selectedTBL_KSV_ORDER_MEM
             : [];
 
+        var tStr= '';
         sourceRows.forEach((col) => {
             const baseObj = { ...col };
             if (typeof baseObj.__typename !== "undefined") {
@@ -96,6 +102,7 @@ const S030304_ADD_SEQ_MRP_BY_ORDER = () => {
                     ...baseObj,
                     PROD_CD: normalizedProd,
                 });
+                tStr += `,${baseObj.ORDER_CD}/${normalizedProd}`;
             });
         });
 
