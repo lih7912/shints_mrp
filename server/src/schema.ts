@@ -2,7 +2,6 @@
 // import path from 'path';
 // const __dirname = path.resolve();
 
-
 // typeDefs, resolver 파일 합칠때 사용
 import { makeExecutableSchema } from '@graphql-tools/schema';
 
@@ -22,14 +21,8 @@ const loadedTypes = loadFilesSync(`${__dirname}/**/*.typedefs.ts`);
   loadFilesSync로, 현재폴더(__dirname)에 있는, 모든폴더(**) 속,
   queries.js와 mutations.js로 끝나는 모든파일(*) 불러오기
 */
-const ext = __filename.endsWith('.ts') ? 'ts' : 'js';
-
-const loadedTypes = loadFilesSync(
-    `${__dirname}/**/*.typedefs.${ext}`
-);
-
 const loadedResolvers = loadFilesSync(
-    `${__dirname}/**/*.{queries,mutations}.${ext}`,
+    `${__dirname}/**/*.{queries,mutations}.ts`,
     {
         ignoreIndex: true,
         extractExports: (mod: any) => mod.default ?? mod.resolvers ?? mod,

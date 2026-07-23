@@ -1,19 +1,10 @@
 {
-  "compilerOptions": {
-    "target": "ES2020",
-    "module": "commonjs",
-    "rootDir": ".",
-    "outDir": "./dist",
-
-    "allowJs": true,
-    "checkJs": false,
-
-    "esModuleInterop": true,
-    "resolveJsonModule": true,
-    "skipLibCheck": true
-  },
-  "include": [
-    "src/**/*",
-    "routes/**/*"
-  ]
+    "compilerOptions": {
+        "outDir": "dist",
+        "rootDir": "src",
+        "lib": ["esnext"],
+        "strict": true,
+        "noImplicitAny": false,
+    },
+    "include": ["src/**/*"]
 }
