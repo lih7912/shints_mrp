@@ -308,6 +308,7 @@ const moduleQuery_S0914_FAC_IN_OUT_MANAGER = {
                     where
                         a.po_cd = '${PO_CD}'
                         and a.order_cd = b.order_cd
+                        ${ORDER_CD ? `and a.order_cd = '${ORDER_CD}'` : ''}
                     order by
                         a.order_cd
                 `;
@@ -323,6 +324,7 @@ const moduleQuery_S0914_FAC_IN_OUT_MANAGER = {
                     where
                         po_cd = '${PO_CD}'
                         and use_po_type = '1'
+                        ${ORDER_CD ? `and order_cd = '${ORDER_CD}'` : ''}
                         -- and use_qty > 0
                         -- and diff_po_type in ('0', '3')
                     group by
@@ -343,6 +345,7 @@ const moduleQuery_S0914_FAC_IN_OUT_MANAGER = {
                     where
                         po_cd = '${PO_CD}'
                         and remark like '%main%'
+                        ${ORDER_CD ? `and order_cd = '${ORDER_CD}'` : ''}
                     group by
                         matl_cd,
                         order_cd
@@ -374,20 +377,23 @@ const moduleQuery_S0914_FAC_IN_OUT_MANAGER = {
                             }
                         });
 
-                        // Old C++ OnBnQuery 기준: ORD_CNT(8자리*오더수)에서 오더별 MRP 수량을 추출
-                        const ordCnt = (tOne.ORD_CNT || '').toString();
-                        const chunk = ordCnt.substring(i * 8, i * 8 + 8);
-                        if (
-                            chunk &&
-                            chunk !== '00000000' &&
-                            chunk !== '________'
-                        ) {
-                            const qtyByOrdCnt = parseInt(chunk, 10);
-                            if (Number.isFinite(qtyByOrdCnt) && qtyByOrdCnt > 0) {
-                                tObj.ORDER_CD = (col as any).order_cd;
-                                tObj.ORDER_QTY = qtyByOrdCnt.toFixed(2);
-                                tObj.MAIN_USE = tMainUse;
-                                tCheck = 1;
+                        // ORDER_CD 지정 시에는 ORD_CNT 보정값 대신 실제 오더 매핑 데이터만 사용
+                        if (!ORDER_CD) {
+                            // Old C++ OnBnQuery 기준: ORD_CNT(8자리*오더수)에서 오더별 MRP 수량을 추출
+                            const ordCnt = (tOne.ORD_CNT || '').toString();
+                            const chunk = ordCnt.substring(i * 8, i * 8 + 8);
+                            if (
+                                chunk &&
+                                chunk !== '00000000' &&
+                                chunk !== '________'
+                            ) {
+                                const qtyByOrdCnt = parseInt(chunk, 10);
+                                if (Number.isFinite(qtyByOrdCnt) && qtyByOrdCnt > 0) {
+                                    tObj.ORDER_CD = (col as any).order_cd;
+                                    tObj.ORDER_QTY = qtyByOrdCnt.toFixed(2);
+                                    tObj.MAIN_USE = tMainUse;
+                                    tCheck = 1;
+                                }
                             }
                         }
 
@@ -415,8 +421,15 @@ const moduleQuery_S0914_FAC_IN_OUT_MANAGER = {
                         }
                     });
                     tOne.DATAS = [...tDatas];
-                    if (ORDER_CD && !tOne.DATAS.some((x: any) => x.ORDER_CD === ORDER_CD)) {
-                        continue;
+                    if (ORDER_CD) {
+                        const orderRow = tOne.DATAS.find(
+                            (x: any) => x.ORDER_CD === ORDER_CD,
+                        );
+                        const orderQty = Number(orderRow?.ORDER_QTY || 0);
+                        const mainUseQty = Number(orderRow?.MAIN_USE || 0);
+                        if (!orderRow || (orderQty <= 0 && mainUseQty <= 0)) {
+                            continue;
+                        }
                     }
                     if (ORDER_CD) {
                         const orderRow = tOne.DATAS.find(
