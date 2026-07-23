@@ -1,10 +1,22 @@
 {
     "compilerOptions": {
+        "target": "es5",
+        "module": "commonjs",
+        "moduleResolution": "node",
         "outDir": "dist",
-        "rootDir": "src",
+        "rootDir": ".",
         "lib": ["esnext"],
-        "strict": true,
+        "allowJs": true,
+        "checkJs": false,
+        "strict": false,
         "noImplicitAny": false,
+        "skipLibCheck": true,
+        "noEmitOnError": false,
+        "esModuleInterop": true,
+        "resolveJsonModule": true,
+        "sourceMap": false,
+        "declaration": false
     },
-    "include": ["src/**/*"]
+    "include": ["src/**/*", "routes/**/*"],
+    "exclude": ["node_modules", "dist", "**/*.bak", "**/*.real", "**/*.1"]
 }

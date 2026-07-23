@@ -15,14 +15,14 @@ import { mergeTypeDefs, mergeResolvers } from '@graphql-tools/merge';
   loadFilesSync로, 현재폴더(__dirname)에 있는, 모든폴더(**) 속,
   typeDefs.js로 끝나는 모든파일(*) 불러오기
 */
-const loadedTypes = loadFilesSync(`${__dirname}/**/*.typedefs.ts`);
+const loadedTypes = loadFilesSync(`${__dirname}/**/*.typedefs.{ts,js}`);
 
 /*
   loadFilesSync로, 현재폴더(__dirname)에 있는, 모든폴더(**) 속,
   queries.js와 mutations.js로 끝나는 모든파일(*) 불러오기
 */
 const loadedResolvers = loadFilesSync(
-    `${__dirname}/**/*.{queries,mutations}.ts`,
+  `${__dirname}/**/*.{queries,mutations}.{ts,js}`,
     {
         ignoreIndex: true,
         extractExports: (mod: any) => mod.default ?? mod.resolvers ?? mod,
