@@ -6,7 +6,9 @@
         "ha:monitor": "ts-node src/ha_monitor.ts",
         "ha:monitor:pm2": "pm2 start npm --name haMonitor -- run ha:monitor",
         "format:sql": "node scripts/format-sql-literals.js .",
-        "format:sql:file": "node scripts/format-sql-literals.js src/dblib3/S070301_DEBIT_NOTE_FACTORY_ETP/S070301_5.mutations.ts"
+        "format:sql:file": "node scripts/format-sql-literals.js src/dblib3/S070301_DEBIT_NOTE_FACTORY_ETP/S070301_5.mutations.ts",
+    	"build": "rm -rf dist && tsc -p tsconfig.json --noEmitOnError false || true",
+    	"start": "node dist/src/server.js"
     },
     "prettier": {
         "tabWidth": 4,
