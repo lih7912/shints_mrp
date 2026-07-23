@@ -74,6 +74,7 @@ class RPT_S030513_QRY_COMM {
 
         var tIdx999 = 0;
         var argOrderCd = '';
+        var aggregatedBatchFiles = [];
         for (tIdx999 = 0; tIdx999 < argOrderCds.length; tIdx999++) {
             var argOrderCd = argOrderCds[tIdx999];
 
@@ -1217,7 +1218,27 @@ class RPT_S030513_QRY_COMM {
                 await prisma.$queryRaw(Prisma.raw(tSql11));
 
                 const uploadResult = await upload(`${tWExcelFile}.xlsx`, wb, uploadURL);
-                return makeBatchFilesResponse(uploadResult);
+                const batchResult = makeBatchFilesResponse(uploadResult);
+                const batchCode = String(
+                    (batchResult && batchResult[0] && batchResult[0].CODE) || '',
+                );
+
+                if (batchCode.includes('ERROR')) {
+                    return batchResult;
+                }
+
+                if (batchCode.startsWith('SUCCESS:BATCH_FILES:')) {
+                    try {
+                        const encoded = batchCode.replace('SUCCESS:BATCH_FILES:', '');
+                        const decoded = Buffer.from(encoded, 'base64').toString('utf8');
+                        const files = JSON.parse(decoded);
+                        if (Array.isArray(files)) {
+                            aggregatedBatchFiles = aggregatedBatchFiles.concat(files);
+                        }
+                    } catch (e2) {
+                        console.log('BATCH_FILES parse error', e2);
+                    }
+                }
             } catch (error) {
                 console.log(`ERROR:MRP LIST:${error.message}`);
 
@@ -1243,7 +1264,15 @@ class RPT_S030513_QRY_COMM {
         var tRetArray = [];
         var tObj = {};
         tObj.id = 1;
-        tObj.CODE = tRetExcelFile;
+        if (aggregatedBatchFiles.length > 0) {
+            const encodedFiles = Buffer.from(
+                JSON.stringify(aggregatedBatchFiles),
+                'utf8',
+            ).toString('base64');
+            tObj.CODE = `SUCCESS:BATCH_FILES:${encodedFiles}`;
+        } else {
+            tObj.CODE = 'SUCCESS:MRP List을 요청했습니다. 완료되면 재조회 후 다운로드 하세요.';
+        }
         tRetArray.push(tObj);
         return tRetArray;
     }
