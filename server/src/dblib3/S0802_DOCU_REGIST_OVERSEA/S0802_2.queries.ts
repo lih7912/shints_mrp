@@ -621,11 +621,6 @@ const moduleQuery_S0802_2 = {
                 tObj.INCOME_DATE2 = col.INCOME_DATE2;
                 tObj.INCOME_DATE3 = col.INCOME_DATE3;
 
-                if (parseFloat(tObj.TOT_AMT1) <= 0) {
-                    tObj.TOT_AMT1 = tObj.TOT_AMT;
-                    tObj.INCOME_DATE1 = tObj.INCOME_DATE;
-                }
-
                 /*
                 var ttInfo = ttMap[tObj.INVOICE_NO];
                 if (ttInfo) {
@@ -759,11 +754,6 @@ const moduleQuery_S0802_2 = {
                 tObj.INCOME_DATE1 = col.INCOME_DATE1;
                 tObj.INCOME_DATE2 = col.INCOME_DATE2;
                 tObj.INCOME_DATE3 = col.INCOME_DATE3;
-
-                if (parseFloat(tObj.TOT_AMT1) <= 0) {
-                    tObj.TOT_AMT1 = tObj.TOT_AMT;
-                    tObj.INCOME_DATE1 = tObj.INCOME_DATE;
-                }
 
                 var ttInfo = ttMap[tObj.INVOICE_NO];
                 tObj.TT_REF_NO = '';
@@ -1025,11 +1015,6 @@ const moduleQuery_S0802_2 = {
                 tObj.INCOME_DATE2 = col.INCOME_DATE2;
                 tObj.INCOME_DATE3 = col.INCOME_DATE3;
 
-                if (parseFloat(tObj.TOT_AMT1) <= 0) {
-                    tObj.TOT_AMT1 = tObj.TOT_AMT;
-                    tObj.INCOME_DATE1 = tObj.INCOME_DATE;
-                }
-
                 let sqlTT = `
                     select
                         a.ref_no,
@@ -1233,11 +1218,6 @@ const moduleQuery_S0802_2 = {
                 tObj.INCOME_DATE1 = col.INCOME_DATE1;
                 tObj.INCOME_DATE2 = col.INCOME_DATE2;
                 tObj.INCOME_DATE3 = col.INCOME_DATE3;
-                if (parseFloat(tObj.TOT_AMT1) <= 0) {
-                    tObj.TOT_AMT1 = tObj.TOT_AMT;
-                    tObj.INCOME_DATE1 = tObj.INCOME_DATE;
-                }
-
 
                 // 
                 let sqlTT = `

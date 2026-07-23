@@ -891,6 +891,35 @@ const moduleMutation_S0802_5 = {
                         `;
                         const tSQL99_1 = prisma.$queryRaw(Prisma.raw(tSQL99));
                         tSQLArray.push(tSQL99_1);
+
+                        // Save split income-date amounts from the edit panel so manual overrides are preserved.
+                        let tSQLInfoDelete = `
+                            delete from ksv_invoice_info
+                            where
+                                invoice_no = '${tInvoiceNo}'
+                        `;
+                        const tSQLInfoDelete_1 = prisma.$queryRaw(
+                            Prisma.raw(tSQLInfoDelete),
+                        );
+                        tSQLArray.push(tSQLInfoDelete_1);
+
+                        var tInvoiceInfoObj = {};
+                        tInvoiceInfoObj.invoice_no = tInvoiceNo;
+                        tInvoiceInfoObj.tot_amt1 = args.datas1.AMOUNT1;
+                        tInvoiceInfoObj.tot_amt2 = args.datas1.AMOUNT2;
+                        tInvoiceInfoObj.tot_amt3 = args.datas1.AMOUNT3;
+                        tInvoiceInfoObj.income_date1 = args.datas1.INCOME_DATE1;
+                        tInvoiceInfoObj.income_date2 = args.datas1.INCOME_DATE2;
+                        tInvoiceInfoObj.income_date3 = args.datas1.INCOME_DATE3;
+
+                        let tSQLInfoInsert = AFLib.createTableSql(
+                            'ksv_invoice_info',
+                            tInvoiceInfoObj,
+                        );
+                        const tSQLInfoInsert_1 = prisma.$queryRaw(
+                            Prisma.raw(tSQLInfoInsert),
+                        );
+                        tSQLArray.push(tSQLInfoInsert_1);
                     }
 
                     let sql99 = `
