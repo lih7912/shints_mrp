@@ -128,6 +128,15 @@ const moduleQuery_S0306_MRP_BY_ORDER_TBL_KSV_PROD_MEM = {
                     (
                         select
                             a.*,
+                            (
+                                select
+                                    max(a3.order_mrp_seq)
+                                from
+                                    ksv_order_mrp a3
+                                where
+                                    a3.prod_cd = a.prod_cd
+                                    and a3.order_cd = a.order_cd
+                            ) as ORDER_MRP_SEQ_MAX,
                             b.MATL_TYPE2,
                             b.MATL_NAME,
                             b.COLOR,

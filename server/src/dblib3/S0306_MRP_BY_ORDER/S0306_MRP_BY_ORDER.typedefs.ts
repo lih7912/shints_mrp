@@ -51,6 +51,9 @@ const moduleTypedefs_S0306_MRP_BY_ORDER = gql`
     }
 
     type T_S0306_MRP_RECORD_STYLE_TBL_KSV_PROD_MEM {
+        ORDER_CD: String
+        ORDER_MRP_SEQ: String
+        ORDER_MRP_SEQ_MAX: String
         PROD_CD: String
         PROD_CD_N: String
         VERSION: String

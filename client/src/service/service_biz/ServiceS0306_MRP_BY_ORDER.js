@@ -1020,6 +1020,9 @@ export class ServiceS0306_MRP_BY_ORDER {
                         mgrQuery_S0306_MRP_RECORD_STYLE_TBL_KSV_PROD_MEM_BY_USAGE(
                             data: $data
                         ) {
+                            ORDER_CD
+                            ORDER_MRP_SEQ
+                            ORDER_MRP_SEQ_MAX
                             PROD_CD
                             PROD_CD_N
                             VERSION
