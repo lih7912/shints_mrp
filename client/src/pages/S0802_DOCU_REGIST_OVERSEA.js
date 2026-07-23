@@ -1157,14 +1157,17 @@ const S0802_DOCU_REGIST_OVERSEA = () => {
             if (!value) return "";
             if (value instanceof Date) return value;
 
+            const toUtcDate = (momentDate) =>
+                new Date(Date.UTC(momentDate.year(), momentDate.month(), momentDate.date()));
+
             const rawValue = String(value).trim();
             const parsed = moment(rawValue, ["YYYYMMDD", "YYYY-MM-DD", "YYYY/MM/DD"], true);
             if (parsed.isValid()) {
-                return parsed.toDate();
+                return toUtcDate(parsed);
             }
 
             const fallback = moment(rawValue);
-            return fallback.isValid() ? fallback.toDate() : "";
+            return fallback.isValid() ? toUtcDate(fallback) : "";
         };
 
         var tArray = [];
