@@ -21,19 +21,23 @@ class S0513_4_COMM {
         var tRetDate = AFLib.getCurrTime();
         var tRetDate1 = tRetDate.substring(0, 8);
         var tUserInfo = AFLib.getUserInfo(contextValue);
+        var tInput = { ...argData };
+
+        if (!tInput.BL_NO) tInput.BL_NO = '';
+        if (!tInput.NAT_CD) tInput.NAT_CD = '';
 
         var tSQL = '';
-        if (argData.STYLE_CD !== '') {
-            tSQL += `AND STYLE_NAME like '%${argData.STYLE_CD}%' `;
+        if (tInput.STYLE_CD !== '') {
+            tSQL += `AND STYLE_NAME like '%${tInput.STYLE_CD}%' `;
         }
 
-        var sDate = argData.S_SHIP_DATE;
-        var eDate = argData.E_SHIP_DATE;
+        var sDate = tInput.S_SHIP_DATE;
+        var eDate = tInput.E_SHIP_DATE;
         if (sDate === '') sDate = `${tRetDate.substring(0, 6)}01`;
         if (eDate === '') eDate = `99999999`;
 
-        var sDate1 = argData.S_ATD;
-        var eDate1 = argData.E_ATD;
+        var sDate1 = tInput.S_ATD || '';
+        var eDate1 = tInput.E_ATD || '';
         if (sDate1 === '') sDate1 = `${tRetDate.substring(0, 6)}01`;
         if (eDate1 === '') eDate1 = `99999999`;
 
@@ -41,309 +45,154 @@ class S0513_4_COMM {
         var tSQL1_1 = '';
         var tSQL2 = '';
         var tSQL2_1 = '';
-        if (argData.INVOICE_NO !== '' || argData.ORDER_CD !== '') {
+        if (tInput.INVOICE_NO !== '' || tInput.ORDER_CD !== '') {
             tSQL2 = `           left join KSV_INVOICE_MST F on F.INVOICE_NO = F0.INVOICE_NO `;
         } else {
             tSQL1 = `    AND   A.SHIP_DATE between '${sDate}' and '${eDate}' `;
             tSQL1_1 = `    AND   F.SHIP_DATE between '${sDate}' and '${eDate}' `;
-            if (argData.S_ATD === '' && argData.E_ATD === '') {
+            if (tInput.S_ATD === '' && tInput.E_ATD === '') {
                 tSQL2 = `           left join KSV_INVOICE_MST F on F.INVOICE_NO = F0.INVOICE_NO `;
                 tSQL2_1 = `           and F.ATD between '${sDate1}' and '${eDate1}'  `;
             } else {
                 tSQL2 = `           inner join KSV_INVOICE_MST F on F.INVOICE_NO = F0.INVOICE_NO AND F.ATD between '${sDate1}' and '${eDate1}'  `;
                 tSQL2_1 = `           and F.ATD between '${sDate1}' and '${eDate1}'  `;
             }
-            if (argData.S_SHIP_DATE === '' && argData.E_SHIP_DATE === '')
+            if (tInput.S_SHIP_DATE === '' && tInput.E_SHIP_DATE === '')
                 tSQL1 = '';
+            if (tInput.S_ATD === '' && tInput.E_ATD === '') tSQL2_1 = '';
         }
 
-        let sqlStr0 = `
-            select
-                count(*) as c_cnt
-            from
-                (
-                    SELECT
-                        isnull(F0.INVOICE_NO, '') as INVOICE_NO,
-                        isnull(F.BL_NO, '') as BL_NO,
-                        isnull(F.ATD, '') as ATD,
-                        isnull(F.SHIP_DATE, '') as ETD,
-                        isnull(F0.BUYER_CD, '') as BUYER_CD,
-                        isnull(F0.SHIP_DATE, '') as SHIP_DATE,
-                        '' as NAT_CD,
-                        '' as NAT_NAME,
-                        B1.BUYER_NAME,
-                        isnull(F.DOCU_NO, '') as DOCU_NO,
-                        isnull(F.TOT_AMT, '0') as TOT_AMT,
-                        isnull(F.ADJ_AMT, '0') as ADJ_AMT,
-                        isnull(F.ORD_AMT, '0') as ORD_AMT,
-                        0.0 AS SHIP_PRICE,
-                        '' AS BL_FILE,
-                        '' AS PL_FILE,
-                        '' AS CI_FILE,
-                        '' AS OTHER_FILE,
-                        '' AS BL_FILE_URL,
-                        '' AS PL_FILE_URL,
-                        '' AS CI_FILE_URL,
-                        '' AS OTHER_FILE_URL,
-                        sum(F0.SHIP_AMOUNT2) as SHIP_AMOUNT2,
-                        sum(F0.SHIP_QTY) as SHIP_QTY,
-                        sum(F0.SHIP_AMOUNT) as SHIP_AMOUNT,
-                        isnull(sum(F0.TOT_CNT), 0) as ORDER_QTY,
-                        0 as SHIP_AMOUNT3,
-                        F.PAYMENT_TYPE,
-                        G.CD_NAME AS PAYMENT_NAME,
-                        F.CURR_CD,
-                        F.INCOME_DATE,
-                        F.EXT_INVOICE,
-                        F.REMARK
-                    FROM
-                        (
-                            select
-                                kk.INVOICE_NO,
-                                left(kk.ORDER_CD, 2) as BUYER_CD,
-                                kk.ORDER_CD,
-                                kk.PROD_CD,
-                                kk.PAYMENT_TYPE,
-                                kk.SHIP_DATE,
-                                kk.SHIP_AMOUNT2,
-                                kk.SHIP_QTY,
-                                kk.SHIP_AMOUNT,
-                                kk.NAT_CD2,
-                                sum(kk2.TOT_CNT) as TOT_CNT
-                            from
-                                (
-                                    select
-                                        isnull(A.INVOICE_NO, '') as INVOICE_NO,
-                                        A.ORDER_CD,
-                                        A.PROD_CD,
-                                        isnull(F1.PAYMENT_TYPE, '') as PAYMENT_TYPE,
-                                        A.SHIP_DATE,
-                                        isnull(F1.NAT_CD, '') as NAT_CD2,
-                                        isnull(sum(D.USD_PRICE * A.SHIP_CNT), 0) as SHIP_AMOUNT2,
-                                        isnull(sum(A.SHIP_CNT), 0) AS SHIP_QTY,
-                                        isnull(sum(A.SHIP_PRICE * A.SHIP_CNT), 0) as SHIP_AMOUNT
-                                    FROM
-                                        KSV_ORDER_MST D,
-                                        KCD_STYLE D1,
-                                        KSV_ORDER_SHIP A
-                                        left join KSV_INVOICE_MST F1 on A.INVOICE_NO = F1.INVOICE_NO
-                                        AND F1.PAYMENT_TYPE like '%${argData.PAYMENT_TYPE}%'
-                                    where
-                                        A.ORDER_CD = D.ORDER_CD
-                                        AND D.STYLE_CD = D1.STYLE_CD
-                                        AND D.ORDER_TYPE in ('0', '1')
-                                        --AND    A.SHIP_PTYPE like '%${argData.SHIP_MODE}%'
-                                        AND A.INVOICE_NO like '%${argData.INVOICE_NO}%'
-                                        AND A.DELIVERY_TYPE like '%${argData.DELIVERY_TYPE}%'
-                                        AND D.ORDER_CD LIKE '%${argData.ORDER_CD}%'
-                                        AND D.FACTORY_CD like '%${argData.FACTORY_CD}%'
-                                        AND LEFT(D.ORDER_CD, 2) like '%${argData.BUYER_CD}%'
-                                        AND (
-                                            D1.STYLE_CD like '%${argData.STYLE_CD}%'
-                                            or D1.STYLE_NAME like '%${argData.STYLE_CD}%'
-                                        ) ${tSQL1}
-                                    group by
-                                        A.INVOICE_NO,
-                                        left(A.ORDER_CD, 2),
-                                        A.ORDER_CD,
-                                        A.PROD_CD,
-                                        F1.PAYMENT_TYPE,
-                                        A.SHIP_DATE,
-                                        F1.NAT_CD
-                                ) kk,
-                                ksv_order_mem kk2
-                            where
-                                kk.ORDER_CD = kk2.ORDER_CD
-                                and kk.PROD_CD = kk2.PROD_CD
-                                and kk.PAYMENT_TYPE like '%${argData.PAYMENT_TYPE}%'
-                            group by
-                                kk.INVOICE_NO,
-                                kk.ORDER_CD,
-                                kk.PROD_CD,
-                                kk.PAYMENT_TYPE,
-                                kk.SHIP_DATE,
-                                kk.SHIP_AMOUNT2,
-                                kk.SHIP_QTY,
-                                kk.SHIP_AMOUNT,
-                                kk.NAT_CD2
-                        ) F0 ${tSQL2}
-                        left join KCD_CODE G on G.CD_GROUP = 'PAYMENT_TYPE'
-                        and G.CD_CODE = F0.PAYMENT_TYPE,
-                        KCD_BUYER B1
-                    WHERE
-                        F0.BUYER_CD = B1.BUYER_CD
-                    GROUP BY
-                        F0.INVOICE_NO,
-                        F.BL_NO,
-                        F.ATD,
-                        F.SHIP_DATE,
-                        F0.BUYER_CD,
-                        F0.SHIP_DATE,
-                        B1.BUYER_NAME,
-                        F.DOCU_NO,
-                        F.TOT_AMT,
-                        F.ADJ_AMT,
-                        F.ORD_AMT,
-                        F.PAYMENT_TYPE,
-                        G.CD_NAME,
-                        F.CURR_CD,
-                        F.INCOME_DATE,
-                        F.EXT_INVOICE,
-                        F.REMARK
-                ) pp
+        var sqlOrder = '';
+        if (tInput.ORDER_CD && tInput.STYLE_CD) {
+            sqlOrder = ` and a.invoice_no in (`;
+            sqlOrder += `  select distinct a.invoice_no  `;
+            sqlOrder += `  from ksv_invoice_mem a, ksv_order_mst b `;
+            sqlOrder += `  where a.order_cd = b.order_cd `;
+            sqlOrder += `  and   a.order_cd like '%${tInput.ORDER_CD}%' `;
+            sqlOrder += `  and   b.style_name like '%${tInput.STYLE_CD}%') `;
+        }
+        else if (tInput.ORDER_CD && !tInput.STYLE_CD) {
+            sqlOrder = ` and a.invoice_no in (`;
+            sqlOrder += `  select distinct a.invoice_no  `;
+            sqlOrder += `  from ksv_invoice_mem a, ksv_order_mst b `;
+            sqlOrder += `  where a.order_cd = b.order_cd `;
+            sqlOrder += `  and   a.order_cd like '%${tInput.ORDER_CD}%') `;
+        }
+        else if (!tInput.ORDER_CD && tInput.STYLE_CD) {
+            sqlOrder = ` and a.invoice_no in (`;
+            sqlOrder += `  select distinct a.invoice_no  `;
+            sqlOrder += `  from ksv_invoice_mem a, ksv_order_mst b `;
+            sqlOrder += `  where a.order_cd = b.order_cd `;
+            sqlOrder += `  and   a.style_cd like '%${tInput.STYLE_CD}%') `;
+        }
+
+        var sqlETD = '';
+        if (tInput.S_SHIP_DATE && tInput.E_SHIP_DATE) {
+            sqlETD = ` and a.ship_date between '${tInput.S_SHIP_DATE}' and '${tInput.E_SHIP_DATE}' ` ;
+        }
+        var sqlATD = '';
+        if (tInput.S_ATD && tInput.E_ATD) {
+            sqlATD = ` and a.atd between '${tInput.S_ATD}' and '${tInput.E_ATD}' ` ;
+        }
+
+        let sqlCnt = `
         `;
-        var tRet0 = await prisma.$queryRaw(Prisma.raw(sqlStr0));
+        // var retCnt = await prisma.$queryRaw(Prisma.raw(sqlCnt));
+        var retCnt = [];
 
-        var topSQL = '';
         var tTotalCount = 0;
-        if (tRet0.length > 0) {
-            console.log(`Count:${tRet0[0].c_cnt}`);
-            tTotalCount = tRet0[0].c_cnt;
-            if (parseFloat(tRet0[0].c_cnt) > 2000) topSQL = ' top 2000 ';
-        }
+        var topSQL = '';
+        if (retCnt.length > 0) {
+            tTotalCount = retCnt[0].c_cnt;
+            if (parseFloat(retCnt[0].c_cnt) > 1000) topSQL = ' top 1000 ';
+
+            if (parseFloat(retCnt[0].c_cnt) > 1001) {
+                return [{ id: '1', REC_COUNT: `${String(tTotalCount)}` }];
+            }
+        } 
 
         let sqlStr = `
-            SELECT
-                --${argData.EMAIL_SEND ? '' : topSQL}
-                isnull(F0.INVOICE_NO, '') as INVOICE_NO,
-                isnull(F.BL_NO, '') as BL_NO,
-                isnull(F.ATD, '') as ATD,
-                isnull(F.SHIP_DATE, '') as ETD,
-                isnull(F0.BUYER_CD, '') as BUYER_CD,
-                isnull(F0.SHIP_DATE, '') as SHIP_DATE,
-                '' as NAT_CD,
-                '' as NAT_NAME,
-                B1.BUYER_NAME,
-                isnull(F.DOCU_NO, '') as DOCU_NO,
-                isnull(F.TOT_AMT, '0') as TOT_AMT,
-                isnull(F.ADJ_AMT, '0') as ADJ_AMT,
-                isnull(F.ORD_AMT, '0') as ORD_AMT,
-                0.0 AS SHIP_PRICE,
-                '' AS BL_FILE,
-                '' AS PL_FILE,
-                '' AS CI_FILE,
-                '' AS OTHER_FILE,
-                '' AS BL_FILE_URL,
-                '' AS PL_FILE_URL,
-                '' AS CI_FILE_URL,
-                '' AS OTHER_FILE_URL,
-                sum(F0.SHIP_AMOUNT2) as SHIP_AMOUNT2,
-                sum(F0.SHIP_QTY) as SHIP_QTY,
-                sum(F0.SHIP_AMOUNT) as SHIP_AMOUNT,
-                isnull(sum(F0.TOT_CNT), 0) as ORDER_QTY,
-                0 as SHIP_AMOUNT3,
-                F.PAYMENT_TYPE,
-                G.CD_NAME AS PAYMENT_NAME,
-                F.CURR_CD,
-                F.INCOME_DATE,
-                F.EXT_INVOICE,
-                F.REMARK
-            FROM
-                (
-                    select
-                        kk.INVOICE_NO,
-                        left(kk.ORDER_CD, 2) as BUYER_CD,
-                        kk.ORDER_CD,
-                        kk.PROD_CD,
-                        kk.PAYMENT_TYPE,
-                        kk.SHIP_DATE,
-                        kk.SHIP_AMOUNT2,
-                        kk.SHIP_QTY,
-                        kk.SHIP_AMOUNT,
-                        kk.NAT_CD2,
-                        sum(kk2.TOT_CNT) as TOT_CNT
-                    from
-                        (
-                            select
-                                isnull(A.INVOICE_NO, '') as INVOICE_NO,
-                                A.ORDER_CD,
-                                A.PROD_CD,
-                                isnull(F1.PAYMENT_TYPE, '') as PAYMENT_TYPE,
-                                A.SHIP_DATE,
-                                isnull(F1.NAT_CD, '') as NAT_CD2,
-                                isnull(sum(D.USD_PRICE * A.SHIP_CNT), 0) as SHIP_AMOUNT2,
-                                isnull(sum(A.SHIP_CNT), 0) AS SHIP_QTY,
-                                isnull(sum(A.SHIP_PRICE * A.SHIP_CNT), 0) as SHIP_AMOUNT
-                            FROM
-                                KSV_ORDER_MST D,
-                                KCD_STYLE D1,
-                                KSV_ORDER_SHIP A
-                                left join KSV_INVOICE_MST F1 on A.INVOICE_NO = F1.INVOICE_NO
-                                AND F1.PAYMENT_TYPE like '%${argData.PAYMENT_TYPE}%'
-                            where
-                                A.ORDER_CD = D.ORDER_CD
-                                AND D.STYLE_CD = D1.STYLE_CD
-                                AND D.ORDER_TYPE in ('0', '1')
-                                --AND    A.SHIP_PTYPE like '%${argData.SHIP_MODE}%'
-                                AND A.INVOICE_NO like '%${argData.INVOICE_NO}%'
-                                AND A.DELIVERY_TYPE like '%${argData.DELIVERY_TYPE}%'
-                                AND D.ORDER_CD LIKE '%${argData.ORDER_CD}%'
-                                AND D.FACTORY_CD like '%${argData.FACTORY_CD}%'
-                                AND LEFT(D.ORDER_CD, 2) like '%${argData.BUYER_CD}%'
-                                AND (
-                                    D1.STYLE_CD like '%${argData.STYLE_CD}%'
-                                    or D1.STYLE_NAME like '%${argData.STYLE_CD}%'
-                                ) ${tSQL1}
-                            group by
-                                A.INVOICE_NO,
-                                left(A.ORDER_CD, 2),
-                                A.ORDER_CD,
-                                A.PROD_CD,
-                                F1.PAYMENT_TYPE,
-                                A.SHIP_DATE,
-                                F1.NAT_CD
-                        ) kk,
-                        ksv_order_mem kk2
-                    where
-                        kk.ORDER_CD = kk2.ORDER_CD
-                        and kk.PROD_CD = kk2.PROD_CD
-                        and kk.PAYMENT_TYPE like '%${argData.PAYMENT_TYPE}%'
-                    group by
-                        kk.INVOICE_NO,
-                        kk.ORDER_CD,
-                        kk.PROD_CD,
-                        kk.PAYMENT_TYPE,
-                        kk.SHIP_DATE,
-                        kk.SHIP_AMOUNT2,
-                        kk.SHIP_QTY,
-                        kk.SHIP_AMOUNT,
-                        kk.NAT_CD2
-                ) F0 ${tSQL2}
-                left join KCD_CODE G on G.CD_GROUP = 'PAYMENT_TYPE'
-                and G.CD_CODE = F0.PAYMENT_TYPE,
-                KCD_BUYER B1
-            WHERE
-                F0.BUYER_CD = B1.BUYER_CD
-            GROUP BY
-                F0.INVOICE_NO,
-                F.BL_NO,
-                F.ATD,
-                F.SHIP_DATE,
-                F0.BUYER_CD,
-                F0.SHIP_DATE,
-                B1.BUYER_NAME,
-                F.DOCU_NO,
-                F.TOT_AMT,
-                F.ADJ_AMT,
-                F.ORD_AMT,
-                F.PAYMENT_TYPE,
-                G.CD_NAME,
-                F.CURR_CD,
-                F.INCOME_DATE,
-                F.EXT_INVOICE,
-                F.REMARK
-            order by
-                F0.SHIP_DATE,
-                F0.INVOICE_NO
+                select
+                     ${topSQL} 
+                     a.invoice_no as INVOICE_NO,
+                     isnull(a.bl_no, '') as BL_NO,
+                     isnull(a.atd, '') as ATD,
+                     isnull(a.buyer_cd, '') as BUYER_CD,
+                     isnull(a.docu_no, '') as DOCU_CD,
+                     isnull(a.tot_amt, '') as TOT_AMT,
+                     isnull(a.adj_amt, '') as ADJ_AMT,
+                     isnull(a.ord_amt, '') as ORD_AMT,
+                     isnull(a.payment_type, '') as PAYMENT_TYPE,
+                     isnull(a.curr_cd, '') as CURR_CD,
+                     isnull(a.factory_cd, '') as FACTORY_CD,
+                     isnull(d.cd_name, '') as PAYMENT_NAME,
+                     isnull(a.delivery_type, '') as DELIVERY_TYPE,
+                     isnull(d1.cd_name, '') as DELIVERY_TYPE_N,
+                     isnull(a.nat_cd, '') as NAT_CD,
+                     isnull(d2.nat_name, '') as NAT_NAME,
+                     isnull(d3.buyer_name, '') as BUYER_NAME,
+                     isnull(a.ship_date, '') as SHIP_DATE,
+                     isnull(a.due_date, '') as EXFACTORY,
+                     isnull(min(b.ship_date), '') as ETD,
+                     isnull(sum(b.ship_qty), 0) as SHIP_QTY,
+                     isnull(sum(b.ship_qty * b.ship_price), 0) as SHIP_AMOUNT,
+                     isnull(sum(b.ship_qty * b.sales_price), 0) as SALES_AMOUNT,
+                     isnull(sum(c.tot_cnt), 0) as ORDER_QTY,
+                     0  as SHIP_PRICE,
+                     '' as BL_FILE,
+                     '' as PL_FILE,
+                     '' as CI_FILE,
+                     '' as OTHER_FILE,
+                     '' as BL_FILE_URL,
+                     '' as PL_FILE_URL,
+                     '' as CI_FILE_URL,
+                     '' as OTHER_FILE_URL
+                from ksv_invoice_mst a
+                     left join ksv_invoice_mem b on b.invoice_no = a.invoice_no
+                     left join ksv_order_mst c on c.order_cd = b.order_cd
+                     left join kcd_code d on d.cd_group = 'payment_type' and  d.cd_code = a.payment_type
+                     left join kcd_code d1 on d1.cd_group = 'delivery_type' and  d1.cd_code = a.delivery_type
+                     left join kcd_nation d2 on d2.nat_cd = a.nat_cd 
+                     left join kcd_buyer d3 on d3.buyer_cd = a.buyer_cd 
+                where
+                     a.factory_cd like '%${tInput.FACTORY_CD}%'
+                 and a.buyer_cd like '%${tInput.BUYER_CD}%'
+                 and a.delivery_type like '%${tInput.DELIVERY_TYPE}%'
+                 and a.payment_type like '%${tInput.PAYMENT_TYPE}%'
+                 and a.nat_cd like '%${tInput.NAT_CD}%'
+                 and a.invoice_no like '%${tInput.INVOICE_NO}%'
+                 and a.bl_no like '%${tInput.BL_NO}%'
+                 ${sqlOrder}
+                 ${sqlETD}
+                 ${sqlATD}
+                 group by 
+                     a.invoice_no,
+                     isnull(a.bl_no, ''),
+                     isnull(a.atd, ''),
+                     isnull(a.buyer_cd, ''),
+                     isnull(a.docu_no, ''),
+                     isnull(a.tot_amt, ''),
+                     isnull(a.adj_amt, ''),
+                     isnull(a.ord_amt, ''),
+                     isnull(a.payment_type, ''),
+                     isnull(a.curr_cd, ''),
+                     isnull(a.factory_cd, ''),
+                     isnull(d.cd_name, ''),
+                     isnull(a.delivery_type, ''),
+                     isnull(d1.cd_name, ''),
+                     isnull(a.nat_cd, ''),
+                     isnull(d2.nat_name, ''),
+                     isnull(d3.buyer_name, ''),
+                     isnull(a.ship_date, ''),
+                     isnull(a.due_date, '')
         `;
-        var tRet0 = await prisma.$queryRaw(Prisma.raw(sqlStr));
+        var tMain0 = await prisma.$queryRaw(Prisma.raw(sqlStr));
 
         var sqlShipDate = '';
-        if (!argData.S_SHIP_DATE && !argData.E_SHIP_DATE);
+        if (!tInput.S_SHIP_DATE && !tInput.E_SHIP_DATE);
         else {
             sqlShipDate = `and   F.SHIP_DATE between '${sDate}' and '${eDate}'  `;
         }
-
         let sqlStr1 = `
             SELECT
                 isnull(F.INVOICE_NO, '') as INVOICE_NO,
@@ -351,13 +200,13 @@ class S0513_4_COMM {
                 isnull(F.ATD, '') as ATD,
                 isnull(F.SHIP_DATE, '') as ETD,
                 isnull(F.DUE_DATE, '') as EXFACTORY,
-                '' as BUYER_CD,
+                isnull(F.BUYER_CD, '') as BUYER_CD,
                 isnull(F.SHIP_DATE, '') as SHIP_DATE,
                 isnull(F.DELIVERY_TYPE, '') as DELIVERY_TYPE,
                 isnull(H.CD_NAME, '') as DELIVERY_TYPE_N,
                 isnull(F.NAT_CD, '') as NAT_CD,
                 isnull(G1.NAT_NAME, '') as NAT_NAME,
-                '' as BUYER_NAME,
+                isnull(G2.BUYER_NAME, '') as BUYER_NAME,
                 isnull(F.DOCU_NO, '') as DOCU_NO,
                 isnull(F.TOT_AMT, '0') as TOT_AMT,
                 isnull(F.ADJ_AMT, '0') as ADJ_AMT,
@@ -379,110 +228,104 @@ class S0513_4_COMM {
                 F.PAYMENT_TYPE,
                 G.CD_NAME AS PAYMENT_NAME,
                 F.CURR_CD,
-                F.INCOME_DATE,
-                F.EXT_INVOICE,
-                F.REMARK
+                isnull(F.FACTORY_CD, '') as FACTORY_CD
             FROM
                 KSV_INVOICE_MST F
                 left join KCD_NATION G1 on G1.NAT_CD = F.NAT_CD
+                left join KCD_BUYER G2 on G2.BUYER_CD = F.BUYER_CD
                 left join KCD_CODE G on G.CD_GROUP = 'PAYMENT_TYPE'
-                and G.CD_CODE = F.PAYMENT_TYPE
-                left join KCD_CODE H on G.CD_GROUP = 'DELIVERY_TYPE'
-                and H.CD_CODE = F.DELIVERY_TYPE
+                                    and G.CD_CODE = F.PAYMENT_TYPE
+                left join KCD_CODE H on H.CD_GROUP = 'DELIVERY_TYPE'
+                                    and H.CD_CODE = F.DELIVERY_TYPE
                 left join ksv_invoice_mem b on F.invoice_no = b.invoice_no
-                -- where   F.TRADE_TYPE = '3' and F.TRADE_TYPE2 = '6'
             where
                 isnull(b.invoice_no, '') = ''
-                and F.INVOICE_NO like '%${argData.INVOICE_NO}%'
-                and F.DELIVERY_TYPE like '%${argData.DELIVERY_TYPE}%'
-                and F.PAYMENT_TYPE like '%${argData.PAYMENT_TYPE}%' ${sqlShipDate} ${tSQL2_1}
+                and F.INVOICE_NO like '%${tInput.INVOICE_NO}%'
+                and F.DELIVERY_TYPE like '%${tInput.DELIVERY_TYPE}%'
+                and F.PAYMENT_TYPE like '%${tInput.PAYMENT_TYPE}%'
+                and F.BUYER_CD like '%${tInput.BUYER_CD}%' ${sqlShipDate} ${tSQL2_1}
+                and F.BL_NO like '%${tInput.BL_NO}%'
+                -- and   F.ATD between '${sDate1}' and '${eDate1}' 
             order by
                 F.SHIP_DATE,
                 F.INVOICE_NO
         `;
-        var tRet1 = await prisma.$queryRaw(Prisma.raw(sqlStr1));
-        var saveSql1 = sqlStr1;
+        var tMain1 = await prisma.$queryRaw(Prisma.raw(sqlStr1));
+        if (tInput.ORDER_CD) tMain1 = [];
 
         var tRet = [];
-        tRet0.forEach((col, i) => {
+        tMain0.forEach((col) => {
             var tObj = { ...col };
             tObj.IS_NON_GARMENT = '0';
             tRet.push(tObj);
         });
+        tMain1.forEach((col) => {
+            var tObj = { ...col };
+            tObj.IS_NON_GARMENT = '1';
+            tRet.push(tObj);
+        });
+        tTotalCount += tMain1.length;
 
-        if (
-            argData.ORDER_CD !== '' ||
-            argData.BUYER_CD !== '' ||
-            argData.STYLE_CD !== '' ||
-            argData.FACTORY_CD !== ''
-        ) {
-        } else {
-            tRet1.forEach((col, i) => {
-                var tObj = { ...col };
-                tObj.IS_NON_GARMENT = '1';
-                tRet.push(tObj);
+        var invoiceNos = Array.from(
+            new Set(
+                tRet.map((r) => r.INVOICE_NO).filter((v) => v && v !== ''),
+            ),
+        );
+        var buyerMstSet = new Set(
+            tRet.map((r) => r.BUYER_CD_MST).filter((v) => v && v !== ''),
+        );
+        var shipKeySet = new Set(
+            tRet
+                .map((r) => `${r.INVOICE_NO}||${r.SHIP_DATE}`)
+                .filter((v) => !v.includes('||')),
+        );
+
+        var buyerMap = {};
+        if (buyerMstSet.size > 0) {
+            let buyerIn = Array.from(buyerMstSet)
+                .map((v) => `'${v}'`)
+                .join(',');
+            let sqlBuyer = `
+                select
+                    buyer_cd,
+                    buyer_name
+                from
+                    kcd_buyer
+                where
+                    buyer_cd in (${buyerIn})
+            `;
+            let rowsBuyer = await prisma.$queryRaw(Prisma.raw(sqlBuyer));
+            rowsBuyer.forEach((r) => {
+                buyerMap[r.buyer_cd] = r.buyer_name;
             });
-            tTotalCount += tRet1.length;
         }
 
-        var tRetData = {};
-        var tRetArray = [];
-        var tIdx = 0;
-
-        for (tIdx = 0; tIdx < tRet.length; tIdx++) {
-            var tObj = { ...tRet[tIdx] };
-            tObj.REC_COUNT = String(tTotalCount);
-
-            if (!argData.EMAIL_SEND && tIdx > 2000) break;
-
-            let sql0 = `
+        var fileInfoMap = {};
+        if (invoiceNos.length > 0) {
+            let invIn = invoiceNos.map((v) => `'${v}'`).join(',');
+            let sqlFile = `
                 select
-                    *
+                    file_key,
+                    kind,
+                    name,
+                    url
                 from
                     kcd_fileinfo
                 where
-                    file_key = '${tObj.INVOICE_NO}'
+                    file_key in (${invIn})
                     and kind like 'ORDER_SHIP_%'
             `;
-            var tRet0 = await prisma.$queryRaw(Prisma.raw(sql0));
-            if (tRet0.length > 0) {
-                tRet0.forEach((col, i) => {
-                    if (col.KIND === 'ORDER_SHIP_BL_FILE') {
-                        tObj.BL_FILE = col.NAME;
-                        tObj.BL_FILE_URL = col.URL;
-                    }
-                    if (col.KIND === 'ORDER_SHIP_PL_FILE') {
-                        tObj.PL_FILE = col.NAME;
-                        tObj.PL_FILE_URL = col.URL;
-                    }
-                    if (col.KIND === 'ORDER_SHIP_CI_FILE') {
-                        tObj.CI_FILE = col.NAME;
-                        tObj.CI_FILE_URL = col.URL;
-                    }
-                    if (col.KIND === 'ORDER_SHIP_OTHER_FILE') {
-                        tObj.OTHER_FILE = col.NAME;
-                        tObj.OTHER_FILE_URL = col.URL;
-                    }
-                    if (col.KIND === 'ORDER_SHIP_BL_FILE2') {
-                        tObj.BL_FILE2 = col.NAME;
-                        tObj.BL_FILE_URL2 = col.URL;
-                    }
-                    if (col.KIND === 'ORDER_SHIP_PL_FILE2') {
-                        tObj.PL_FILE2 = col.NAME;
-                        tObj.PL_FILE_URL2 = col.URL;
-                    }
-                    if (col.KIND === 'ORDER_SHIP_CI_FILE2') {
-                        tObj.CI_FILE2 = col.NAME;
-                        tObj.CI_FILE_URL2 = col.URL;
-                    }
-                    if (col.KIND === 'ORDER_SHIP_OTHER_FILE2') {
-                        tObj.OTHER_FILE2 = col.NAME;
-                        tObj.OTHER_FILE_URL2 = col.URL;
-                    }
-                });
-            }
+            let rowsFile = await prisma.$queryRaw(Prisma.raw(sqlFile));
+            rowsFile.forEach((r) => {
+                if (!fileInfoMap[r.file_key]) fileInfoMap[r.file_key] = [];
+                fileInfoMap[r.file_key].push(r);
+            });
+        }
 
-            let sql1 = `
+        var shipInfoMap = {};
+        if (invoiceNos.length > 0) {
+            let invIn2 = invoiceNos.map((v) => `'${v}'`).join(',');
+            let sqlShip = `
                 select distinct
                     a.invoice_no,
                     a.ship_date,
@@ -501,80 +344,21 @@ class S0513_4_COMM {
                     and A4.CD_GROUP = 'DELIVERY_TYPE'
                     left join KCD_NATION b on a.nat_cd = b.nat_cd
                 where
-                    a.invoice_no = '${tObj.INVOICE_NO}'
-                    and a.ship_date = '${tObj.SHIP_DATE}'
+                    a.invoice_no in (${invIn2})
             `;
-            var tRet1 = await prisma.$queryRaw(Prisma.raw(sql1));
-            if (tRet1.length > 0) {
-                tObj.SHIP_PTYPE = tRet1[0].ship_ptype;
-                tObj.DELIVERY_TYPE = tRet1[0].delivery_type;
-                tObj.SHIP_MODE_N = tRet1[0].delivery_type_n;
-                tObj.DELIVERY_TYPE_N = tRet1[0].delivery_type_n;
-                tObj.EXFACTORY = tRet1[0].exfactory;
-                tObj.NAT_CD = tRet1[0].nat_cd;
-                tObj.NAT_NAME = tRet1[0].nat_name;
-            }
+            let rowsShip = await prisma.$queryRaw(Prisma.raw(sqlShip));
+            rowsShip.forEach((r) => {
+                let key = `${r.invoice_no}||${r.ship_date}`;
+                if (!shipInfoMap[key]) shipInfoMap[key] = r;
+            });
+        }
 
-            if (tObj.NAT_CD === '' && tObj.NAT_CD2 !== '') {
-                tObj.NAT_CD = tObj.NAT_CD2;
-                let sql1_1 = `
-                    select
-                        *
-                    from
-                        kcd_nation
-                    where
-                        nat_cd = '${tObj.NAT_CD}'
-                `;
-                var tRet1_1 = await prisma.$queryRaw(Prisma.raw(sql1_1));
-                if (tRet1_1.length > 0) tObj.NAT_NAME = tRet1_1[0].NAT_NAME;
-            }
-
-            if (typeof argData.NAT_CD === 'undefined');
-            else {
-                if (argData.NAT_CD !== '' && argData.NAT_CD !== tObj.NAT_CD)
-                    continue;
-            }
-
-            // console.log(tObj);
-            /*
-           if (parseFloat(tObj.SHIP_AMOUNT) <= 0) tObj.SHIP_AMOUNT = tObj.SHIP_AMOUNT2;
-           if (parseFloat(tObj.SHIP_AMOUNT) <= 0) tObj.SHIP_AMOUNT = tObj.TOT_AMT;
-           tObj.SHIP_AMOUNT = tObj.TOT_AMT;
-           */
-
-            if (parseFloat(tObj.TOT_AMT) <= 0) {
-                /*
-               var tShipAmount = parseFloat(tObj.SHIP_AMOUNT);
-               // if (tShipAmount <= 0) tShipAmount = parseFloat(tObj.SHIP_AMOUNT2);
-               var tOrdAmount = parseFloat(tObj.SHIP_AMOUNT2);
-               var tAdjAmount = tShipAmount - tOrdAmount;
-               tObj.ORD_AMT = String(tOrdAmount);
-               // tObj.ADJ_AMT = String(tAdjAmount);
-               tObj.TOT_AMT = String(tShipAmount);
-               tObj.SHIP_AMOUNT = String(tShipAmount);
-               tObj.SHIP_PRICE = String(tShipAmount / parseFloat(tObj.SHIP_QTY));
-               */
-                tObj.ORD_AMT = String(tObj.ORD_AMT);
-                tObj.TOT_AMT = String(tObj.TOT_AMT);
-                tObj.SHIP_AMOUNT = String(tObj.TOT_AMT);
-                tObj.SHIP_PRICE = String(
-                    parseFloat(tObj.TOT_AMT) / parseFloat(tObj.SHIP_QTY),
-                );
-            } else {
-                tObj.SHIP_AMOUNT = String(tObj.TOT_AMT);
-                tObj.SHIP_PRICE = String(
-                    parseFloat(tObj.TOT_AMT) / parseFloat(tObj.SHIP_QTY),
-                );
-            }
-
-            var tBillAmt = 0;
-            var tOANegoAmt = 0;
-            var tRemainAmt = 0;
-
-            // bill_type = '1': TT, Bill_type = '2': OA Nego,  OA Nego와 TT는 별걔임
-
-            let sqlStr1 = `
+        var billRows = [];
+        if (invoiceNos.length > 0) {
+            let invIn3 = invoiceNos.map((v) => `'${v}'`).join(',');
+            let sqlBill = `
                 select
+                    invoice_no,
                     curr_cd,
                     bill_amt,
                     bill_date,
@@ -582,74 +366,179 @@ class S0513_4_COMM {
                 from
                     ksv_invoice_bill
                 where
-                    invoice_no = '${tObj.INVOICE_NO}'
-                    -- and   bill_type <> '2' 
-                    -- and   bill_type in  ('1' , '2')
+                    invoice_no in (${invIn3})
                     and bill_type in ('1')
                 order by
+                    invoice_no,
                     bill_type
             `;
-            var tRet1 = await prisma.$queryRaw(Prisma.raw(sqlStr1));
-            var tIdx98 = 0;
-            for (tIdx98 = 0; tIdx98 < tRet1.length; tIdx98++) {
-                var tOne = { ...tRet1[tIdx98] };
-                let sqlStr2 = `
-                    select
-                        usd_rate
-                    from
-                        kcd_currency
-                    where
-                        start_date = '${tOne.bill_date}'
-                        and curr_cd = '${tOne.curr_cd}'
-                `;
-                var tRet2 = await prisma.$queryRaw(Prisma.raw(sqlStr2));
-                if (tRet2.length <= 0) {
-                    sqlStr2 = `
-                        select
-                            usd_rate
-                        from
-                            kcd_currency
-                        where
-                            start_date = (
-                                select
-                                    max(start_date)
-                                from
-                                    kcd_currency
-                                where
-                                    curr_cd = '${tOne.curr_cd}'
-                            )
-                            and curr_cd = '${tOne.curr_cd}'
-                    `;
-                    tRet2 = await prisma.$queryRaw(Prisma.raw(sqlStr2));
-                }
+            billRows = await prisma.$queryRaw(Prisma.raw(sqlBill));
+        }
 
+        var billMap = {};
+        var currSet = new Set();
+        billRows.forEach((r) => {
+            if (!billMap[r.invoice_no]) billMap[r.invoice_no] = [];
+            billMap[r.invoice_no].push(r);
+            if (r.curr_cd) currSet.add(r.curr_cd);
+        });
+
+        var currencyMap = {};
+        if (currSet.size > 0) {
+            let currIn = Array.from(currSet)
+                .map((v) => `'${v}'`)
+                .join(',');
+            let sqlCurr = `
+                select
+                    curr_cd,
+                    start_date,
+                    usd_rate
+                from
+                    kcd_currency
+                where
+                    curr_cd in (${currIn})
+            `;
+            let rowsCurr = await prisma.$queryRaw(Prisma.raw(sqlCurr));
+            rowsCurr.forEach((r) => {
+                if (!currencyMap[r.curr_cd]) currencyMap[r.curr_cd] = [];
+                currencyMap[r.curr_cd].push({
+                    start_date: r.start_date,
+                    usd_rate: parseFloat(r.usd_rate),
+                });
+            });
+            Object.keys(currencyMap).forEach((k) => {
+                currencyMap[k].sort((a, b) => {
+                    if (a.start_date < b.start_date) return -1;
+                    if (a.start_date > b.start_date) return 1;
+                    return 0;
+                });
+            });
+        }
+
+        function getUsdRate(currCd, billDate) {
+            var list = currencyMap[currCd];
+            if (!list || list.length === 0) return 1;
+            var found = list.find((x) => x.start_date === billDate);
+            if (!found) return list[list.length - 1].usd_rate;
+            return found.usd_rate;
+        }
+
+        var oaMap = {};
+        if (invoiceNos.length > 0) {
+            let invIn4 = invoiceNos.map((v) => `'${v}'`).join(',');
+            let sqlOA = `
+                select
+                    a.invoice_no,
+                    isnull(sum(a.bill_amt), 0) as s_amt
+                from
+                    ksv_invoice_bill a,
+                    ksv_invoice_nego b
+                where
+                    a.invoice_no in (${invIn4})
+                    and a.bill_type = '2'
+                    and a.ref_no = b.ref_no
+                group by
+                    a.invoice_no
+            `;
+            let rowsOA = await prisma.$queryRaw(Prisma.raw(sqlOA));
+            rowsOA.forEach((r) => {
+                oaMap[r.invoice_no] = parseFloat(r.s_amt);
+            });
+        }
+
+        var tRetArray = [];
+        var tIdx = 0;
+
+        if (tTotalCount <= 0) tTotalCount = tRet.length;
+
+        for (tIdx = 0; tIdx < tRet.length; tIdx++) {
+            var tObj = { ...tRet[tIdx] };
+            tObj.REC_COUNT = String(tTotalCount);
+
+            if (tIdx > 1000) break;
+
+            if (parseFloat(tObj.SHIP_QTY) <= 0) {
+                tObj.SHIP_PRICE = '0';
+            } else {
+                tObj.SHIP_PRICE = parseFloat(tObj.SHIP_AMOUNT) / parseFloat(tObj.SHIP_QTY);
+                tObj.SHIP_PRICE = parseFloat(tObj.SHIP_PRICE).toFixed(2);
+            }
+
+            if (!tObj.SHIP_DATE) tObj.SHIP_DATE = tObj.ETD;
+            tObj.SHIP_AMOUNT = tObj.ORD_AMT;
+
+            var files = fileInfoMap[tObj.INVOICE_NO] || [];
+            if (files.length > 0) {
+                files.forEach((col) => {
+                    if (col.kind === 'ORDER_SHIP_BL_FILE') {
+                        tObj.BL_FILE = col.name;
+                        tObj.BL_FILE_URL = col.url;
+                    }
+                    if (col.kind === 'ORDER_SHIP_PL_FILE') {
+                        tObj.PL_FILE = col.name;
+                        tObj.PL_FILE_URL = col.url;
+                    }
+                    if (col.kind === 'ORDER_SHIP_CI_FILE') {
+                        tObj.CI_FILE = col.name;
+                        tObj.CI_FILE_URL = col.url;
+                    }
+                    if (col.kind === 'ORDER_SHIP_OTHER_FILE') {
+                        tObj.OTHER_FILE = col.name;
+                        tObj.OTHER_FILE_URL = col.url;
+                    }
+                    if (col.kind === 'ORDER_SHIP_BL_FILE2') {
+                        tObj.BL_FILE2 = col.name;
+                        tObj.BL_FILE_URL2 = col.url;
+                    }
+                    if (col.kind === 'ORDER_SHIP_PL_FILE2') {
+                        tObj.PL_FILE2 = col.name;
+                        tObj.PL_FILE_URL2 = col.url;
+                    }
+                    if (col.kind === 'ORDER_SHIP_CI_FILE2') {
+                        tObj.CI_FILE2 = col.name;
+                        tObj.CI_FILE_URL2 = col.url;
+                    }
+                    if (col.kind === 'ORDER_SHIP_OTHER_FILE2') {
+                        tObj.OTHER_FILE2 = col.name;
+                        tObj.OTHER_FILE_URL2 = col.url;
+                    }
+                });
+            }
+
+            if (parseFloat(tObj.TOT_AMT) <= 0) {
+                tObj.ORD_AMT = String(tObj.ORD_AMT);
+                tObj.TOT_AMT = String(tObj.TOT_AMT);
+                tObj.SHIP_AMOUNT = String(tObj.TOT_AMT);
+                tObj.SHIP_PRICE = String(
+                    parseFloat(tObj.TOT_AMT) / parseFloat(tObj.SHIP_QTY),
+                );
+            } else {
+                ;
+            }
+
+            var tBillAmt = 0;
+            var tOANegoAmt = 0;
+            var tRemainAmt = 0;
+
+            var bills = billMap[tObj.INVOICE_NO] || [];
+            for (let i = 0; i < bills.length; i++) {
+                var tOne = bills[i];
                 var tAmt = 0;
-                if (tObj.CURR_CD === tOne.curr_cd)
+                if (tObj.CURR_CD === tOne.curr_cd) {
                     tAmt = parseFloat(tOne.bill_amt);
-                else
-                    tAmt =
-                        parseFloat(tOne.bill_amt) *
-                        parseFloat(tRet2[0].usd_rate);
-
+                } else {
+                    var rate = getUsdRate(tOne.curr_cd, tOne.bill_date);
+                    tAmt = parseFloat(tOne.bill_amt) * rate;
+                }
                 if (tOne.bill_type === '1') tBillAmt += tAmt;
                 if (tOne.bill_type === '2') tBillAmt -= tAmt;
             }
 
             if (tBillAmt < 0 || tBillAmt <= 0.01) tBillAmt = 0;
 
-            let sqlStr10 = `
-                select
-                    isnull(sum(bill_amt), 0) as s_amt
-                from
-                    ksv_invoice_bill a,
-                    ksv_invoice_nego b
-                where
-                    a.invoice_no = '${tObj.INVOICE_NO}'
-                    and a.bill_type = '2'
-                    and a.ref_no = b.ref_no
-            `;
-            var tRet10 = await prisma.$queryRaw(Prisma.raw(sqlStr10));
-            if (tRet10.length > 0) tOANegoAmt = parseFloat(tRet10[0].s_amt);
+            if (oaMap[tObj.INVOICE_NO]) {
+                tOANegoAmt = oaMap[tObj.INVOICE_NO];
+            }
 
             tRemainAmt = parseFloat(tObj.TOT_AMT) - tBillAmt - tOANegoAmt;
             tObj.BILL_AMT = String(tBillAmt);
@@ -658,12 +547,7 @@ class S0513_4_COMM {
 
             tRetArray.push(tObj);
         }
-
-        console.log(sqlStr);
-        console.log(saveSql1);
-        console.log(tTotalCount);
-
-        return tRetArray;
+        return (tRetArray);
     }
 }
 

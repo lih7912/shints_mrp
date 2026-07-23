@@ -22,9 +22,21 @@ const moduleTypedefs_S0513_4 = gql`
     }
 
     input I_S0513_4 {
-        ORDER_CD: String
         FACTORY_CD: String
         BUYER_CD: String
+        STYLE_CD: String
+        ORDER_CD: String
+        INVOICE_NO: String
+        S_SHIP_DATE: String
+        E_SHIP_DATE: String
+        S_ATD: String
+        E_ATD: String
+        SHIP_MODE: String
+        PAYMENT_TYPE: String
+        DELIVERY_TYPE: String
+        NAT_CD: String
+        EMAIL_SEND: String
+        BL_NO: String
     }
 
     type Query {
