@@ -1302,7 +1302,7 @@ const moduleQuery_S030513_2 = {
             );
 
             let fileList = [];
-            const chunkSize = 200;
+            const chunkSize = 60;
             for (let i = 0; i < allTitles.length; i += chunkSize) {
                 const chunk = allTitles.slice(i, i + chunkSize);
                 const prefixSql = chunk

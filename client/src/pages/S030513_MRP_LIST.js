@@ -706,7 +706,7 @@ const S030513_MRP_LIST = () => {
     };
 
     const downloadFile = async (argFileUrl, argFileName) => {
-        serviceLib.downloadFile(argFileUrl, argFileName);
+        return await serviceLib.downloadFile(argFileUrl, argFileName);
     };
 
     const collectDownloadFiles = (rows) => {

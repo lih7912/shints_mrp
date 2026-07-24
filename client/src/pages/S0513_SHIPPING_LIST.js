@@ -1645,28 +1645,19 @@ const S0513_SHIPPING_LIST = () => {
                     <AFColumn field="SHIP_QTY" header="Ship Qty" headerStyle={{ width: "5rem" }} bodyStyle={{ textAlign: "right" }} body={(rowData) => serviceLib.numWithCommas(rowData.SHIP_QTY, 2) } ></AFColumn>
                     <AFColumn field="ORD_AMT" header="Ship Amt" headerStyle={{ width: "5rem" }} bodyStyle={{ textAlign: "right" }} body={(rowData) => serviceLib.numWithCommas(rowData.ORD_AMT, 2) } ></AFColumn>
                     <AFColumn field="ADJ_AMT" header="Adjust Amt" headerStyle={{ width: "5rem" }} bodyStyle={{ textAlign: "right" }} body={(rowData) => serviceLib.numWithCommas(rowData.ADJ_AMT, 2) } ></AFColumn>
-
                     <AFColumn field="TOT_AMT" header="Invoice Amt" headerStyle={{ width: "5rem" }} bodyStyle={{ textAlign: "right" }} body={(rowData) => serviceLib.numWithCommas(rowData.TOT_AMT, 2) } ></AFColumn>
                     <AFColumn field="BILL_AMT" header="Received Amt" headerStyle={{ width: "5rem" }} bodyStyle={{ textAlign: "right" }} body={(rowData) => serviceLib.numWithCommas(rowData.BILL_AMT, 2) } ></AFColumn>
                     <AFColumn field="OA_NEGO" header="OA Nego" headerStyle={{ width: "5rem" }} bodyStyle={{ textAlign: "right" }} body={(rowData) => serviceLib.numWithCommas(rowData.OA_NEGO, 2) } ></AFColumn>
                     <AFColumn field="BL_NO" header="BL#" headerStyle={{ width: "5rem" }} ></AFColumn>
                     <AFColumn field="BL_FILE" header="BL" headerStyle={{ width: "3rem", textAlign: "center" }} bodyStyle={{ textAlign: "center", cursor: "pointer" }} body={(rowData) => ( <div onDoubleClick={(e) => { e.stopPropagation(); onFileCellDoubleClick("BL_FILE", rowData); }} > {rowData.BL_FILE ? "✔️" : ""} </div> )} />
-
                     <AFColumn field="PL_FILE" header="PL" headerStyle={{ width: "3rem", textAlign: "center" }} bodyStyle={{ textAlign: "center", cursor: "pointer" }} body={(rowData) => ( <div onDoubleClick={(e) => { e.stopPropagation(); onFileCellDoubleClick("PL_FILE", rowData); }} > {rowData.PL_FILE ? "✔️" : ""} </div> )} />
-
                     <AFColumn field="CI_FILE" header="CI" headerStyle={{ width: "3rem", textAlign: "center" }} bodyStyle={{ textAlign: "center", cursor: "pointer" }} body={(rowData) => ( <div onDoubleClick={(e) => { e.stopPropagation(); onFileCellDoubleClick("CI_FILE", rowData); }} > {rowData.CI_FILE ? "✔️" : ""} </div> )} />
-
                     <AFColumn field="OTHER_FILE" header="Othr." headerStyle={{ width: "3rem", textAlign: "center" }} bodyStyle={{ textAlign: "center", cursor: "pointer" }} body={(rowData) => ( <div onDoubleClick={(e) => { e.stopPropagation(); onFileCellDoubleClick( "OTHER_FILE", rowData, ); }} > {rowData.OTHER_FILE ? "✔️" : ""} </div> )} />
-
                     <AFColumn field="BL_FILE2" header="BL2" headerStyle={{ width: "3rem", textAlign: "center" }} bodyStyle={{ textAlign: "center", cursor: "pointer" }} body={(rowData) => ( <div onDoubleClick={(e) => { e.stopPropagation(); onFileCellDoubleClick("BL_FILE2", rowData); }} > {rowData.BL_FILE2 ? "✔️" : ""} </div> )} />
-
                     <AFColumn field="PL_FILE2" header="PL2" headerStyle={{ width: "3rem", textAlign: "center" }} bodyStyle={{ textAlign: "center", cursor: "pointer" }} body={(rowData) => ( <div onDoubleClick={(e) => { e.stopPropagation(); onFileCellDoubleClick("PL_FILE2", rowData); }} > {rowData.PL_FILE2 ? "✔️" : ""} </div> )} />
-
                     <AFColumn field="CI_FILE2" header="CI2" headerStyle={{ width: "3rem", textAlign: "center" }} bodyStyle={{ textAlign: "center", cursor: "pointer" }} body={(rowData) => ( <div onDoubleClick={(e) => { e.stopPropagation(); onFileCellDoubleClick("CI_FILE2", rowData); }} > {rowData.CI_FILE2 ? "✔️" : ""} </div> )} />
-
                     <AFColumn field="OTHER_FILE2" header="Othr2" headerStyle={{ width: "3rem", textAlign: "center" }} bodyStyle={{ textAlign: "center", cursor: "pointer" }} body={(rowData) => ( <div onDoubleClick={(e) => { e.stopPropagation(); onFileCellDoubleClick( "OTHER_FILE2", rowData, ); }} > {rowData.OTHER_FILE2 ? "✔️" : ""} </div> )} />
-
-                    <AFColumn field="COMPLETE" header="COMPLETE" headerStyle={{ width: "6rem" }} bodyStyle={{ textAlign: "CENTER" }} body={(rowData) => ( <div>{rowData.DOCU_NO ? "✔️" : ""}</div> )} ></AFColumn>
+                    <AFColumn field="COMPLETE" header="COMPLETE" headerStyle={{ width: "6rem" }} bodyStyle={{ textAlign: "CENTER" }} body={(rowData) => ( <div>{rowData.COMPLETE ? "✔️" : ""}</div> )} ></AFColumn>
                 </AFDataTable>
             </div>
 
