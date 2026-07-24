@@ -5,6 +5,44 @@ const Excel = require('exceljs');
 const fs = require('fs');
 const { upload } = require('../../../routes/s3');
 
+const toSqlInList = (values: any[]) => {
+    const escaped = values.map((v) => String(v || '').replace(/'/g, "''"));
+    return escaped.map((v) => `'${v}'`).join(',');
+};
+
+const getBackwardStockChain = async (startStockIdx: string) => {
+    const chain: string[] = [];
+    const visited: Record<string, boolean> = {};
+    let current = String(startStockIdx || '').trim();
+
+    while (current !== '' && !visited[current]) {
+        visited[current] = true;
+        chain.push(current);
+
+        const sql = `
+            select
+                isnull(org_stock_idx, '') as org_stock_idx
+            from
+                ksv_stock_matl
+            where
+                stock_idx = '${current}'
+        `;
+        const ret = await prisma.$queryRaw(Prisma.raw(sql));
+        if (ret.length <= 0) {
+            break;
+        }
+
+        const orgStockIdx = String(ret[0].org_stock_idx || '').trim();
+        if (orgStockIdx === '' || orgStockIdx === current) {
+            break;
+        }
+
+        current = orgStockIdx;
+    }
+
+    return chain;
+};
+
 // export default로 Query 내용 내보내기
 const moduleQuery_S0517_2 = {
     Query: {
@@ -39,6 +77,12 @@ const moduleQuery_S0517_2 = {
                     tRootIdx = tStockIdx;
                 }
 
+                var tTraceStockIdxes = await getBackwardStockChain(tStockIdx);
+                if (tTraceStockIdxes.length <= 0) {
+                    tTraceStockIdxes = [tStockIdx];
+                }
+                var tTraceInSql = toSqlInList(tTraceStockIdxes);
+
                 let sql100 = `
                     select top 1
                         a.MATL_CD,
@@ -52,10 +96,11 @@ const moduleQuery_S0517_2 = {
                         kcd_matl_mst b,
                         kcd_vendor c
                     where
-                        a.root_idx = '${tRootIdx}'
+                        a.stock_idx in (${tTraceInSql})
                         and a.matl_cd = b.matl_cd
                         and b.vendor_cd = c.vendor_cd
                     order by
+                        a.reg_datetime,
                         a.stock_idx
                 `;
                 var tRet100 = await prisma.$queryRaw(Prisma.raw(sql100));
@@ -97,10 +142,11 @@ const moduleQuery_S0517_2 = {
                         ksv_stock_matl a,
                         kcd_code b
                     where
-                        a.root_idx = '${tRootIdx}'
+                        a.stock_idx in (${tTraceInSql})
                         and b.cd_group = 'STOCK_STATUS_S'
                         and b.cd_code = a.stock_status
                     order by
+                        a.reg_datetime,
                         a.stock_idx
                 `;
                 var tRet1 = await prisma.$queryRaw(Prisma.raw(sql1));
@@ -108,10 +154,6 @@ const moduleQuery_S0517_2 = {
                 var tRetArray = [];
                 for (var tIdx = 0; tIdx < tRet1.length; tIdx++) {
                     var tOne = { ...tRet1[tIdx] };
-                    var tUseStockIdx = String(tOne.STOCK_IDX || '').trim();
-                    if (String(tOne.STOCK_STATUS_S_N || '').trim() === 'STOCK(Normal use)' && String(tOne.ORG_STOCK_IDX || '').trim() !== '') {
-                        tUseStockIdx = String(tOne.ORG_STOCK_IDX || '').trim();
-                    }
 
                     let sql2 = `
                         select
@@ -123,7 +165,7 @@ const moduleQuery_S0517_2 = {
                         from
                             ksv_stock_use
                         where
-                            stock_idx = '${tUseStockIdx}'
+                            stock_idx = '${tOne.STOCK_IDX}'
                         order by
                             use_datetime
                     `;
@@ -327,6 +369,12 @@ const moduleQuery_S0517_2 = {
              */
             }
 
+            var tTraceStockIdxes = await getBackwardStockChain(tStockIdx);
+            if (tTraceStockIdxes.length <= 0) {
+                tTraceStockIdxes = [tStockIdx];
+            }
+            var tTraceInSql = toSqlInList(tTraceStockIdxes);
+
             let sql100 = `
                 select
                     a.MATL_CD,
@@ -344,7 +392,7 @@ const moduleQuery_S0517_2 = {
                     kcd_matl_mst b,
                     kcd_vendor c
                 where
-                    a.root_idx = '${tRootIdx}'
+                    a.stock_idx in (${tTraceInSql})
                     and a.matl_cd = b.matl_cd
                     and b.vendor_cd = c.vendor_cd
             `;
@@ -360,7 +408,7 @@ const moduleQuery_S0517_2 = {
                 from
                     ksv_stock_matl a
                 where
-                    a.root_idx = '${tRootIdx}'
+                    a.stock_idx in (${tTraceInSql})
             `;
             tRet0 = await prisma.$queryRaw(Prisma.raw(sql0));
             var tSumStockQty = 0;
@@ -404,10 +452,11 @@ const moduleQuery_S0517_2 = {
                     ksv_stock_matl a,
                     kcd_code b
                 where
-                    a.root_idx = '${tRootIdx}'
+                    a.stock_idx in (${tTraceInSql})
                     and b.cd_group = 'STOCK_STATUS_S'
                     and b.cd_code = a.stock_status
                 order by
+                    a.reg_datetime,
                     a.stock_idx
             `;
             var tRet1 = await prisma.$queryRaw(Prisma.raw(sql1));
@@ -416,10 +465,6 @@ const moduleQuery_S0517_2 = {
             var tIdx = 0;
             for (tIdx = 0; tIdx < tRet1.length; tIdx++) {
                 var tOne = { ...tRet1[tIdx] };
-                var tUseStockIdx = String(tOne.STOCK_IDX || '').trim();
-                if (String(tOne.STOCK_STATUS_S_N || '').trim() === 'STOCK(Normal use)' && String(tOne.ORG_STOCK_IDX || '').trim() !== '') {
-                    tUseStockIdx = String(tOne.ORG_STOCK_IDX || '').trim();
-                }
 
                 let sql2 = `
                     select
@@ -431,7 +476,7 @@ const moduleQuery_S0517_2 = {
                     from
                         ksv_stock_use
                     where
-                        stock_idx = '${tUseStockIdx}'
+                        stock_idx = '${tOne.STOCK_IDX}'
                     order by
                         use_datetime
                 `;
