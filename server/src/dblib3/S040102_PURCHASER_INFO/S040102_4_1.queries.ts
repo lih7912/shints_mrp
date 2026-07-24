@@ -125,6 +125,7 @@ class S040102_COMM {
                   isnull(A1.SURCHARGE_AMT, 0),
                   isnull(A1.SURCHARGE_PRICE, 0),
                   isnull(A1.SURCHARGE_REMARK, '')
+            order by A0.MATL_CD
         `;
         var ret0  =  await prisma.$queryRaw(Prisma.raw(sql0));
         var idx0 = 0;
