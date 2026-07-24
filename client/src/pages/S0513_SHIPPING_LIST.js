@@ -221,6 +221,9 @@ const S0513_SHIPPING_LIST = () => {
                         var tSeq = tRetArray.length + 1;
                         data.forEach((col, i) => {
                             var tObj = { ...col };
+                            if (!tObj.COMPLETE && tObj.DOCU_NO) {
+                                tObj.COMPLETE = "1";
+                            }
                             tObj.id = tSeq;
                             tSeq += 1;
                             tRetArray.push(tObj);
@@ -1657,7 +1660,8 @@ const S0513_SHIPPING_LIST = () => {
                     <AFColumn field="PL_FILE2" header="PL2" headerStyle={{ width: "3rem", textAlign: "center" }} bodyStyle={{ textAlign: "center", cursor: "pointer" }} body={(rowData) => ( <div onDoubleClick={(e) => { e.stopPropagation(); onFileCellDoubleClick("PL_FILE2", rowData); }} > {rowData.PL_FILE2 ? "✔️" : ""} </div> )} />
                     <AFColumn field="CI_FILE2" header="CI2" headerStyle={{ width: "3rem", textAlign: "center" }} bodyStyle={{ textAlign: "center", cursor: "pointer" }} body={(rowData) => ( <div onDoubleClick={(e) => { e.stopPropagation(); onFileCellDoubleClick("CI_FILE2", rowData); }} > {rowData.CI_FILE2 ? "✔️" : ""} </div> )} />
                     <AFColumn field="OTHER_FILE2" header="Othr2" headerStyle={{ width: "3rem", textAlign: "center" }} bodyStyle={{ textAlign: "center", cursor: "pointer" }} body={(rowData) => ( <div onDoubleClick={(e) => { e.stopPropagation(); onFileCellDoubleClick( "OTHER_FILE2", rowData, ); }} > {rowData.OTHER_FILE2 ? "✔️" : ""} </div> )} />
-                    <AFColumn field="COMPLETE" header="COMPLETE" headerStyle={{ width: "6rem" }} bodyStyle={{ textAlign: "CENTER" }} body={(rowData) => ( <div>{rowData.DOCU_NO ? "✔️" : ""}</div> )} ></AFColumn>
+                    <AFColumn field="DOCU_NO" header="Docu No" headerStyle={{ width: "3rem", textAlign: "center" }} bodyStyle={{ textAlign: "center", cursor: "pointer" }} />
+                    <AFColumn field="COMPLETE" header="COMPLETE" headerStyle={{ width: "6rem" }} bodyStyle={{ textAlign: "CENTER" }} body={(rowData) => ( <div>{rowData.COMPLETE === "1" || rowData.DOCU_NO ? "✔️" : ""}</div> )} ></AFColumn>
                 </AFDataTable>
             </div>
 
