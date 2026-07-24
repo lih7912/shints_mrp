@@ -65,30 +65,6 @@ const moduleMutation_S043101_5 = {
                 return tRetArray;
             }
 
-            /*
-      var sql10 = `
-          select
-              isnull(a.bill_to, '') as bill_to
-          from
-              ksv_pu_mst2 a,
-              ksv_stock_out_mst b
-          where
-              b.stsout_cd = '${tInput.STSOUT_CD}'
-              and a.pu_cd = b.pu_cd
-      `;
-      var nRet10 = await prisma.$queryRaw(Prisma.raw(sql10));
-      var tBillTo = '';
-      if (nRet10.length > 0) tBillTo = nRet10[0].bill_to ;
-      if (tBillTo !== 'SHINTS' && tBillTo !== 'BUYER') {
-          var tRetArray = [];
-          var tObj = {};
-          tObj.CODE = 'ERROR:Cancel STOCK_OUT: Bill To (Factory, BVT, ETP), sts in을 cancel해 주세요';
-          tObj.id = 0; 
-          tRetArray.push(tObj);
-          return (tRetArray);
-      }
-      */
-
             var tIdx0 = 0;
             var t_out_qty = 0;
             var t_weight = 0;
@@ -330,26 +306,6 @@ const moduleMutation_S043101_5 = {
                     `;
                     const tSQL99_1 = prisma.$queryRaw(Prisma.raw(tSQL99));
                     tSQLArray.push(tSQL99_1);
-
-                    let tSQL99 = `
-                        update ksv_stock_out_mst
-                        set
-                            weight = weight - ${t_weight}
-                        where
-                            stsout_cd = '${tInput.STSOUT_CD}'
-                    `;
-                    const tSQL99_1 = prisma.$queryRaw(Prisma.raw(tSQL99));
-                    tSQLArray.push(tSQL99_1);
-
-                    let tSQL99 = `
-                        update ksv_shipment_mem
-                        set
-                            weight = weight - ${t_weight}
-                        where
-                            stsout_cd = '${tInput.STSOUT_CD}'
-                    `;
-                    const tSQL99_1 = prisma.$queryRaw(Prisma.raw(tSQL99));
-                    tSQLArray.push(tSQL99_1);
                 }
             }
 
@@ -371,6 +327,7 @@ const moduleMutation_S043101_5 = {
 
             tSQLArray = [];
 
+            // 전체 삭제 여부 체크. won 260724
             var tIdx2 = 0;
             for (tIdx2 = 0; tIdx2 < arrayStsOut.length; tIdx2++) {
                 var tStsOutCd = arrayStsOut[tIdx2];
@@ -419,18 +376,6 @@ const moduleMutation_S043101_5 = {
                 const tSQL99_1 = prisma.$queryRaw(Prisma.raw(tSQL99));
                 tSQLArray.push(tSQL99_1);
             }
-
-            /*
-      let tSQL99 = `
-          update ksv_stock_in_mst
-          set
-              out_qty = out_qty - ${t_out_qty}
-          where
-              stsin_cd = '${tInput.STSIN_CD}'
-      `;
-      const tSQL99_1 = prisma.$queryRaw(Prisma.raw(tSQL99));
-      tSQLArray.push(tSQL99_1);
-      */
 
             try {
                 global.currentTransactionInfo = {
