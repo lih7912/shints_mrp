@@ -107,7 +107,7 @@ const moduleQuery_S0513_2 = {
                          isnull(a.bl_no, '') as BL_NO,
                          isnull(a.atd, '') as ATD,
                          isnull(a.buyer_cd, '') as BUYER_CD,
-                         isnull(a.docu_no, '') as DOCU_CD,
+                         isnull(a.docu_no, '') as DOCU_NO,
                          isnull(a.tot_amt, '') as TOT_AMT,
                          isnull(a.adj_amt, '') as ADJ_AMT,
                          isnull(a.ord_amt, '') as ORD_AMT,
@@ -209,6 +209,7 @@ const moduleQuery_S0513_2 = {
                     '' AS PL_FILE_URL,
                     '' AS CI_FILE_URL,
                     '' AS OTHER_FILE_URL,
+                    '' AS COMPLETE,
                     '0' as SHIP_AMOUNT2,
                     '0' as SHIP_QTY,
                     '0' as SHIP_AMOUNT,
@@ -364,6 +365,23 @@ const moduleQuery_S0513_2 = {
                 billRows = await prisma.$queryRaw(Prisma.raw(sqlBill));
             }
 
+            var taxInvoiceSet = new Set();
+            if (invoiceNos.length > 0) {
+                let invInTax = invoiceNos.map((v) => `'${v}'`).join(',');
+                let sqlTax = `
+                    select distinct
+                        invoice_no
+                    from
+                        ksv_tax_mem
+                    where
+                        invoice_no in (${invInTax})
+                `;
+                let rowsTax = await prisma.$queryRaw(Prisma.raw(sqlTax));
+                rowsTax.forEach((r) => {
+                    if (r.invoice_no) taxInvoiceSet.add(r.invoice_no);
+                });
+            }
+
             var billMap = {};
             var currSet = new Set();
             billRows.forEach((r) => {
@@ -444,8 +462,6 @@ const moduleQuery_S0513_2 = {
                 var tObj = { ...tRet[tIdx] };
                 tObj.REC_COUNT = String(tTotalCount);
 
-                if (tIdx > 1000) break;
-
                 if (parseFloat(tObj.SHIP_QTY) <= 0) {
                     tObj.SHIP_PRICE = '0';
                 } else {
@@ -455,6 +471,7 @@ const moduleQuery_S0513_2 = {
 
                 if (!tObj.SHIP_DATE) tObj.SHIP_DATE = tObj.ETD;
                 tObj.SHIP_AMOUNT = tObj.ORD_AMT;
+                tObj.COMPLETE = tObj.DOCU_NO || taxInvoiceSet.has(tObj.INVOICE_NO) ? '1' : '';
 
                 var files = fileInfoMap[tObj.INVOICE_NO] || [];
                 if (files.length > 0) {

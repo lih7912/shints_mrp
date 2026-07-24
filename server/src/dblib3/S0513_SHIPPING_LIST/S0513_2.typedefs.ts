@@ -41,6 +41,7 @@ const moduleTypedefs_S0513_2 = gql`
         ORD_AMT: String
         TOT_AMT: String
         DOCU_NO: String
+        COMPLETE: String
         EXFACTORY: String
         BL_NO: String
         ATD: String
