@@ -18,7 +18,6 @@ const nodemailer = require('nodemailer'); // 모듈 import
 
 //  수정: 0724-01 
 
-//
 class S040102_COMM {
     async queryS040102_4_1(argData, contextValue) {
         var sql1 = `
