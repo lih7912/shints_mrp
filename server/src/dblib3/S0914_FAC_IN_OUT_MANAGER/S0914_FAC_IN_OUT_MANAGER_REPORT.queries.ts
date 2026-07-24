@@ -714,12 +714,21 @@ const moduleQuery_S0914_FAC_IN_OUT_MANAGER_REPORT = {
 
             let currentRow = 1;
 
-            worksheet.getCell('A1').value = `PO NO : ${poCd}`;
-            worksheet.getCell('A1').font = {
+            const thinBorder = {
+                top: { style: 'thin' },
+                left: { style: 'thin' },
+                bottom: { style: 'thin' },
+                right: { style: 'thin' },
+            };
+
+            worksheet.getCell('F1').value = `PO NO. : ${poCd}`;
+            worksheet.getCell('F1').font = {
                 size: 12,
                 bold: true,
                 color: { argb: 'FFFF0000' },
             };
+            worksheet.getCell('F1').border = thinBorder;
+            worksheet.getCell('F1').alignment = { vertical: 'middle', horizontal: 'left' };
 
             if (orderList.length > 0) {
                 const issueDate = orderList[0].PO_DATE
@@ -729,9 +738,24 @@ const moduleQuery_S0914_FAC_IN_OUT_MANAGER_REPORT = {
                     ? moment(orderList[0].MATL_DUE_DATE).format('YYYY-MM-DD')
                     : '';
 
-                worksheet.getCell('E1').value = `Issue Date : ${issueDate}`;
-                worksheet.getCell('E2').value = `Due Date : ${dueDate}`;
+                worksheet.getCell('F2').value = `Issue Date : ${issueDate}`;
+                worksheet.getCell('F2').border = thinBorder;
+                worksheet.getCell('F2').alignment = { vertical: 'middle', horizontal: 'left' };
+                worksheet.getCell('F2').font = { name: '맑은 고딕', size: 10 };
+
+                worksheet.getCell('F3').value = `Due Date : ${dueDate}`;
+                worksheet.getCell('F3').border = thinBorder;
+                worksheet.getCell('F3').alignment = { vertical: 'middle', horizontal: 'left' };
+                worksheet.getCell('F3').font = { name: '맑은 고딕', size: 10 };
             }
+
+            // 오더 목록 헤더 행 (row 1, A~E)
+            const orderColHeaders = ['ORDER NO', 'SEQ', 'BUYER', 'STYLE', "Q'TY"];
+            orderColHeaders.forEach((text, i) => {
+                const cell = worksheet.getCell(1, i + 1);
+                cell.value = text;
+                setStyle(cell, true, 'center');
+            });
 
             orderList.forEach((record: any, index: number) => {
                 currentRow = index + 2;
@@ -887,7 +911,7 @@ const moduleQuery_S0914_FAC_IN_OUT_MANAGER_REPORT = {
                     row.COLOR,
                     row.SPEC,
                     row.UNIT,
-                    toDisplay(row.MRPQTY ?? 0, 0, false),
+                    toNumber(row.MRPQTY ?? 0),
                 ];
 
                 let dataCol = 1;
@@ -895,6 +919,9 @@ const moduleQuery_S0914_FAC_IN_OUT_MANAGER_REPORT = {
                     const cell = worksheet.getCell(currentRow, dataCol++);
                     cell.value = value;
                     setStyle(cell, false, index === 7 ? 'right' : 'center');
+                    if (index === 7) {
+                        cell.numFmt = '#,##0';
+                    }
                 });
 
                 for (const orderRecord of orderList) {
@@ -903,46 +930,62 @@ const moduleQuery_S0914_FAC_IN_OUT_MANAGER_REPORT = {
                     );
 
                     let cell = worksheet.getCell(currentRow, dataCol++);
-                    cell.value = toDisplay(orderRow?.ORDER_QTY ?? 0, 0, true);
+                    const oQty = toNumber(orderRow?.ORDER_QTY ?? 0);
+                    cell.value = oQty === 0 ? null : oQty;
+                    cell.numFmt = '#,##0';
                     setStyle(cell, false, 'right');
 
                     cell = worksheet.getCell(currentRow, dataCol++);
-                    cell.value = toDisplay(orderRow?.OUT_QTY ?? 0, 0, true);
+                    const outQty = toNumber(orderRow?.OUT_QTY ?? 0);
+                    cell.value = outQty === 0 ? null : outQty;
+                    cell.numFmt = '#,##0';
                     setStyle(cell, false, 'right');
                 }
 
                 for (const item of inDateHeaders) {
                     const key = `${row.MATL_CD}|${item.IN_DATE}|${item.DELIVERY}`;
                     const cell = worksheet.getCell(currentRow, dataCol++);
-                    cell.value = toDisplay(inDateQtyMap.get(key) ?? 0, 1, true);
+                    const inQty = toNumber(inDateQtyMap.get(key) ?? 0);
+                    cell.value = inQty === 0 ? null : inQty;
+                    cell.numFmt = '#,##0.0';
                     setStyle(cell, false, 'right');
                 }
 
                 const regUser = regUserMap.get(row.MATL_CD) ?? '';
 
-                const trailingValues = [
-                    toDisplay(row.STOCK ?? 0, 0, true),
-                    toDisplay(total, 0, true),
-                    toDisplay(err, 0, true),
-                    toDisplay(shortage, 0, true),
-                    toDisplay(other, 0, true),
-                    toDisplay(bal, 1, true),
-                    toDisplay(actCon, 0, true),
-                    toDisplay(adjustQty, 0, true),
-                    toDisplay(outputBal, 0, true),
-                    toDisplay(stsQty, 1, true),
-                    toDisplay(bal2, 1, true),
+                // trailing 숫자 컬럼 (index 0~10): 실제 숫자로 저장
+                const trailingNumFmts = [
+                    '#,##0',   // 0: Stock
+                    '#,##0',   // 1: Total
+                    '#,##0',   // 2: Err
+                    '#,##0',   // 3: Shortage
+                    '#,##0',   // 4: Other
+                    '#,##0.0', // 5: Bal
+                    '#,##0',   // 6: ActCon
+                    '#,##0',   // 7: AdjustQty
+                    '#,##0',   // 8: OutputBal
+                    '#,##0.0', // 9: Sts
+                    '#,##0.0', // 10: Bal2
+                ];
+                const trailingNums = [
+                    toNumber(row.STOCK ?? 0),
+                    total,
+                    err,
+                    shortage,
+                    other,
+                    bal,
+                    actCon,
+                    adjustQty,
+                    outputBal,
+                    stsQty,
+                    bal2,
+                ];
+                const trailingTexts = [
                     row.DELAYREMARK ?? '',
                     row.REMARK_BVT ?? '',
                     row.EXP_ETD_ETA_DELIVERY ?? ' /  /  / ',
                     regUser,
-                    '',
-                    '',
-                    '',
-                    '',
-                    '',
-                    '',
-                    '',
+                    '', '', '', '', '', '', '',
                     row.PRICE ?? '',
                     matlInfoMap.get(String(row.MATL_CD ?? ''))?.CURR_CD ?? '',
                     matlInfoMap.get(String(row.MATL_CD ?? ''))?.KIND2 ?? '',
@@ -952,11 +995,17 @@ const moduleQuery_S0914_FAC_IN_OUT_MANAGER_REPORT = {
                     matlInfoMap.get(String(row.MATL_CD ?? ''))?.COMPOSITION ?? '',
                 ];
 
-                trailingValues.forEach((value, index) => {
+                trailingNums.forEach((num, index) => {
+                    const cell = worksheet.getCell(currentRow, dataCol++);
+                    cell.value = num === 0 ? null : num;
+                    cell.numFmt = trailingNumFmts[index];
+                    setStyle(cell, false, 'right');
+                });
+
+                trailingTexts.forEach((value) => {
                     const cell = worksheet.getCell(currentRow, dataCol++);
                     cell.value = value;
-                    const align = index <= 9 ? 'right' : index >= 10 ? 'left' : 'center';
-                    setStyle(cell, false, align);
+                    setStyle(cell, false, 'left');
                 });
 
                 currentRow++;
