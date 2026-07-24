@@ -160,7 +160,12 @@ const moduleMutation_S0301_MATL_RECORD_EDT_KCD_MATL_MEM = {
 
                 if (tEdit.IS_MASTER === '1') {
                     var tMasterSeqKey =
-                        'MASTER_' + tData.MATL_CD + '_' + tRetDate1;
+                        'MASTER_' +
+                        tData.MATL_CD +
+                        '_' +
+                        tRetDate1 +
+                        '_' +
+                        (tEdit.CURR_CD || 'USD');
                     var nRet0 = [];
                     if (typeof tSameDateSeqMap[tMasterSeqKey] !== 'undefined') {
                         nRet0 = [
@@ -180,6 +185,7 @@ const moduleMutation_S0301_MATL_RECORD_EDT_KCD_MATL_MEM = {
                                 kcd_matl_mem
                             where
                                 matl_cd = '${tData.MATL_CD}'
+                                and curr_cd = '${tEdit.CURR_CD || 'USD'}'
                                 and (
                                     left(cast(REG_DATETIME as varchar(20)), 8) = '${tRetDate1}'
                                     or left(replace(convert(varchar(20), REG_DATETIME, 120), '-', ''), 8) = '${tRetDate1}'
@@ -249,7 +255,12 @@ const moduleMutation_S0301_MATL_RECORD_EDT_KCD_MATL_MEM = {
 
                 if (tEdit.IS_SALES === '1') {
                     var tSalesSeqKey =
-                        'SALES_' + tData.MATL_CD + '_' + tRetDate1;
+                        'SALES_' +
+                        tData.MATL_CD +
+                        '_' +
+                        tRetDate1 +
+                        '_' +
+                        (tEdit.CURR_CD || 'USD');
                     var nRet0 = [];
                     if (typeof tSameDateSeqMap[tSalesSeqKey] !== 'undefined') {
                         nRet0 = [
@@ -269,6 +280,7 @@ const moduleMutation_S0301_MATL_RECORD_EDT_KCD_MATL_MEM = {
                                 kcd_matl_sale
                             where
                                 matl_cd = '${tData.MATL_CD}'
+                                and curr_cd = '${tEdit.CURR_CD || 'USD'}'
                                 and (
                                     left(cast(REG_DATETIME as varchar(20)), 8) = '${tRetDate1}'
                                     or left(replace(convert(varchar(20), REG_DATETIME, 120), '-', ''), 8) = '${tRetDate1}'
