@@ -699,6 +699,7 @@ const S0306_MRP_BY_ORDER = () => {
         delete payload.__typename;
         delete payload.id;
         delete payload.__ROW_KEY;
+        delete payload.ORDER_MRP_SEQ_MAX;
         delete payload.ORDER_QTY;
         delete payload.PO_QTY;
         return payload;
@@ -3364,7 +3365,7 @@ const S0306_MRP_BY_ORDER = () => {
         var argData = {};
 
         if (typeof argData0.length !== "undefined") {
-            argData = argData0[0];
+            argData = argData0[argData0.length - 1];
         } else {
             argData = argData0;
         }
@@ -4083,21 +4084,28 @@ const S0306_MRP_BY_ORDER = () => {
             (selectedTBL_KSV_PROD_MEM1 || []).map((row) => row.id),
         );
 
+        const hasSelectedRows = selectedIds.size > 0;
+
         currentRows.forEach((col, i) => {
             const isSelected = selectedIds.has(col.id);
             const isChanged = col.S_FLAG === "1";
-            if (!isSelected && !isChanged) return;
+            const shouldSave = hasSelectedRows ? isSelected : isChanged;
+            if (!shouldSave) return;
 
             var tObj = { ...col };
             delete tObj.__typename;
             delete tObj.id;
             delete tObj.__ROW_KEY;
+            tObj.PROD_CD =
+                tObj.PROD_CD || tSavedSpec.PROD_CD || tSelectedProd.PROD_CD;
             tObj.ORDER_CD =
-                tObj.ORDER_CD || tSelectedProd.ORDER_CD || tSavedSpec.ORDER_CD;
+                tObj.ORDER_CD || tSavedSpec.ORDER_CD || tSelectedProd.ORDER_CD;
             tObj.ORDER_MRP_SEQ =
+                tObj.ORDER_MRP_SEQ_MAX ||
                 tObj.ORDER_MRP_SEQ ||
-                tSelectedProd.ORDER_MRP_SEQ ||
-                tSavedSpec.ORDER_MRP_SEQ;
+                tSavedSpec.ORDER_MRP_SEQ ||
+                tSelectedProd.ORDER_MRP_SEQ;
+            delete tObj.ORDER_MRP_SEQ_MAX;
 
             // GraphQL 입력 타입에 맞춰 NaN/타입 오류를 방지한다.
             // PO_QTY 는 Float, 나머지 수치 컬럼은 String 스키마를 사용한다.
@@ -4177,8 +4185,8 @@ const S0306_MRP_BY_ORDER = () => {
     const buildProdMemPatchKey = (row) =>
         `${row?.PROD_CD || ""}|${row?.SEQ || ""}|${row?.MATL_CD || ""}`;
 
-    // ORDER_CD / ORDER_MRP_SEQ 는 BY_USAGE 쿼리 반환 타입에 포함되지 않으므로
-    // fetch된 행에서 항상 빈 문자열이 되어 키 불일치가 발생한다.
+    // BY_USAGE 조회 결과는 화면 상태/선택 상황에 따라 키가 섞일 수 있어
+    // strict key(SEQ 기반)가 실패할 때 fallback key로만 사용한다.
     // strict key(SEQ 기반)가 실패할 때의 fallback으로만 사용하므로
     // 두 필드를 제거해 양쪽 행이 동일한 키를 생성하도록 수정한다.
     const buildProdMemPatchLooseKey = (row) =>
@@ -4372,17 +4380,22 @@ const S0306_MRP_BY_ORDER = () => {
         popupSpecSourceRowKeyRef.current = buildProdMemPatchKey(argData);
         var tColor = selectedTBL_KSV_PROD_MST[0]?.COLOR || "";
 
+        const tSelectedProdRow =
+            selectedTBL_KSV_PROD_MST?.[0] ||
+            selectedTBL_KSV_PROD_MSTRef.current?.[0] ||
+            {};
+
         var tObj = {};
-        tObj.PROD_CD = argData.PROD_CD;
+        tObj.PROD_CD = tSelectedProdRow.PROD_CD || argData.PROD_CD;
         tObj.REMARK = argData.REMARK;
-        tObj.ORDER_CD = argData.ORDER_CD;
-        tObj.ORDER_MRP_SEQ = argData.ORDER_MRP_SEQ;
+        tObj.ORDER_CD = tSelectedProdRow.ORDER_CD || argData.ORDER_CD;
+        tObj.ORDER_MRP_SEQ =
+            tSelectedProdRow.ORDER_MRP_SEQ || argData.ORDER_MRP_SEQ;
         tObj.DL_FLAG = "";
 
         datasTBL_KSV_PROD_MEM1Ref.current = [];
         setDatasTBL_KSV_PROD_MEM1([]);
         setSelectedTBL_KSV_PROD_MEM1([]);
-        var tArray = [];
 
         setSaveUPDATE_SPEC(tObj);
 
@@ -4390,7 +4403,7 @@ const S0306_MRP_BY_ORDER = () => {
         serviceS0306_MRP_BY_ORDER
             .mgrQueryTBL_KSV_PROD_MEM_BY_USAGE(tObj)
             .then((data) => {
-            setLoadingTBL_KSV_PROD_MEM1(false);
+                setLoadingTBL_KSV_PROD_MEM1(false);
                 if (typeof data.graphQLErrors === "undefined") {
                     let copiedData = cloneArrayData(data);
                     var tArray = [];
@@ -5228,9 +5241,11 @@ const S0306_MRP_BY_ORDER = () => {
                                 selection={selectedTBL_KSV_PROD_MST}
                                 onSelectionChange={(e) => {
                                     if (!e.value || e.value.length === 0) return;
-                                    selectedTBL_KSV_PROD_MSTRef.current = e.value;
+                                    const tActiveRow = e.value[e.value.length - 1];
+                                    selectedTBL_KSV_PROD_MSTRef.current =
+                                        tActiveRow ? [tActiveRow] : [];
                                     setSelectedTBL_KSV_PROD_MST(e.value);
-                                    onRowClick1TBL_KSV_PROD_MST(e.value);
+                                    onRowClick1TBL_KSV_PROD_MST(tActiveRow || e.value);
                                 }}
                                 onRowClick={onRowClickTBL_KSV_PROD_MST}
                                 dataKey="PROD_CD"

@@ -362,26 +362,75 @@ const S0914_FAC_IN_OUT_MANAGER = () => {
 
             let result = await serviceS0914.exportReport(params);
 
-            if (result && result.graphQLErrors) {
-                console.log(
-                    "getBottomLeftList error =>",
-                    result.graphQLErrors[0].message,
-                );
-                alert(result.graphQLErrors[0].message);
-                return;
-            }
-
-            console.log(result);
-
-            const fileUrl = result[0].CODE.split("?")[2].toString();
-            const fileName = result[0].CODE.split("?")[1].toString();
+            const { fileUrl, fileName } = parseDownloadResult(
+                result,
+                "exportReport",
+            );
             serviceLib.downloadFile(fileUrl, fileName);
         } catch (e) {
             console.log("searchBottom exception =>", e);
-            alert(e);
+            alert(e?.message || e);
         } finally {
             setLoading(false);
         }
+    }
+
+    async function exportReport2() {
+        try {
+            setLoading(true);
+
+            const params = {
+                PO_CD: (poCd || "").trim(),
+                ORDER_CD: (orderCd || "").trim(),
+                SUPPLIER: (qrySupplierRef.current || "").trim(),
+                DESCRIPTION: (qryDescriptionRef.current || "").trim(),
+                UNIT: (qryUnitRef.current || "").trim(),
+                MATL_CD: (qryMatlCdRef.current || "").trim(),
+                COLOR: (qryColorRef.current || "").trim(),
+                SPEC: (qrySpecRef.current || "").trim(),
+            };
+
+            let result = await serviceS0914.exportReport2(params);
+
+            const { fileUrl, fileName } = parseDownloadResult(
+                result,
+                "exportReport2",
+            );
+            serviceLib.downloadFile(fileUrl, fileName);
+        } catch (e) {
+            console.log("exportReport2 exception =>", e);
+            alert(e?.message || e);
+        } finally {
+            setLoading(false);
+        }
+    }
+
+    function parseDownloadResult(result, actionName) {
+        if (result?.graphQLErrors?.[0]?.message) {
+            throw new Error(result.graphQLErrors[0].message);
+        }
+
+        if (result instanceof Error) {
+            throw result;
+        }
+
+        if (!Array.isArray(result) || result.length === 0) {
+            console.log(`${actionName} invalid result =>`, result);
+            throw new Error("No file was returned from server.");
+        }
+
+        const code = String(result?.[0]?.CODE || "");
+        const parts = code.split("?");
+
+        if (!code || parts.length < 3 || !parts[1] || !parts[2]) {
+            console.log(`${actionName} invalid CODE =>`, result);
+            throw new Error("Download file information is invalid.");
+        }
+
+        return {
+            fileName: parts[1].toString(),
+            fileUrl: parts[2].toString(),
+        };
     }
 
     function windowOpen(where) {
@@ -469,12 +518,15 @@ const S0914_FAC_IN_OUT_MANAGER = () => {
                         gap: "0.25rem",
                     }}
                 >
-                    <span style={{ minWidth: 25 }}>PO#</span>
+                    <span style={{ minWidth: 15 }}>PO#</span>
                     <Dropdown
                         value={poCd}
                         options={poOptions}
-                        onChange={(e) => setPoCd(e.value)}
-                        style={{ width: 150 }}
+                        onChange={(e) => {
+                            setPoCd(e.value);
+                            searchOrderCd(e.value);
+                        }}
+                        style={{ width: 100 }}
                         filter
                         editable
                     />
@@ -493,7 +545,7 @@ const S0914_FAC_IN_OUT_MANAGER = () => {
                         value={orderCd}
                         options={orderOptions}
                         onChange={(e) => setOrderCd(e.value)}
-                        style={{ width: 150 }}
+                        style={{ width: 100 }}
                         filter
                     />
                 </div>
@@ -510,7 +562,7 @@ const S0914_FAC_IN_OUT_MANAGER = () => {
                         position="bottom"
                     />
                     <Button
-                        style={{ width: 100 }}
+                        style={{ width: 90 }}
                         label={
                             <span>
                                 Search(<u>S</u>)
@@ -522,20 +574,20 @@ const S0914_FAC_IN_OUT_MANAGER = () => {
                     />
 
                     <Button
-                        style={{ width: 100 }}
+                        style={{ width: 90 }}
                         className="p-button-text orange"
                         label="FAC IN Record"
                         onClick={() => windowOpen("FAC_IN_LIST")}
                     />
 
                     <Button
-                        style={{ width: 100 }}
+                        style={{ width: 90 }}
                         className="p-button-text orange"
                         label="FAC OUT Record"
                         onClick={() => windowOpen("FAC_OUT_RECORD")}
                     />
                     <Button
-                        style={{ width: 100 }}
+                        style={{ width: 90 }}
                         className="p-button-text green"
                         label="Excel"
                         onClick={() =>
@@ -547,10 +599,17 @@ const S0914_FAC_IN_OUT_MANAGER = () => {
                         }
                     />
                     <Button
-                        style={{ width: 100 }}
+                        style={{ width: 90 }}
                         className="p-button-text green"
                         label="List"
                         onClick={() => exportReport()}
+                    />
+
+                    <Button
+                        style={{ width: 90 }}
+                        className="p-button-text green"
+                        label="List2"
+                        onClick={() => exportReport2()}
                     />
                 </div>
             </div>

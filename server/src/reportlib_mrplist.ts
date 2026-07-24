@@ -999,7 +999,7 @@ class RPT_S030513_QRY_COMM {
                         const tRateCurr = await prisma.$queryRaw(Prisma.raw(sqlRate));
                         const fxRate =
                             tRateCurr.length > 0
-                                ? Number(tRateCurr[0].won_amt) || Number(tRateCurr[0].usd_rate) || 0
+                                ? Number(tRateCurr[0].usd_rate) || Number(tRateCurr[0].won_amt) || 0
                                 : 0;
 
                         sheet.getCell(tRowIdx, currCol).value = currCd;

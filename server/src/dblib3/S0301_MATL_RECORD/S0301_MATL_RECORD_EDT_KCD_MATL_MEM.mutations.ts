@@ -160,7 +160,10 @@ const moduleMutation_S0301_MATL_RECORD_EDT_KCD_MATL_MEM = {
 
                 if (tEdit.IS_MASTER === '1') {
                     var tMasterSeqKey =
-                        'MASTER_' + tData.MATL_CD + '_' + tRetDate1;
+                        'MASTER_' +
+                        tData.MATL_CD +
+                        '_' +
+                        tRetDate1;
                     var nRet0 = [];
                     if (typeof tSameDateSeqMap[tMasterSeqKey] !== 'undefined') {
                         nRet0 = [
@@ -207,45 +210,42 @@ const moduleMutation_S0301_MATL_RECORD_EDT_KCD_MATL_MEM = {
                         var nRetMaxSeq = await prisma.$queryRaw(
                             Prisma.raw(sqlMaxSeq),
                         );
-                        if (nRetMaxSeq.length > 0 && nRetMaxSeq[0].max_seq) {
-                            var tUpdateSeq = parseInt(nRetMaxSeq[0].max_seq);
+                        if (tInputPrice === 0 && nRetMaxSeq.length > 0 && nRetMaxSeq[0].max_seq) {
+                            // 가격이 0이면 새 SEQ 삽입 없이 최대 SEQ에 UPDATE
                             var tInObj = {};
                             tInObj.MATL_PRICE = tInputPrice;
                             tInObj.CURR_CD = tEdit.CURR_CD || 'USD';
                             tInObj.UPD_USER = tUserInfo.USER_ID;
                             tInObj.UPD_DATETIME = tRetDate;
-                            let tSQL99 = AFLib.updateTableSql(
-                                'KCD_MATL_MEM',
-                                tInObj,
-                            );
-                            tSQL99 += ` where MATL_CD = '${tData.MATL_CD}' and MATL_SEQ = '${tUpdateSeq}' `;
+                            let tSQL99 = AFLib.updateTableSql('KCD_MATL_MEM', tInObj);
+                            tSQL99 += ` where MATL_CD = '${tData.MATL_CD}' and MATL_SEQ = '${nRetMaxSeq[0].max_seq}' `;
                             const tSQL99_1 = prisma.$queryRaw(Prisma.raw(tSQL99));
                             tSQLArray.push(tSQL99_1);
-                            tMatlSeq = tUpdateSeq;
+                            tMatlSeq = parseInt(nRetMaxSeq[0].max_seq);
                             tSameDateSeqMap[tMasterSeqKey] = tMatlSeq;
                         } else {
-                            var tNextSeq = 1;
-                            if (nRetMaxSeq.length > 0 && nRetMaxSeq[0].max_seq) {
-                                tNextSeq = parseInt(nRetMaxSeq[0].max_seq) + 1;
-                            }
-                            tSameDateSeqMap[tMasterSeqKey] = tNextSeq;
-                            var tInObj = {};
-                            tInObj.MATL_CD = tData.MATL_CD;
-                            tInObj.MATL_SEQ = tNextSeq;
-                            tInObj.MATL_PRICE = tInputPrice;
-                            tInObj.CURR_CD = tEdit.CURR_CD || 'USD';
-                            tInObj.REG_USER = tUserInfo.USER_ID;
-                            tInObj.REG_DATETIME = tRetDate;
-                            tInObj.UPD_USER = tUserInfo.USER_ID;
-                            tInObj.UPD_DATETIME = tRetDate;
-                            tInObj.CONF_FLAG = 'W';
-                            let tSQL99 = AFLib.createTableSql(
-                                'KCD_MATL_MEM',
-                                tInObj,
-                            );
-                            const tSQL99_1 = prisma.$queryRaw(Prisma.raw(tSQL99));
-                            tSQLArray.push(tSQL99_1);
-                            tMatlSeq = tNextSeq;
+                        var tNextSeq = 1;
+                        if (nRetMaxSeq.length > 0 && nRetMaxSeq[0].max_seq) {
+                            tNextSeq = parseInt(nRetMaxSeq[0].max_seq) + 1;
+                        }
+                        tSameDateSeqMap[tMasterSeqKey] = tNextSeq;
+                        var tInObj = {};
+                        tInObj.MATL_CD = tData.MATL_CD;
+                        tInObj.MATL_SEQ = tNextSeq;
+                        tInObj.MATL_PRICE = tInputPrice;
+                        tInObj.CURR_CD = tEdit.CURR_CD || 'USD';
+                        tInObj.REG_USER = tUserInfo.USER_ID;
+                        tInObj.REG_DATETIME = tRetDate;
+                        tInObj.UPD_USER = tUserInfo.USER_ID;
+                        tInObj.UPD_DATETIME = tRetDate;
+                        tInObj.CONF_FLAG = 'W';
+                        let tSQL99 = AFLib.createTableSql(
+                            'KCD_MATL_MEM',
+                            tInObj,
+                        );
+                        const tSQL99_1 = prisma.$queryRaw(Prisma.raw(tSQL99));
+                        tSQLArray.push(tSQL99_1);
+                        tMatlSeq = tNextSeq;
                         }
                     } else {
                         var tInObj = {};
@@ -267,7 +267,10 @@ const moduleMutation_S0301_MATL_RECORD_EDT_KCD_MATL_MEM = {
 
                 if (tEdit.IS_SALES === '1') {
                     var tSalesSeqKey =
-                        'SALES_' + tData.MATL_CD + '_' + tRetDate1;
+                        'SALES_' +
+                        tData.MATL_CD +
+                        '_' +
+                        tRetDate1;
                     var nRet0 = [];
                     if (typeof tSameDateSeqMap[tSalesSeqKey] !== 'undefined') {
                         nRet0 = [
@@ -314,42 +317,39 @@ const moduleMutation_S0301_MATL_RECORD_EDT_KCD_MATL_MEM = {
                         var nRetMaxSeq = await prisma.$queryRaw(
                             Prisma.raw(sqlMaxSeq),
                         );
-                        if (nRetMaxSeq.length > 0 && nRetMaxSeq[0].max_seq) {
-                            var tUpdateSeq = parseInt(nRetMaxSeq[0].max_seq);
+                        if (tInputPrice === 0 && nRetMaxSeq.length > 0 && nRetMaxSeq[0].max_seq) {
+                            // 가격이 0이면 새 SEQ 삽입 없이 최대 SEQ에 UPDATE
                             var tInObj = {};
                             tInObj.MATL_PRICE = tInputPrice;
                             tInObj.CURR_CD = tEdit.CURR_CD || 'USD';
                             tInObj.UPD_USER = tUserInfo.USER_ID;
                             tInObj.UPD_DATETIME = tRetDate;
-                            let tSQL99 = AFLib.updateTableSql(
-                                'KCD_MATL_SALE',
-                                tInObj,
-                            );
-                            tSQL99 += ` where MATL_CD = '${tData.MATL_CD}' and MATL_SEQ = '${tUpdateSeq}' `;
+                            let tSQL99 = AFLib.updateTableSql('KCD_MATL_SALE', tInObj);
+                            tSQL99 += ` where MATL_CD = '${tData.MATL_CD}' and MATL_SEQ = '${nRetMaxSeq[0].max_seq}' `;
                             const tSQL99_1 = prisma.$queryRaw(Prisma.raw(tSQL99));
                             tSQLArray.push(tSQL99_1);
-                            tSameDateSeqMap[tSalesSeqKey] = tUpdateSeq;
+                            tSameDateSeqMap[tSalesSeqKey] = parseInt(nRetMaxSeq[0].max_seq);
                         } else {
-                            var tNextSeq = 1;
-                            if (nRetMaxSeq.length > 0 && nRetMaxSeq[0].max_seq) {
-                                tNextSeq = parseInt(nRetMaxSeq[0].max_seq) + 1;
-                            }
-                            tSameDateSeqMap[tSalesSeqKey] = tNextSeq;
-                            var tInObj = {};
-                            tInObj.MATL_CD = tData.MATL_CD;
-                            tInObj.MATL_SEQ = tNextSeq;
-                            tInObj.MATL_PRICE = tInputPrice;
-                            tInObj.CURR_CD = tEdit.CURR_CD || 'USD';
-                            tInObj.REG_USER = tUserInfo.USER_ID;
-                            tInObj.REG_DATETIME = tRetDate;
-                            tInObj.UPD_USER = tUserInfo.USER_ID;
-                            tInObj.UPD_DATETIME = tRetDate;
-                            let tSQL99 = AFLib.createTableSql(
-                                'KCD_MATL_SALE',
-                                tInObj,
-                            );
-                            const tSQL99_1 = prisma.$queryRaw(Prisma.raw(tSQL99));
-                            tSQLArray.push(tSQL99_1);
+                        var tNextSeq = 1;
+                        if (nRetMaxSeq.length > 0 && nRetMaxSeq[0].max_seq) {
+                            tNextSeq = parseInt(nRetMaxSeq[0].max_seq) + 1;
+                        }
+                        tSameDateSeqMap[tSalesSeqKey] = tNextSeq;
+                        var tInObj = {};
+                        tInObj.MATL_CD = tData.MATL_CD;
+                        tInObj.MATL_SEQ = tNextSeq;
+                        tInObj.MATL_PRICE = tInputPrice;
+                        tInObj.CURR_CD = tEdit.CURR_CD || 'USD';
+                        tInObj.REG_USER = tUserInfo.USER_ID;
+                        tInObj.REG_DATETIME = tRetDate;
+                        tInObj.UPD_USER = tUserInfo.USER_ID;
+                        tInObj.UPD_DATETIME = tRetDate;
+                        let tSQL99 = AFLib.createTableSql(
+                            'KCD_MATL_SALE',
+                            tInObj,
+                        );
+                        const tSQL99_1 = prisma.$queryRaw(Prisma.raw(tSQL99));
+                        tSQLArray.push(tSQL99_1);
                         }
                     } else {
                         var tInObj = {};

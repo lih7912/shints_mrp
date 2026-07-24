@@ -1,0 +1,84 @@
+{
+    "OP_MODE": "1",
+    "OP_MODE2": "",
+    "ORDER_MST": {
+        "STYLE_NAME": "MAMMUT 26FW M11F6JD104",
+        "STYLE_CD": "ST25-7804",
+        "PO_CD": "PO26S0826",
+        "XX_ORDER_CD": "",
+        "XX_ORDER_QTY": "",
+        "XX_ORDER_REMAIN": "NaN",
+        "BUYER_NAME": "CREAS F&C",
+        "BUYER_CD": "CR",
+        "PRICE_TERM": "FOB",
+        "USER_ID": "logan",
+        "APPROVAL_USER": "",
+        "BUYER_TEAM": "kr",
+        "IS_COMBINED": "0",
+        "IS_SAMPLE": "1",
+        "IS_FACTORY_FOB": "0",
+        "IS_EXPECTED": "0"
+    },
+    "ORDER_MST1": {
+        "ORDER_CD": "CR26-S0093",
+        "ORDER_CD1": "",
+        "ORDER_CD2": "",
+        "FACTORY_CD": "FC034",
+        "ORDER_QTY": "1",
+        "ADD_QTY": "0",
+        "ORDER_DATE": "20260701",
+        "DUE_DATE": "20260720",
+        "ETD": "20260721",
+        "NAT_CD": "vt",
+        "CURR_CD": "USD",
+        "FOB": "0.00",
+        "FOB_USD": "0.00",
+        "SIZE_MEMBER": "SIZE-20260331093612",
+        "SIZE_GROUP": "SIZE-20260331093612",
+        "CAPA_USER": "",
+        "ORDER_STATUS": "Stock Chk"
+    },
+    "ORDER_MST2": {
+        "SAMPLE_STEP": "",
+        "SAMPLE_ROUND": "",
+        "SAMPLE_REASON": ""
+    },
+    "ORDER_MST_ARRAY": [
+        {
+            "id": 0,
+            "ORDER_CD": "CR26-S0093",
+            "TYPE": "Main",
+            "CURR_CD": "USD",
+            "NAT_CD": "vt",
+            "NAT_NAME": "Vietnam",
+            "BUYER_PO": "PP",
+            "EXF_DATE": "20260720",
+            "ETD_DATE": "20260721",
+            "IS_DL": "X",
+            "ORDER_QTY": "1",
+            "ADD_QTY": "0",
+            "ORDER_QTY_ONLY": "1",
+            "REMARK1": "",
+            "REMARK2": "",
+            "NOTE": "",
+            "MID_SIZE1": "M",
+            "mid_size1": "M",
+            "MID_SIZE": "M",
+            "MID_SIZE_QTY": "M",
+            "IS_OLD_COMBINED": "0",
+            "ORDER_MEM": [
+                {
+                    "id": 1,
+                    "PROD_CD": "CR26-P0006",
+                    "ADD_FLAG": "0",
+                    "COLOR": "NAVY",
+                    "TOT_CNT": "1",
+                    "PRICE": "0.00",
+                    "SIZE_CNT": "000000000000000001000000000000000000",
+                    "MID_SIZE": "M",
+                    "MID_SIZE_QTY": "1"
+                }
+            ]
+        }
+    ]
+}

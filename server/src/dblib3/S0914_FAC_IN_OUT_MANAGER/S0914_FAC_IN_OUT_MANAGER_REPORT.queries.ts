@@ -642,6 +642,405 @@ const moduleQuery_S0914_FAC_IN_OUT_MANAGER_REPORT = {
             const fileName = `${poCd}_${moment().format('YYYYMMDD_HHmmss')}.xlsx`;
             return upload(fileName, workbook);
         },
+
+        mgrQuery_S0914_FAC_IN_OUT_MANAGER_REPORT2: async (
+            _: any,
+            args: any,
+            contextValue: any,
+        ) => {
+            const qry = normalizeReportFilter(args.data || {});
+            const poCd = qry.PO_CD;
+
+            if (!poCd) throw new Error('poCd is required');
+
+            const workbook = new ExcelJS.Workbook();
+            const worksheet = workbook.addWorksheet('PO Report2');
+
+            const setStyle = (
+                cell: any,
+                isHeader = false,
+                alignment = 'center',
+            ) => {
+                cell.font = { name: '맑은 고딕', size: 10, bold: isHeader };
+                cell.alignment = {
+                    vertical: 'middle',
+                    horizontal: alignment,
+                    wrapText: true,
+                };
+                cell.border = {
+                    top: { style: 'thin' },
+                    left: { style: 'thin' },
+                    bottom: { style: 'thin' },
+                    right: { style: 'thin' },
+                };
+                if (isHeader) {
+                    cell.fill = {
+                        type: 'pattern',
+                        pattern: 'solid',
+                        fgColor: { argb: 'FFFFFFCC' },
+                    };
+                }
+            };
+
+            const orderList = await getOrderSummaryForReport(poCd);
+            const topListData = await getTopListDataForReport2(qry);
+            const inDateHeaders = await getInDateHeadersForReport2(poCd);
+            const inDateQtyMap = await getInDateQtyMapForReport2(poCd);
+            const stsQtyMap = await getStsQtyMapForReport2(poCd);
+            const regUserMap = await getRegUserMapForReport2(poCd);
+            const matlInfoMap = await getMaterialInfoMapForReport2(
+                poCd,
+                topListData.map((row: any) => row.MATL_CD),
+            );
+            const stockUseRows = await getStockUseRowsForReport2(poCd);
+            const leftOverRows = await getLeftOverRowsForReport2(poCd);
+
+            const toNumber = (value: any) => {
+                const num = Number(value ?? 0);
+                return Number.isFinite(num) ? num : 0;
+            };
+
+            const toDisplay = (
+                value: any,
+                decimals = 0,
+                blankWhenZero = true,
+            ) => {
+                const num = toNumber(value);
+                if (blankWhenZero && Math.abs(num) < 0.0000001) {
+                    return '';
+                }
+                return num.toFixed(decimals);
+            };
+
+            let currentRow = 1;
+
+            worksheet.getCell('A1').value = `PO NO : ${poCd}`;
+            worksheet.getCell('A1').font = {
+                size: 12,
+                bold: true,
+                color: { argb: 'FFFF0000' },
+            };
+
+            if (orderList.length > 0) {
+                const issueDate = orderList[0].PO_DATE
+                    ? moment(orderList[0].PO_DATE).format('YYYY-MM-DD')
+                    : '';
+                const dueDate = orderList[0].MATL_DUE_DATE
+                    ? moment(orderList[0].MATL_DUE_DATE).format('YYYY-MM-DD')
+                    : '';
+
+                worksheet.getCell('E1').value = `Issue Date : ${issueDate}`;
+                worksheet.getCell('E2').value = `Due Date : ${dueDate}`;
+            }
+
+            orderList.forEach((record: any, index: number) => {
+                currentRow = index + 2;
+                const values = [
+                    `(${index + 1}) ${record.ORDER_CD}`,
+                    Number(record.SEQ ?? 0),
+                    record.BUYER_NAME,
+                    record.STYLE_NAME,
+                    Number(record.TOT_CNT ?? 0),
+                ];
+
+                values.forEach((value, index) => {
+                    const cell = worksheet.getCell(currentRow, index + 1);
+                    cell.value = value;
+                    setStyle(
+                        cell,
+                        false,
+                        index === 1 || index === 4 ? 'right' : 'center',
+                    );
+                    if (index === 4) {
+                        cell.numFmt = '#,##0';
+                    }
+                });
+            });
+
+            const tableStartRow = Math.max(orderList.length + 3, 5);
+
+            const leadingHeaders = [
+                'Supplier',
+                'No',
+                'Matl Cd',
+                'Desc',
+                'Color',
+                'Spec',
+                'Unit',
+                'Need Qty',
+            ];
+
+            let headerCol = 1;
+            leadingHeaders.forEach((text) => {
+                const cell = worksheet.getCell(tableStartRow, headerCol++);
+                cell.value = text;
+                setStyle(cell, true);
+            });
+
+            for (const orderRecord of orderList) {
+                let cell = worksheet.getCell(tableStartRow, headerCol++);
+                cell.value = orderRecord.ORDER_CD;
+                setStyle(cell, true);
+
+                cell = worksheet.getCell(tableStartRow, headerCol++);
+                cell.value = `N${headerCol / 2 - 4}`;
+                setStyle(cell, true);
+            }
+
+            for (const item of inDateHeaders) {
+                const cell = worksheet.getCell(tableStartRow, headerCol++);
+                const inDate = String(item.IN_DATE || '');
+                cell.value = `${inDate.substring(4)}(${item.DELIVERY || ''})`;
+                setStyle(cell, true);
+            }
+
+            const trailingHeaders = [
+                'Stock',
+                'Total',
+                'Err',
+                'Shortage in Roll',
+                'Other',
+                'Bal',
+                `ActCon's`,
+                'Adjust Qty',
+                'OutputBal   ',
+                'Sts',
+                'Bal2',
+                'Remark STS',
+                'Remark BVT',
+                'EXP/ETD/ETA/Delivery',
+                'RegUser',
+                '',
+                '',
+                '',
+                '',
+                '',
+                '',
+                '',
+                'Price',
+                'Curr',
+                'Kind2',
+                'V-Custom',
+                'HS CODE',
+                'HS NAME',
+                'COMPOSITION',
+            ];
+            trailingHeaders.forEach((text) => {
+                const cell = worksheet.getCell(tableStartRow, headerCol++);
+                cell.value = text;
+                setStyle(cell, true);
+            });
+
+            currentRow = tableStartRow + 1;
+            let previousSupplier = '';
+            let supplierGroupIndex = 0;
+            let subIndex = 0;
+
+            for (const row of topListData) {
+                if (row.VENDOR_NAME !== previousSupplier) {
+                    supplierGroupIndex++;
+                    subIndex = 1;
+                    previousSupplier = row.VENDOR_NAME;
+                } else {
+                    subIndex++;
+                }
+
+                const noValue = `${supplierGroupIndex}-${subIndex}`;
+                const selectedOrder = qry.ORDER_CD
+                    ? (row.DATAS || []).find(
+                          (item: any) => item.ORDER_CD === qry.ORDER_CD,
+                      )
+                    : null;
+                if (
+                    qry.ORDER_CD &&
+                    toNumber(selectedOrder?.ORDER_QTY ?? 0) <= 0
+                ) {
+                    continue;
+                }
+
+                const total = toNumber(row.FACIN ?? 0);
+                const err = toNumber(row.DEFECT ?? 0);
+                const shortage = toNumber(row.SHORTOVER ?? 0);
+                const other = toNumber(row.OTHER ?? 0);
+                const adjustQty =
+                    toNumber(row.MOVE_STOCK ?? 0) + toNumber(row.ADJUST ?? 0);
+                const actCon = (row.DATAS || []).reduce(
+                    (sum: number, item: any) => sum + toNumber(item.OUT_QTY ?? 0),
+                    0,
+                );
+                const stsQty = toNumber(stsQtyMap.get(row.MATL_CD) ?? 0);
+                const bal =
+                    total -
+                    toNumber(row.MRPQTY ?? 0) -
+                    err -
+                    shortage -
+                    other -
+                    adjustQty;
+                const outputBal = total - actCon - err - shortage - other - adjustQty;
+                const bal2 = stsQty + toNumber(row.STOCK ?? 0) - total;
+
+                const fixedValues = [
+                    row.VENDOR_NAME,
+                    noValue,
+                    row.MATL_CD,
+                    row.MATL_NAME,
+                    row.COLOR,
+                    row.SPEC,
+                    row.UNIT,
+                    toDisplay(row.MRPQTY ?? 0, 0, false),
+                ];
+
+                let dataCol = 1;
+                fixedValues.forEach((value, index) => {
+                    const cell = worksheet.getCell(currentRow, dataCol++);
+                    cell.value = value;
+                    setStyle(cell, false, index === 7 ? 'right' : 'center');
+                });
+
+                for (const orderRecord of orderList) {
+                    const orderRow = (row.DATAS || []).find(
+                        (item: any) => item.ORDER_CD === orderRecord.ORDER_CD,
+                    );
+
+                    let cell = worksheet.getCell(currentRow, dataCol++);
+                    cell.value = toDisplay(orderRow?.ORDER_QTY ?? 0, 0, true);
+                    setStyle(cell, false, 'right');
+
+                    cell = worksheet.getCell(currentRow, dataCol++);
+                    cell.value = toDisplay(orderRow?.OUT_QTY ?? 0, 0, true);
+                    setStyle(cell, false, 'right');
+                }
+
+                for (const item of inDateHeaders) {
+                    const key = `${row.MATL_CD}|${item.IN_DATE}|${item.DELIVERY}`;
+                    const cell = worksheet.getCell(currentRow, dataCol++);
+                    cell.value = toDisplay(inDateQtyMap.get(key) ?? 0, 1, true);
+                    setStyle(cell, false, 'right');
+                }
+
+                const regUser = regUserMap.get(row.MATL_CD) ?? '';
+
+                const trailingValues = [
+                    toDisplay(row.STOCK ?? 0, 0, true),
+                    toDisplay(total, 0, true),
+                    toDisplay(err, 0, true),
+                    toDisplay(shortage, 0, true),
+                    toDisplay(other, 0, true),
+                    toDisplay(bal, 1, true),
+                    toDisplay(actCon, 0, true),
+                    toDisplay(adjustQty, 0, true),
+                    toDisplay(outputBal, 0, true),
+                    toDisplay(stsQty, 1, true),
+                    toDisplay(bal2, 1, true),
+                    row.DELAYREMARK ?? '',
+                    row.REMARK_BVT ?? '',
+                    row.EXP_ETD_ETA_DELIVERY ?? ' /  /  / ',
+                    regUser,
+                    '',
+                    '',
+                    '',
+                    '',
+                    '',
+                    '',
+                    '',
+                    row.PRICE ?? '',
+                    matlInfoMap.get(String(row.MATL_CD ?? ''))?.CURR_CD ?? '',
+                    matlInfoMap.get(String(row.MATL_CD ?? ''))?.KIND2 ?? '',
+                    matlInfoMap.get(String(row.MATL_CD ?? ''))?.V_CUSTOM ?? '',
+                    matlInfoMap.get(String(row.MATL_CD ?? ''))?.HS_CODE ?? '',
+                    matlInfoMap.get(String(row.MATL_CD ?? ''))?.HS_NAME ?? '',
+                    matlInfoMap.get(String(row.MATL_CD ?? ''))?.COMPOSITION ?? '',
+                ];
+
+                trailingValues.forEach((value, index) => {
+                    const cell = worksheet.getCell(currentRow, dataCol++);
+                    cell.value = value;
+                    const align = index <= 9 ? 'right' : index >= 10 ? 'left' : 'center';
+                    setStyle(cell, false, align);
+                });
+
+                currentRow++;
+            }
+
+            currentRow += 2;
+            worksheet.getCell(currentRow, 1).value = 'Stock Use';
+            worksheet.getCell(currentRow, 1).font = { bold: true, size: 11 };
+            currentRow++;
+
+            ['W/H', 'Matl Code', 'Matl Name', 'Color', 'Spec', 'Unit', 'Qty'].forEach(
+                (text, index) => {
+                    const cell = worksheet.getCell(currentRow, index + 1);
+                    cell.value = text;
+                    setStyle(cell, true);
+                },
+            );
+            currentRow++;
+
+            stockUseRows.forEach((row: any) => {
+                const values = [
+                    row.WARE_NAME,
+                    row.MATL_CD,
+                    row.MATL_NAME,
+                    row.COLOR,
+                    row.SPEC,
+                    row.UNIT,
+                    Number(row.QTY ?? 0),
+                ];
+
+                values.forEach((value, index) => {
+                    const cell = worksheet.getCell(currentRow, index + 1);
+                    cell.value = value;
+                    setStyle(cell, false, index === 6 ? 'right' : 'center');
+                    if (index === 6) {
+                        cell.numFmt = '#,##0.00';
+                    }
+                });
+
+                currentRow++;
+            });
+
+            currentRow += 2;
+            worksheet.getCell(currentRow, 1).value = 'Left Over';
+            worksheet.getCell(currentRow, 1).font = { bold: true, size: 11 };
+            currentRow++;
+
+            ['Supplier', 'Matl Code', 'Matl Name', 'Color', 'Spec', 'Unit', 'Qty'].forEach(
+                (text, index) => {
+                    const cell = worksheet.getCell(currentRow, index + 1);
+                    cell.value = text;
+                    setStyle(cell, true);
+                },
+            );
+            currentRow++;
+
+            leftOverRows.forEach((row: any) => {
+                const values = [
+                    row.VENDOR_NAME,
+                    row.MATL_CD,
+                    row.MATL_NAME,
+                    row.COLOR,
+                    row.SPEC,
+                    row.UNIT,
+                    Number(row.QTY ?? 0),
+                ];
+
+                values.forEach((value, index) => {
+                    const cell = worksheet.getCell(currentRow, index + 1);
+                    cell.value = value;
+                    setStyle(cell, false, index === 6 ? 'right' : 'center');
+                    if (index === 6) {
+                        cell.numFmt = '#,##0.00';
+                    }
+                });
+
+                currentRow++;
+            });
+
+            adjustColumnWidths(worksheet, 1, Math.max(12, headerCol - 1));
+
+            const fileName = `${poCd}_report2_${moment().format('YYYYMMDD_HHmmss')}.xlsx`;
+            return upload(fileName, workbook);
+        },
     },
 };
 
@@ -690,6 +1089,536 @@ const adjustColumnWidths = (
         const finalWidth = Math.min(MAX_WIDTH_LIMIT, maxCellWidth + PADDING);
         column.width = Math.max(MIN_WIDTH, finalWidth);
     }
+};
+
+const normalizeReportFilter = (data: any) => ({
+    PO_CD: String(data?.PO_CD ?? '').trim(),
+    ORDER_CD: String(data?.ORDER_CD ?? '').trim(),
+    SUPPLIER: String(data?.SUPPLIER ?? '').trim(),
+    DESCRIPTION: String(data?.DESCRIPTION ?? '').trim(),
+    UNIT: String(data?.UNIT ?? '').trim(),
+    MATL_CD: String(data?.MATL_CD ?? '').trim(),
+    COLOR: String(data?.COLOR ?? '').trim(),
+    SPEC: String(data?.SPEC ?? '').trim(),
+});
+
+const getOrderSummaryForReport = async (PO_CD: string) => {
+    const sqlStr = `
+        SELECT
+            A.ORDER_CD,
+            COUNT(B.PROD_CD) AS SEQ,
+            C.BUYER_NAME,
+            D.STYLE_NAME,
+            A.TOT_CNT,
+            MAX(G.PO_DATE) AS PO_DATE,
+            MAX(G.MATL_DUE_DATE) AS MATL_DUE_DATE
+        FROM
+            KSV_ORDER_MST AS A
+            INNER JOIN KSV_ORDER_MEM AS B ON A.ORDER_CD = B.ORDER_CD
+            INNER JOIN KCD_BUYER AS C ON LEFT(A.ORDER_CD, 2) = C.BUYER_CD
+            INNER JOIN KCD_STYLE AS D ON A.STYLE_CD = D.STYLE_CD
+            INNER JOIN KSV_PO_MEM AS F ON A.ORDER_CD = F.ORDER_CD
+            INNER JOIN KSV_PO_MST AS G ON F.PO_CD = G.PO_CD
+        WHERE
+            F.PO_CD = '${PO_CD}'
+            AND F.PO_SEQ = '1'
+            AND G.PO_SEQ = '1'
+        GROUP BY
+            A.ORDER_CD,
+            C.BUYER_NAME,
+            D.STYLE_NAME,
+            A.TOT_CNT
+        ORDER BY
+            A.ORDER_CD
+    `;
+
+    return (await prisma.$queryRaw(Prisma.raw(sqlStr))) as any[];
+};
+
+const getTopListDataForReport2 = async (filter: any) => {
+    const qry = normalizeReportFilter(filter);
+    const { PO_CD, ORDER_CD, SUPPLIER, DESCRIPTION, UNIT, MATL_CD, COLOR, SPEC } =
+        qry;
+
+    if (!PO_CD) {
+        return [];
+    }
+
+    const sqlStr = `
+        select
+            row_number() over (order by b.vendor_name, len(a.pr_num), a.pr_num) as id,
+            a.po_cd as PO_CD,
+            b.vendor_name as VENDOR_NAME,
+            a.matl_cd as MATL_CD,
+            c.matl_name as MATL_NAME,
+            c.color as COLOR,
+            c.spec as SPEC,
+            c.unit as UNIT,
+            isnull(a.ord_cnt, '') as ORD_CNT,
+            isnull(a.tot_cnt, 0) as MRPQTY,
+            isnull((select sum(tot_qty) from ksv_stock_in where po_cd = a.po_cd and matl_cd = a.matl_cd), 0) as STSIN,
+            isnull((select sum(out_qty) from ksv_stock_out where po_cd = a.po_cd and matl_cd = a.matl_cd and left(out_from,5) <> 'stock'), 0) as STSOUT,
+            (
+                isnull((
+                    select sum(m.po_qty)
+                    from ksv_po_mrp m
+                    where m.po_cd = a.po_cd
+                      and m.po_matl_cd = a.matl_cd
+                      and m.use_po_type = '2'
+                ), 0)
+                - isnull((
+                    select sum(m.po_qty)
+                    from ksv_po_mrp m
+                    inner join ksv_stock_matl s on m.stock_idx = s.stock_idx
+                        and m.matl_cd = s.matl_cd
+                    where m.po_cd = a.po_cd
+                      and m.po_matl_cd = a.matl_cd
+                      and m.matl_cd = a.matl_cd
+                      and m.use_po_type = '2'
+                      and s.po_cd = a.po_cd
+                ), 0)
+            ) as STOCK,
+            isnull((select sum(in_qty) from ksv_stock_facin where po_cd = a.po_cd and matl_cd = a.matl_cd), 0) as FACIN_BASE,
+            isnull((select sum(case when etc_type='Shortage' then etc_qty else 0 end) from ksv_stock_facetc where po_cd = a.po_cd and matl_cd = a.matl_cd), 0) as SHORTOVER,
+            isnull((select sum(case when etc_type='Error' then etc_qty else 0 end) from ksv_stock_facetc where po_cd = a.po_cd and matl_cd = a.matl_cd), 0) as DEFECT,
+            isnull((select sum(case when etc_type='Adjust' then etc_qty else 0 end) from ksv_stock_facetc where po_cd = a.po_cd and matl_cd = a.matl_cd), 0) as ADJUST,
+            isnull((select sum(out_qty) from ksv_stock_facout where po_cd = a.po_cd and matl_cd = a.matl_cd and (remark like '%sasmple%' or remark like '%m_up%' or remark like '%test%')), 0) as OTHER,
+            isnull((select sum(out_qty) from ksv_stock_facout where po_cd = a.po_cd and matl_cd = a.matl_cd and remark like 'defect%'), 0) as DEFECT_A,
+            isnull((select sum(out_qty) from ksv_stock_facout where po_cd = a.po_cd and matl_cd = a.matl_cd and remark like '%main%'), 0) as MAINUSE,
+            isnull((select sum(out_qty) from ksv_stock_facout where po_cd = a.po_cd and matl_cd = a.matl_cd and remark like '%table_shortage%'), 0) as TABLE_SHORT,
+            isnull((select sum(out_qty) from ksv_stock_facout where po_cd = a.po_cd and matl_cd = a.matl_cd and remark like '%keep_stock%'), 0) as KEEP_STOCK,
+            isnull((select sum(out_qty) from ksv_stock_facout where po_cd = a.po_cd and matl_cd = a.matl_cd and remark like '%move_stock%'), 0) as MOVE_STOCK,
+            isnull((select sum(out_qty) from ksv_stock_facout where po_cd = a.po_cd and matl_cd = a.matl_cd and remark like '%lost%'), 0) as LOST,
+            isnull((select sum(stock_qty) from ksv_stock_matl where po_cd = a.po_cd and matl_cd = a.matl_cd and reason_make='RETURN'), 0) as LINE_RETURN,
+            isnull((
+                select sum(isnull(su.use_qty, 0))
+                from ksv_stock_matl sm
+                inner join ksv_stock_use su on su.stock_idx = sm.stock_idx
+                where sm.po_cd = a.po_cd
+                  and sm.matl_cd = a.matl_cd
+                  and sm.stock_status in ('W', 'N')
+                  and su.use_po_cd <> a.po_cd
+            ), 0) as MOQ_BASE,
+            isnull((select sum(po_qty) from ksv_stock_mem where po_cd = a.po_cd and matl_cd = a.matl_cd and po_seq in (98, 99)), 0) as OVERIN,
+            isnull(d.matl_price, 0) as PRICE,
+            isnull(a.remark, '') as DELAYREMARK,
+            isnull(a.remark_bvt, '') as REMARK_BVT,
+            isnull(a.exp_date + ' / ' + a.etd + ' / ' + a.eta + ' / ' + a.delivery, ' /  /  / ') as EXP_ETD_ETA_DELIVERY
+        from ksv_po_matllist a
+        inner join kcd_vendor b on b.vendor_cd = a.vendor_cd
+        inner join kcd_matl_mst c on c.matl_cd = a.matl_cd
+        left join kcd_matl_mem d on d.matl_cd = a.matl_cd
+            and d.matl_seq = (select max(matl_seq) from kcd_matl_mem where matl_cd = a.matl_cd)
+        where 1 = 1
+          and a.po_cd = '${PO_CD}'
+          and a.matl_cd like '%${MATL_CD}%'
+          and c.matl_name like '%${DESCRIPTION}%'
+          and c.color like '%${COLOR}%'
+          and c.spec like '%${SPEC}%'
+          and c.unit like '%${UNIT}%'
+          and b.vendor_name like '%${SUPPLIER}%'
+        order by b.vendor_name, len(a.pr_num), a.pr_num
+    `;
+
+    const ret = (await prisma.$queryRaw(Prisma.sql([sqlStr]))) as any[];
+
+    const mapped = (ret || []).map((col: any, i: number) => {
+        const row: any = { ...col };
+
+        row.id = i + 1;
+        row.PO_CD = row.PO_CD ?? row.po_cd ?? '';
+        row.VENDOR_NAME = row.VENDOR_NAME ?? row.vendor_name ?? '';
+        row.MATL_CD = row.MATL_CD ?? row.matl_cd ?? '';
+        row.MATL_NAME = row.MATL_NAME ?? row.matl_name ?? '';
+        row.COLOR = row.COLOR ?? row.color ?? '';
+        row.SPEC = row.SPEC ?? row.spec ?? '';
+        row.UNIT = row.UNIT ?? row.unit ?? '';
+        row.ORD_CNT = row.ORD_CNT ?? row.ord_cnt ?? '';
+        row.MRPQTY = Number(row.MRPQTY || 0);
+        row.STSIN = Number(row.STSIN || 0);
+        row.STSOUT = Number(row.STSOUT || 0);
+        row.STOCK = Number(row.STOCK || 0);
+        row.FACIN_BASE = Number(row.FACIN_BASE || 0);
+        row.SHORTOVER = Number(row.SHORTOVER || 0);
+        row.DEFECT = Number(row.DEFECT || 0);
+        row.ERROR = Number(row.DEFECT || 0);
+        row.ADJUST = Number(row.ADJUST || 0);
+        row.DEFECT_A = Number(row.DEFECT_A || 0);
+        row.MAINUSE = Number(row.MAINUSE || 0);
+        row.OTHER = Number(row.OTHER || 0);
+        row.TABLE_SHORT = Number(row.TABLE_SHORT || 0);
+        row.KEEP_STOCK = Number(row.KEEP_STOCK || 0);
+        row.MOVE_STOCK = Number(row.MOVE_STOCK || 0);
+        row.LOST = Number(row.LOST || 0);
+        row.LINE_RETURN = Number(row.LINE_RETURN || 0);
+        row.MOQ_BASE = Number(row.MOQ_BASE || 0);
+        row.OVERIN = Number(row.OVERIN || 0);
+        row.MOQ = row.MOQ_BASE;
+        row.PRICE = Number(row.PRICE || 0);
+        row.DELAYREMARK = row.DELAYREMARK || '';
+        row.REMARK_BVT = row.REMARK_BVT || row.DELAYREMARK || '';
+        row.EXP_ETD_ETA_DELIVERY = row.EXP_ETD_ETA_DELIVERY || ' /  /  / ';
+        row.FACIN = row.FACIN_BASE + row.STOCK;
+        row.SHIPQTY = row.STSOUT + row.ERROR;
+        row.FACOUT =
+            row.SHORTOVER +
+            row.DEFECT_A +
+            row.MAINUSE +
+            row.OTHER +
+            row.TABLE_SHORT +
+            row.KEEP_STOCK +
+            row.LOST -
+            row.LINE_RETURN;
+        row.REMAIN_A =
+            row.FACIN -
+            (row.SHORTOVER +
+                row.DEFECT_A +
+                row.MAINUSE +
+                row.OTHER +
+                row.TABLE_SHORT +
+                row.KEEP_STOCK +
+                row.LOST);
+        row.REMAIN_E =
+            row.FACIN -
+            row.SHORTOVER -
+            row.DEFECT -
+            row.MRPQTY -
+            row.OTHER -
+            row.KEEP_STOCK -
+            row.LOST;
+        row.DATAS = [];
+
+        return row;
+    });
+
+    const sqlPo = `
+        select a.order_cd
+        from kvw_po_order a, ksv_order_mst b
+        where a.po_cd = '${PO_CD}'
+          and a.order_cd = b.order_cd
+        order by a.order_cd
+    `;
+    const retPo = (await prisma.$queryRaw(Prisma.raw(sqlPo))) as any[];
+
+    const sqlOrder = `
+        select matl_cd, order_cd, isnull(sum(use_qty), 0) as po_qty
+        from ksv_po_mrp
+        where po_cd = '${PO_CD}'
+          and use_po_type = '1'
+        group by matl_cd, order_cd
+        order by matl_cd
+    `;
+    const retOrder = (await prisma.$queryRaw(Prisma.raw(sqlOrder))) as any[];
+
+    const sqlOutByOrder = `
+        select matl_cd, order_cd, isnull(sum(out_qty), 0) as out_qty
+        from ksv_stock_facout
+        where po_cd = '${PO_CD}'
+        group by matl_cd, order_cd
+    `;
+    const retOutByOrder = (await prisma.$queryRaw(
+        Prisma.raw(sqlOutByOrder),
+    )) as any[];
+
+    const result: any[] = [];
+    for (const one of mapped) {
+        const next = { ...one };
+        const datas: any[] = [];
+
+        retPo.forEach((col: any, index: number) => {
+            const dataRow: any = {};
+            let matched = false;
+            let outQty = '0';
+
+            retOutByOrder.forEach((col2: any) => {
+                if (col2.matl_cd === next.MATL_CD && col2.order_cd === col.order_cd) {
+                    outQty = parseFloat(col2.out_qty).toFixed(2);
+                }
+            });
+
+            if (!ORDER_CD) {
+                const ordCnt = String(next.ORD_CNT || '');
+                const chunk = ordCnt.substring(index * 8, index * 8 + 8);
+                if (chunk && chunk !== '00000000' && chunk !== '________') {
+                    const qtyByOrdCnt = parseInt(chunk, 10);
+                    if (Number.isFinite(qtyByOrdCnt) && qtyByOrdCnt > 0) {
+                        dataRow.ORDER_CD = col.order_cd;
+                        dataRow.ORDER_QTY = qtyByOrdCnt.toFixed(2);
+                        dataRow.OUT_QTY = outQty;
+                        matched = true;
+                    }
+                }
+            }
+
+            retOrder.forEach((col1: any) => {
+                if (
+                    !matched &&
+                    col1.matl_cd === next.MATL_CD &&
+                    col.order_cd === col1.order_cd
+                ) {
+                    dataRow.ORDER_CD = col.order_cd;
+                    dataRow.ORDER_QTY = parseFloat(col1.po_qty).toFixed(2);
+                    dataRow.OUT_QTY = outQty;
+                    matched = true;
+                }
+            });
+
+            if (!matched) {
+                dataRow.ORDER_CD = col.order_cd;
+                dataRow.ORDER_QTY = '0';
+                dataRow.OUT_QTY = outQty;
+            }
+
+            datas.push(dataRow);
+        });
+
+        next.DATAS = datas;
+
+        if (ORDER_CD) {
+            const orderRow = next.DATAS.find(
+                (x: any) => x.ORDER_CD === ORDER_CD,
+            );
+            const orderQty = Number(orderRow?.ORDER_QTY || 0);
+            if (!orderRow || orderQty <= 0) {
+                continue;
+            }
+        }
+
+        result.push(next);
+    }
+
+    return result;
+};
+
+const getInDateHeadersForReport2 = async (PO_CD: string) => {
+    const sqlStr = `
+        select distinct in_date as IN_DATE, delivery as DELIVERY
+        from ksv_stock_facin
+        where po_cd = '${PO_CD}'
+        order by in_date, delivery
+    `;
+
+    return (await prisma.$queryRaw(Prisma.raw(sqlStr))) as any[];
+};
+
+const getInDateQtyMapForReport2 = async (PO_CD: string) => {
+    const sqlStr = `
+        select in_date as IN_DATE, delivery as DELIVERY, matl_cd as MATL_CD, sum(in_qty) as IN_QTY
+        from ksv_stock_facin
+        where po_cd = '${PO_CD}'
+        group by in_date, delivery, matl_cd
+    `;
+
+    const rows = (await prisma.$queryRaw(Prisma.raw(sqlStr))) as any[];
+    const result = new Map<string, number>();
+    rows.forEach((row) => {
+        result.set(
+            `${row.MATL_CD}|${row.IN_DATE}|${row.DELIVERY}`,
+            Number(row.IN_QTY ?? 0),
+        );
+    });
+    return result;
+};
+
+const getStsQtyMapForReport2 = async (PO_CD: string) => {
+    const sqlStr = `
+        select matl_cd as MATL_CD, sum(tot_qty) as STS_QTY
+        from ksv_stock_in
+        where po_cd = '${PO_CD}'
+        group by matl_cd
+    `;
+
+    const rows = (await prisma.$queryRaw(Prisma.raw(sqlStr))) as any[];
+    const result = new Map<string, number>();
+    rows.forEach((row) => {
+        result.set(String(row.MATL_CD ?? ''), Number(row.STS_QTY ?? 0));
+    });
+    return result;
+};
+
+const getRegUserMapForReport2 = async (PO_CD: string) => {
+    const sqlStr = `
+        select t.matl_cd as MATL_CD, t.reg_user as REG_USER
+        from (
+            select matl_cd, reg_user,
+                   row_number() over (partition by matl_cd order by reg_datetime asc, reg_user asc) as rn
+            from ksv_stock_facin
+            where po_cd = '${PO_CD}'
+        ) t
+        where t.rn = 1
+    `;
+
+    const rows = (await prisma.$queryRaw(Prisma.raw(sqlStr))) as any[];
+    const result = new Map<string, string>();
+    rows.forEach((row) => {
+        result.set(String(row.MATL_CD ?? ''), String(row.REG_USER ?? ''));
+    });
+    return result;
+};
+
+const getMaterialInfoMapForReport2 = async (
+    PO_CD: string,
+    matlCds: string[],
+) => {
+    const keys = Array.from(
+        new Set(
+            (matlCds || [])
+                .map((value) => String(value || '').trim())
+                .filter((value) => value !== ''),
+        ),
+    );
+
+    const result = new Map<string, any>();
+
+    if (keys.length === 0) {
+        return result;
+    }
+
+    const sqlStr = Prisma.sql`
+        SELECT
+            A.MATL_CD,
+            ISNULL(MM.CURR_CD, '') AS CURR_CD,
+            ISNULL(T2.MATL_TYPE2, '') AS KIND2,
+            ISNULL(CV.COMP1, '') AS V_CUSTOM,
+            ISNULL(HS.HS_CD, '') AS HS_CODE,
+            ISNULL(HS.HS_NAME, '') AS HS_NAME,
+            ISNULL(
+                CASE
+                    WHEN ISNULL(CP.COMP4, '') <> '' THEN
+                        CP.COMP1 + '-' + CAST(CP.COMP1_PERCENT AS VARCHAR) + '%' + ' ' +
+                        CP.COMP2 + '-' + CAST(CP.COMP2_PERCENT AS VARCHAR) + '%' + ' ' +
+                        CP.COMP3 + '-' + CAST(CP.COMP3_PERCENT AS VARCHAR) + '%' + ' ' +
+                        CP.COMP4 + '-' + CAST(CP.COMP4_PERCENT AS VARCHAR) + '%'
+                    WHEN ISNULL(CP.COMP3, '') <> '' THEN
+                        CP.COMP1 + '-' + CAST(CP.COMP1_PERCENT AS VARCHAR) + '%' + ' ' +
+                        CP.COMP2 + '-' + CAST(CP.COMP2_PERCENT AS VARCHAR) + '%' + ' ' +
+                        CP.COMP3 + '-' + CAST(CP.COMP3_PERCENT AS VARCHAR) + '%'
+                    WHEN ISNULL(CP.COMP2, '') <> '' THEN
+                        CP.COMP1 + '-' + CAST(CP.COMP1_PERCENT AS VARCHAR) + '%' + ' ' +
+                        CP.COMP2 + '-' + CAST(CP.COMP2_PERCENT AS VARCHAR) + '%'
+                    WHEN ISNULL(CP.COMP1, '') <> '' THEN
+                        CP.COMP1 + '-' + CAST(CP.COMP1_PERCENT AS VARCHAR) + '%'
+                    ELSE ''
+                END,
+                ''
+            ) AS COMPOSITION
+        FROM
+            KCD_MATL_MST A
+            OUTER APPLY (
+                SELECT TOP 1 CURR_CD
+                FROM KCD_MATL_MEM
+                WHERE MATL_CD = A.MATL_CD
+                ORDER BY MATL_SEQ DESC
+            ) MM
+            OUTER APPLY (
+                SELECT TOP 1 COMP1
+                FROM KCD_COMPOSITION_V
+                WHERE MATL_NAME = A.MATL_NAME
+            ) CV
+            OUTER APPLY (
+                SELECT TOP 1 COMP1, COMP1_PERCENT, COMP2, COMP2_PERCENT, COMP3, COMP3_PERCENT, COMP4, COMP4_PERCENT
+                FROM KCD_COMPOSITION
+                WHERE MATL_NAME = A.MATL_NAME
+            ) CP
+            LEFT JOIN KCD_MATL_TYPE2 T2 ON A.MATL_TYPE2 = T2.SEQ
+            LEFT JOIN KCD_HSCODE HS ON A.HS_CD = HS.HS_NO
+        WHERE
+            A.MATL_CD IN (${Prisma.join(keys)})
+    `;
+
+    const rows = (await prisma.$queryRaw(sqlStr)) as any[];
+    rows.forEach((row) => {
+        result.set(String(row.MATL_CD ?? ''), {
+            CURR_CD: row.CURR_CD ?? '',
+            KIND2: row.KIND2 ?? '',
+            V_CUSTOM: row.V_CUSTOM ?? '',
+            HS_CODE: row.HS_CODE ?? '',
+            HS_NAME: row.HS_NAME ?? '',
+            COMPOSITION: row.COMPOSITION ?? '',
+        });
+    });
+
+    return result;
+};
+
+const getStockUseRowsForReport2 = async (PO_CD: string) => {
+    const sqlStr = `
+        SELECT
+            F.WARE_NAME + '(' + B.PO_MATL_CD + ')' AS WARE_NAME,
+            B.MATL_CD,
+            A.MATL_NAME,
+            A.COLOR,
+            A.SPEC,
+            A.UNIT,
+            SUM(B.PO_QTY) AS QTY
+        FROM
+            KCD_MATL_MST AS A
+            INNER JOIN KSV_PO_MRP AS B ON A.MATL_CD = B.MATL_CD
+            INNER JOIN KCD_VENDOR AS C ON A.VENDOR_CD = C.VENDOR_CD
+            INNER JOIN KCD_MATL_MEM AS D ON A.MATL_CD = D.MATL_CD
+                AND B.MATL_SEQ = D.MATL_SEQ
+            INNER JOIN KSV_STOCK_MATL AS E ON B.STOCK_IDX = E.STOCK_IDX
+            INNER JOIN KCD_FACTORY_WARE AS F ON F.WARE_CD = E.FACTORY_CD
+        WHERE
+            B.PO_CD = '${PO_CD}'
+            AND B.USE_PO_TYPE = '2'
+            AND B.DIFF_PO_TYPE <> '2'
+        GROUP BY
+            C.VENDOR_NAME,
+            B.MATL_CD,
+            A.COLOR,
+            A.MATL_NAME,
+            A.SPEC,
+            A.UNIT,
+            B.PO_MATL_CD,
+            F.WARE_NAME
+        ORDER BY
+            F.WARE_NAME,
+            C.VENDOR_NAME,
+            A.MATL_NAME,
+            A.COLOR,
+            A.SPEC
+    `;
+
+    return (await prisma.$queryRaw(Prisma.raw(sqlStr))) as any[];
+};
+
+const getLeftOverRowsForReport2 = async (PO_CD: string) => {
+    const sqlStr = `
+        SELECT
+            C.VENDOR_NAME,
+            A.MATL_CD,
+            B.MATL_NAME,
+            B.COLOR,
+            B.SPEC,
+            B.UNIT,
+            SUM(A.DIFF_QTY) AS QTY
+        FROM
+            KSV_PO_MRP A,
+            KCD_MATL_MST B,
+            KCD_VENDOR C
+        WHERE
+            A.PO_CD = '${PO_CD}'
+            AND A.DIFF_PO_TYPE = '1'
+            AND B.MATL_CD = A.MATL_CD
+            AND C.VENDOR_CD = B.VENDOR_CD
+        GROUP BY
+            C.VENDOR_NAME,
+            A.MATL_CD,
+            B.MATL_NAME,
+            B.COLOR,
+            B.SPEC,
+            B.UNIT,
+            A.PO_SEQ
+        ORDER BY
+            1,
+            2,
+            3,
+            4,
+            5
+    `;
+
+    return (await prisma.$queryRaw(Prisma.raw(sqlStr))) as any[];
 };
 
 const getTopListDataForReport = async (PO_CD: string) => {

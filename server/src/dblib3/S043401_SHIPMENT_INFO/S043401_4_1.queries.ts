@@ -1,7 +1,9 @@
 import { Prisma } from '@prisma/client';
 import prisma from '../../db';
 import AFLib from '../../commlib';
-const moment = require('moment');
+const momentRaw = require('moment');
+const moment =
+    typeof momentRaw === 'function' ? momentRaw : momentRaw.default;
 const Excel = require('exceljs');
 const fs = require('fs');
 const {
@@ -1653,7 +1655,7 @@ const moduleQuery_S043401_4_1 = {
                 arrPoObj,
                 company,
                 tPackCd,
-                etd: moment(tShipmentObj.ETD, 'YYYYMMDD', true), // ETD
+                etd: moment(tShipmentObj.ETD, 'YYYYMMDD', true),
             });
 
             await dPac({

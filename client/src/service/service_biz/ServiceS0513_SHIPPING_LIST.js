@@ -235,6 +235,7 @@ export class ServiceS0513_SHIPPING_LIST {
                             SHIP_MODE_N
                             SHIP_AMOUNT
                             DOCU_NO
+                            COMPLETE
                             ATD
                             PAYMENT_TYPE
                             PAYMENT_NAME
