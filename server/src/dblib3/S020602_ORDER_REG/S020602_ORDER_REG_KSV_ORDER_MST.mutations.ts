@@ -1653,7 +1653,8 @@ const moduleMutation_S020602_ORDER_REG_EDT_KSV_ORDER_MST = {
                     tUserInfo.USER_ID === 'won21kr' ||
                     tUserInfo.USER_ID === 'lih7912' ||
                     tUserInfo.USER_ID === 'chibumy' ||
-                    tUserInfo.USER_ID === 'oliver'
+                    tUserInfo.USER_ID === 'oliver' ||
+                    tUserInfo.USER_ID === 'chris'
                 );
                 else {
                     var retArray = [];
@@ -1744,7 +1745,8 @@ const moduleMutation_S020602_ORDER_REG_EDT_KSV_ORDER_MST = {
                     tUserInfo.USER_ID === 'chibumy' ||
                     tUserInfo.USER_ID === 'elly' ||
                     tUserInfo.USER_ID === 'ken' ||
-                    tUserInfo.USER_ID === 'oliver'
+                    tUserInfo.USER_ID === 'oliver' ||
+                    tUserInfo.USER_ID === 'chris'
                 );
                 else {
                     var retArray = [];
