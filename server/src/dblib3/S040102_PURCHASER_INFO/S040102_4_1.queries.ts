@@ -3279,17 +3279,13 @@ const moduleQuery_S040102_4_1 = {
             /* 가장 최근에 나간 Mail 과 변동정보 확인 */
             if (retLastStockMem2.length <= 0) tCheck = 1; // 메일발송된 발주서가 없는경우
 
-            // 임시 코드. 0403 이후 삭제 
             if (tCheck === 0) {
-                if (tInput1.PU_CD === 'PU26-NE001321' || tInput1.PU_CD === 'PU26-NE001322') ;
-                else {
-                    var tRetArray = [];
-                    var tObj = {};
-                    tObj.id = 1;
-                    tObj.CODE = `ERROR:Send Po Sheet:No changes detected, so the email was not sent. `;
-                    tRetArray.push(tObj);
-                    return tRetArray;
-                }
+                var tRetArray = [];
+                var tObj = {};
+                tObj.id = 1;
+                tObj.CODE = `ERROR:Send Po Sheet:No changes detected, so the email was not sent. `;
+                tRetArray.push(tObj);
+                return tRetArray;
             }
 
             var tPoCds = tInput1.PO_CD2.replace(/\//gi, '_');
@@ -3405,6 +3401,7 @@ const moduleQuery_S040102_4_1 = {
                     where
                         pu_cd = '${tInput1.PU_CD}'
                         and po_cd = '${tPoCd}'
+                        and pu_seq < 900
                 `;
                 var tRet0_1 = await prisma.$queryRaw(Prisma.raw(sql0_1));
                 var tMaxPuSeq = 1;
